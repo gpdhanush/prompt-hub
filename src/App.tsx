@@ -22,6 +22,8 @@ import FileManager from "./pages/FileManager";
 import Notifications from "./pages/Notifications";
 import Reports from "./pages/Reports";
 import EmployeeProfile from "./pages/EmployeeProfile";
+import BugDetail from "./pages/BugDetail";
+import RolesPositions from "./pages/RolesPositions";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
@@ -90,6 +92,7 @@ const App = () => (
               <Route path="/projects" element={<Projects />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/bugs" element={<Bugs />} />
+              <Route path="/bugs/:id" element={<BugDetail />} />
               <Route path="/attendance" element={<Attendance />} />
               <Route path="/leaves" element={<Leaves />} />
               <Route path="/reimbursements" element={<Reimbursements />} />
@@ -98,6 +101,14 @@ const App = () => (
               <Route path="/files" element={<FileManager />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/reports" element={<Reports />} />
+              <Route 
+                path="/roles-positions" 
+                element={
+                  <ProtectedRoute allowedRoles={['Super Admin']}>
+                    <RolesPositions />
+                  </ProtectedRoute>
+                } 
+              />
               <Route path="/employee-profile/:id" element={<EmployeeProfile />} />
               <Route path="/settings" element={<Settings />} />
             </Route>

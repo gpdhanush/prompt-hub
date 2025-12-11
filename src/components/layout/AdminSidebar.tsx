@@ -10,15 +10,13 @@ import {
   Calendar,
   Clock,
   Receipt,
-  Sparkles,
-  FileText,
   Settings,
   Bell,
   BarChart3,
-  FolderOpen,
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Shield,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -45,18 +43,16 @@ const navItems = [
   { name: "Attendance", href: "/attendance", icon: Clock },
   { name: "Leaves", href: "/leaves", icon: Calendar },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt },
-];
-
-const toolItems = [
-  { name: "AI Prompts", href: "/prompts", icon: Sparkles },
-  { name: "Audit Logs", href: "/audit-logs", icon: FileText },
-  { name: "File Manager", href: "/files", icon: FolderOpen },
   { name: "Reports", href: "/reports", icon: BarChart3 },
 ];
 
 const bottomItems = [
   { name: "Notifications", href: "/notifications", icon: Bell },
   { name: "Settings", href: "/settings", icon: Settings },
+];
+
+const adminItems = [
+  { name: "Roles & Positions", href: "/roles-positions", icon: Shield },
 ];
 
 export function AdminSidebar() {
@@ -71,7 +67,8 @@ export function AdminSidebar() {
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const userRole = currentUser?.role || '';
   
-  // Employees and Viewers cannot access Users and Employees pages
+  // Only Admin, Super Admin, and Team Lead can access Users and Employees pages
+  // Developer, Designer, Tester, and Viewer roles cannot access these pages
   const canAccessUserManagement = userRole === 'Admin' || userRole === 'Super Admin' || userRole === 'Team Lead';
 
   const isActive = (href: string) => location.pathname === href;
@@ -106,17 +103,28 @@ export function AdminSidebar() {
   return (
     <aside
       className={cn(
-        "flex h-screen flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300",
+        "flex h-screen flex-col border-r border-sidebar-border bg-transparent transition-all duration-300",
         collapsed ? "w-16" : "w-64"
       )}
     >
       {/* Header */}
-      <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+      <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4 bg-transparent">
         {!collapsed ? (
-          <Logo showText={true} iconSize={16} />
+          <div className="flex items-center gap-2">
+            <img 
+              src="/assets/images/fav-icon.png" 
+              alt="Logo" 
+              className="h-8 w-8 object-contain"
+            />
+            <span className="font-semibold text-foreground">Naethra EMS</span>
+          </div>
         ) : (
           <div className="mx-auto">
-            <Logo iconSize={16} />
+            <img 
+              src="/assets/images/fav-icon.png" 
+              alt="Logo" 
+              className="h-8 w-8 object-contain"
+            />
           </div>
         )}
         <Button
@@ -138,30 +146,32 @@ export function AdminSidebar() {
         )}
         {navItems
           .filter((item) => {
-            // Hide Users and Employees for Employee and Viewer roles
+            // Hide Users and Employees for Developer, Designer, Tester, and Viewer roles
             if ((item.href === '/users' || item.href === '/employees') && !canAccessUserManagement) {
               return false;
             }
             return true;
           })
           .map((item) => (
-            <NavItem key={item.href} item={item} />
-          ))}
-
-        <div className="my-4 border-t border-sidebar-border" />
-
-        {!collapsed && (
-          <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Tools
-          </p>
-        )}
-        {toolItems.map((item) => (
           <NavItem key={item.href} item={item} />
         ))}
       </nav>
 
       {/* Bottom */}
       <div className="border-t border-sidebar-border p-3">
+        {userRole === 'Super Admin' && (
+          <>
+            {!collapsed && (
+              <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Administration
+              </p>
+            )}
+            {adminItems.map((item) => (
+              <NavItem key={item.href} item={item} />
+            ))}
+            <div className="my-2 border-t border-sidebar-border" />
+          </>
+        )}
         {bottomItems.map((item) => (
           <NavItem key={item.href} item={item} />
         ))}

@@ -54,56 +54,201 @@ const upload = multer({
 
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const { page = 1, limit = 10, my_bugs } = req.query;
     const offset = (page - 1) * limit;
-    const query = `
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    
+    console.log('=== GET BUGS REQUEST ===');
+    console.log('User Role:', userRole);
+    console.log('User ID:', userId);
+    console.log('My Bugs filter:', my_bugs, 'Type:', typeof my_bugs);
+    
+    // Check if tasks table has role-specific columns
+    let hasRoleColumns = false;
+    try {
+      const [columns] = await db.query('SHOW COLUMNS FROM tasks LIKE "developer_id"');
+      hasRoleColumns = columns.length > 0;
+    } catch (err) {
+      // Columns don't exist, use old schema
+    }
+    
+    let query = `
       SELECT 
         b.*,
         u1.name as assigned_to_name,
         u1.email as assigned_to_email,
-        u2.name as reported_by_name
+        u2.name as reported_by_name,
+        u2.email as reported_by_email,
+        u3.name as updated_by_name,
+        u3.email as updated_by_email`;
+    
+    if (hasRoleColumns) {
+      query += `,
+        t_dev.name as task_developer_name,
+        t_test.name as task_tester_name`;
+    }
+    
+    query += `
       FROM bugs b
       LEFT JOIN users u1 ON b.assigned_to = u1.id
       LEFT JOIN users u2 ON b.reported_by = u2.id
-      ORDER BY b.created_at DESC 
-      LIMIT ? OFFSET ?
+      LEFT JOIN users u3 ON b.updated_by = u3.id
+      LEFT JOIN tasks t ON b.task_id = t.id`;
+    
+    if (hasRoleColumns) {
+      query += `
+      LEFT JOIN users t_dev ON t.developer_id = t_dev.id
+      LEFT JOIN users t_test ON t.tester_id = t_test.id`;
+    }
+    
+    query += ` WHERE 1=1`;
+    const params = [];
+    
+    // All users can see all bugs and their statuses
+    // Only apply "My Bugs" filter if specifically requested (and not the string "undefined")
+    const shouldFilterMyBugs = my_bugs && 
+                                my_bugs !== 'undefined' && 
+                                my_bugs !== 'false' && 
+                                my_bugs !== '' && 
+                                userId;
+    
+    if (shouldFilterMyBugs) {
+      query += ' AND (b.assigned_to = ? OR b.reported_by = ?)';
+      params.push(userId, userId);
+      console.log('Applying "My Bugs" filter for user:', userId);
+    } else {
+      console.log('Showing ALL bugs to user:', userRole);
+    }
+    
+    query += ' ORDER BY b.created_at DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), parseInt(offset));
+    
+    console.log('Final query:', query);
+    console.log('Query params:', params);
+    
+    const [bugs] = await db.query(query, params);
+    
+    console.log(`Found ${bugs.length} bugs`);
+    console.log('Bug IDs:', bugs.map(b => `${b.bug_code} (reported_by: ${b.reported_by}, assigned_to: ${b.assigned_to})`).join(', '));
+    
+    // Count query with same filters
+    let countQuery = `
+      SELECT COUNT(*) as total 
+      FROM bugs b
+      WHERE 1=1
     `;
-    const [bugs] = await db.query(query, [parseInt(limit), parseInt(offset)]);
-    const [countResult] = await db.query('SELECT COUNT(*) as total FROM bugs');
+    const countParams = [];
+    
+    // All users can see all bugs - only apply "My Bugs" filter if requested (and not the string "undefined")
+    const shouldFilterMyBugsCount = my_bugs && 
+                                     my_bugs !== 'undefined' && 
+                                     my_bugs !== 'false' && 
+                                     my_bugs !== '' && 
+                                     userId;
+    
+    if (shouldFilterMyBugsCount) {
+      countQuery += ' AND (b.assigned_to = ? OR b.reported_by = ?)';
+      countParams.push(userId, userId);
+    }
+    
+    const [countResult] = await db.query(countQuery, countParams);
+    console.log('Total bugs count:', countResult[0].total);
+    
     res.json({ data: bugs, pagination: { page: parseInt(page), limit: parseInt(limit), total: countResult[0].total, totalPages: Math.ceil(countResult[0].total / limit) } });
   } catch (error) {
+    console.error('Error fetching bugs:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 router.get('/:id', async (req, res) => {
   try {
-    const [bugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [req.params.id]);
+    // Check if tasks table has role-specific columns
+    let hasRoleColumns = false;
+    try {
+      const [columns] = await db.query('SHOW COLUMNS FROM tasks LIKE "developer_id"');
+      hasRoleColumns = columns.length > 0;
+    } catch (err) {
+      // Columns don't exist, use old schema
+    }
+    
+    let query = `
+      SELECT 
+        b.*,
+        u1.name as assigned_to_name,
+        u1.email as assigned_to_email,
+        u2.name as reported_by_name,
+        u2.email as reported_by_email,
+        u3.name as updated_by_name,
+        u3.email as updated_by_email`;
+    
+    if (hasRoleColumns) {
+      query += `,
+        t_dev.name as task_developer_name,
+        t_test.name as task_tester_name`;
+    }
+    
+    query += `
+      FROM bugs b
+      LEFT JOIN users u1 ON b.assigned_to = u1.id
+      LEFT JOIN users u2 ON b.reported_by = u2.id
+      LEFT JOIN users u3 ON b.updated_by = u3.id
+      LEFT JOIN tasks t ON b.task_id = t.id`;
+    
+    if (hasRoleColumns) {
+      query += `
+      LEFT JOIN users t_dev ON t.developer_id = t_dev.id
+      LEFT JOIN users t_test ON t.tester_id = t_test.id`;
+    }
+    
+    query += ` WHERE b.id = ?`;
+    
+    const [bugs] = await db.query(query, [req.params.id]);
     if (bugs.length === 0) return res.status(404).json({ error: 'Bug not found' });
-    res.json({ data: bugs[0] });
+    
+    // Fetch attachments for this bug
+    const [attachments] = await db.query(
+      'SELECT id, uploaded_by, original_filename, mime_type, size, created_at FROM attachments WHERE bug_id = ? ORDER BY created_at DESC',
+      [req.params.id]
+    );
+    
+    const bugData = bugs[0];
+    bugData.attachments = attachments;
+    
+    res.json({ data: bugData });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Create bug - Tester, Admin, Team Lead, Employee, and Super Admin
-router.post('/', authorize('Tester', 'Admin', 'Team Lead', 'Employee', 'Super Admin'), upload.array('attachments', 10), async (req, res) => {
+// Create bug - Tester, Admin, Team Lead, Developer, Designer, and Super Admin
+router.post('/', authorize('Tester', 'Admin', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), upload.array('attachments', 10), async (req, res) => {
   try {
     console.log('=== CREATE BUG REQUEST ===');
     console.log('Request body:', req.body);
     console.log('Files:', req.files ? req.files.map(f => ({ name: f.originalname, size: f.size })) : 'No files');
     console.log('User:', req.user);
     
-    const { task_id, title, description, severity, status, steps_to_reproduce, expected_behavior, actual_behavior } = req.body;
+    const { task_id, title, description, severity, status, steps_to_reproduce, expected_behavior, actual_behavior, assigned_to: provided_assigned_to } = req.body;
     const reported_by = req.user.id; // Get from authenticated user
+    
+    console.log('=== CREATE BUG REQUEST ===');
+    console.log('Request body:', req.body);
+    console.log('Provided assigned_to:', provided_assigned_to, 'Type:', typeof provided_assigned_to);
     
     if (!title && !description) {
       return res.status(400).json({ error: 'Title or description is required' });
     }
     
-    // Generate bug code
-    const [countResult] = await db.query('SELECT COUNT(*) as count FROM bugs');
-    const bugCode = `BG-${String(countResult[0].count + 1).padStart(4, '0')}`;
+    // Generate bug code - find the maximum numeric part from existing bug codes
+    const [maxBugCodeResult] = await db.query(`
+      SELECT MAX(CAST(SUBSTRING(bug_code, 4) AS UNSIGNED)) as max_num 
+      FROM bugs 
+      WHERE bug_code REGEXP '^BG-[0-9]+$'
+    `);
+    const nextBugNum = (maxBugCodeResult[0].max_num || 0) + 1;
+    const bugCode = `BG-${String(nextBugNum).padStart(4, '0')}`;
     
     // Combine title and description if title doesn't exist in schema
     // If title exists, use it; otherwise, prepend title to description
@@ -111,13 +256,56 @@ router.post('/', authorize('Tester', 'Admin', 'Team Lead', 'Employee', 'Super Ad
       ? `${title}\n\n${description}` 
       : title || description;
     
-    // Auto-assign bug to the task's assigned user if task_id is provided
+    // Handle assigned_to: Use provided value if available, otherwise use auto-assignment logic
     let assigned_to = null;
-    if (task_id) {
-      const [taskResult] = await db.query('SELECT assigned_to FROM tasks WHERE id = ?', [task_id]);
-      if (taskResult.length > 0 && taskResult[0].assigned_to) {
-        assigned_to = taskResult[0].assigned_to;
-        console.log(`Auto-assigning bug to task's assigned user: ${assigned_to}`);
+    
+    // If assigned_to was explicitly provided in the request, use it
+    if (provided_assigned_to !== undefined && provided_assigned_to !== null && provided_assigned_to !== '') {
+      assigned_to = parseInt(provided_assigned_to) || null;
+      console.log(`Using provided assigned_to: ${assigned_to}`);
+    } else {
+      // Auto-assign bug based on creator's role and task assignments
+      // - If Tester creates bug → assign to task's Developer
+      // - If Developer creates bug → assign to task's Tester
+      const creatorRole = req.user?.role || '';
+      
+      if (task_id) {
+        // Check if task has developer_id, designer_id, tester_id columns (new schema)
+        let taskQuery = 'SELECT assigned_to';
+        try {
+          const [columns] = await db.query('SHOW COLUMNS FROM tasks LIKE "developer_id"');
+          if (columns.length > 0) {
+            taskQuery += ', developer_id, designer_id, tester_id';
+          }
+        } catch (err) {
+          // Columns don't exist, use old schema
+          console.log('Using old task schema (no role-specific assignments)');
+        }
+        taskQuery += ' FROM tasks WHERE id = ?';
+        
+        const [taskResult] = await db.query(taskQuery, [task_id]);
+        if (taskResult.length > 0) {
+          const task = taskResult[0];
+          
+          // Role-based assignment logic
+          if (creatorRole === 'Tester') {
+            // Tester creates bug → assign to Developer
+            assigned_to = task.developer_id || task.assigned_to || null;
+            console.log(`Tester created bug - auto-assigning to Developer: ${assigned_to}`);
+          } else if (creatorRole === 'Developer') {
+            // Developer creates bug → assign to Tester
+            assigned_to = task.tester_id || task.assigned_to || null;
+            console.log(`Developer created bug - auto-assigning to Tester: ${assigned_to}`);
+          } else if (creatorRole === 'Designer') {
+            // Designer creates bug → assign to Developer (for code fixes) or Tester (for testing)
+            assigned_to = task.developer_id || task.tester_id || task.assigned_to || null;
+            console.log(`Designer created bug - auto-assigning to Developer/Tester: ${assigned_to}`);
+          } else {
+            // For other roles (Admin, Team Lead, Super Admin), use task's assigned_to
+            assigned_to = task.assigned_to || null;
+            console.log(`Auto-assigning bug to task's assigned user: ${assigned_to}`);
+          }
+        }
       }
     }
     
@@ -160,33 +348,85 @@ router.post('/', authorize('Tester', 'Admin', 'Team Lead', 'Employee', 'Super Ad
   }
 });
 
-// Update bug - Tester, Admin, Team Lead, Employee, and Super Admin
-router.put('/:id', authorize('Tester', 'Admin', 'Team Lead', 'Employee', 'Super Admin'), async (req, res) => {
+// Update bug - Tester, Admin, Team Lead, Developer, Designer, and Super Admin
+router.put('/:id', authorize('Tester', 'Admin', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
   try {
     const userRole = req.user?.role || '';
-    const { title, description, severity, status } = req.body;
+    const { title, description, severity, status, assigned_to } = req.body;
     
-    // Employee and Tester can only update status
-    if ((userRole === 'Employee' || userRole === 'Tester') && (title || description || severity)) {
-      return res.status(403).json({ error: 'You can only update the bug status' });
-    }
+    console.log('=== UPDATE BUG REQUEST ===');
+    console.log('Bug ID:', req.params.id);
+    console.log('User Role:', userRole);
+    console.log('Request body:', req.body);
+    console.log('assigned_to value:', assigned_to, 'Type:', typeof assigned_to);
+    
+    // All users can now update bugs including assigned_to
+    // Developer, Designer, and Tester can update status and assigned_to
+    // Admin, Team Lead, Super Admin can update all fields
     
     // Combine title and description if both provided
     const bugDescription = title && description 
       ? `${title}\n\n${description}` 
       : title || description;
     
-    // If Employee or Tester, only update status
-    if (userRole === 'Employee' || userRole === 'Tester') {
-      await db.query('UPDATE bugs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [status, req.params.id]);
+    const updated_by = req.user.id;
+    
+    // Handle assigned_to: convert empty string, null, undefined, or 0 to null, otherwise use the value
+    const assignedToValue = (assigned_to === '' || assigned_to === null || assigned_to === undefined || assigned_to === 0) ? null : parseInt(assigned_to);
+    console.log('Processed assigned_to value:', assignedToValue);
+    
+    // All users can update status and assigned_to
+    // Developer, Designer, and Tester can only update status and assigned_to (not description/severity)
+    if (userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester') {
+      // Developer, Designer, Tester: can update status and assigned_to only
+      await db.query('UPDATE bugs SET status = ?, assigned_to = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [status, assignedToValue, updated_by, req.params.id]);
+      console.log('Bug updated by Developer/Designer/Tester - status and assigned_to:', { status, assigned_to: assignedToValue });
     } else {
-      // Admin, Team Lead, Super Admin can update all fields
-      await db.query('UPDATE bugs SET description = ?, severity = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [bugDescription, severity, status, req.params.id]);
+      // Admin, Team Lead, Super Admin can update all fields including assigned_to
+      await db.query('UPDATE bugs SET description = ?, severity = ?, status = ?, assigned_to = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [bugDescription, severity, status, assignedToValue, updated_by, req.params.id]);
+      console.log('Bug updated successfully with assigned_to:', assignedToValue);
     }
     
     const [updated] = await db.query('SELECT * FROM bugs WHERE id = ?', [req.params.id]);
+    console.log('Updated bug:', updated[0]);
     res.json({ data: updated[0] });
   } catch (error) {
+    console.error('Error updating bug:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Download attachment
+router.get('/:bugId/attachments/:attachmentId', async (req, res) => {
+  try {
+    const { bugId, attachmentId } = req.params;
+    
+    // Get attachment info
+    const [attachments] = await db.query(
+      'SELECT path, original_filename, mime_type FROM attachments WHERE id = ? AND bug_id = ?',
+      [attachmentId, bugId]
+    );
+    
+    if (attachments.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+    
+    const attachment = attachments[0];
+    const filePath = attachment.path;
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on server' });
+    }
+    
+    // Set headers for file download
+    res.setHeader('Content-Type', attachment.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${attachment.original_filename || 'attachment'}"`);
+    
+    // Send file
+    res.sendFile(path.resolve(filePath));
+  } catch (error) {
+    console.error('Error downloading attachment:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -195,10 +435,10 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Lead', 'Employee', 'Super 
 router.delete('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
   try {
     // Delete associated attachments first
-    const [attachments] = await db.query('SELECT file_path FROM attachments WHERE bug_id = ?', [req.params.id]);
+    const [attachments] = await db.query('SELECT path FROM attachments WHERE bug_id = ?', [req.params.id]);
     attachments.forEach((att) => {
-      if (fs.existsSync(att.file_path)) {
-        fs.unlinkSync(att.file_path);
+      if (fs.existsSync(att.path)) {
+        fs.unlinkSync(att.path);
       }
     });
     await db.query('DELETE FROM attachments WHERE bug_id = ?', [req.params.id]);

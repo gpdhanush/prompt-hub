@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { employeesApi } from "@/lib/api";
 import {
   User,
   Mail,
@@ -37,83 +39,96 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-// Mock employee data - in production, fetch from API
-const mockEmployee = {
-  id: 1,
-  empCode: "EMP001",
-  name: "Ravi Kumar",
-  email: "ravi@example.com",
-  mobile: "+1234567890",
-  photo: null,
-  address: {
-    line1: "123 Main Street",
-    line2: "Apt 4B",
-    city: "Mumbai",
-    state: "Maharashtra",
-    postalCode: "400001",
-    country: "India",
-  },
-  bank: {
-    name: "HDFC Bank",
-    accountNumber: "1234567890123456",
-    ifsc: "HDFC0001234",
-    branch: "Mumbai Main Branch",
-  },
-  pan: "ABCDE1234F",
-  aadhaar: "1234 5678 9012",
-  documents: [
-    {
-      id: 1,
-      type: "Aadhaar",
-      fileName: "aadhaar-front.pdf",
-      uploadedAt: "2024-01-15",
-      verified: true,
-    },
-    {
-      id: 2,
-      type: "PAN",
-      fileName: "pan-card.pdf",
-      uploadedAt: "2024-01-15",
-      verified: true,
-    },
-    {
-      id: 3,
-      type: "Bank Passbook",
-      fileName: "passbook.pdf",
-      uploadedAt: "2024-01-20",
-      verified: false,
-    },
-  ],
-};
-
 export default function EmployeeProfile() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState("personal");
   const [showPassword, setShowPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Fetch employee data from API
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['employee', id],
+    queryFn: () => employeesApi.getById(Number(id)),
+    enabled: !!id,
+  });
+
+  const employee = data?.data;
+
   const [formData, setFormData] = useState({
-    email: mockEmployee.email,
-    mobile: mockEmployee.mobile,
+    email: "",
+    mobile: "",
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
-    address: mockEmployee.address,
-    bank: mockEmployee.bank,
+    address: {
+      line1: "",
+      line2: "",
+      city: "",
+      state: "",
+      postalCode: "",
+      country: "India",
+    },
+    bank: {
+      name: "",
+      accountNumber: "",
+      ifsc: "",
+      branch: "",
+    },
   });
+
+  // Update form data when employee data loads
+  useEffect(() => {
+    if (employee) {
+      setFormData({
+        email: employee.email || "",
+        mobile: employee.mobile || "",
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+        address: {
+          line1: "",
+          line2: "",
+          city: "",
+          state: "",
+          postalCode: "",
+          country: "India",
+        },
+        bank: {
+          name: "",
+          accountNumber: "",
+          ifsc: "",
+          branch: "",
+        },
+      });
+    }
+  }, [employee]);
 
   const handleInputChange = (field: string, value: string) => {
     if (field.includes(".")) {
       const [parent, child] = field.split(".");
-      setFormData((prev) => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent as keyof typeof prev],
-          [child]: value,
-        },
-      }));
+      setFormData((prev) => {
+        if (parent === "address") {
+          return {
+            ...prev,
+            address: {
+              ...prev.address,
+              [child]: value,
+            } as typeof prev.address,
+          };
+        } else if (parent === "bank") {
+          return {
+            ...prev,
+            bank: {
+              ...prev.bank,
+              [child]: value,
+            } as typeof prev.bank,
+          };
+        }
+        return prev;
+      });
     } else {
       setFormData((prev) => ({ ...prev, [field]: value }));
     }
@@ -200,12 +215,31 @@ export default function EmployeeProfile() {
     });
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-muted-foreground">Loading employee profile...</div>
+      </div>
+    );
+  }
+
+  if (error || !employee) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-destructive">Error loading employee profile. Please try again.</div>
+        <Button variant="outline" onClick={() => navigate("/employees")} className="ml-4">
+          Back to Employees
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">My Profile</h1>
-          <p className="text-muted-foreground">Manage your personal information and documents</p>
+          <h1 className="text-3xl font-bold">Employee Profile</h1>
+          <p className="text-muted-foreground">View and manage employee information</p>
         </div>
         <Button variant="outline" onClick={() => navigate("/employees")}>
           Back to Employees
@@ -218,9 +252,9 @@ export default function EmployeeProfile() {
           <div className="flex items-center gap-6">
             <div className="relative">
               <Avatar className="h-24 w-24">
-                <AvatarImage src={mockEmployee.photo || undefined} />
+                <AvatarImage src={employee.photo || undefined} />
                 <AvatarFallback className="text-2xl">
-                  {mockEmployee.name.split(" ").map((n) => n[0]).join("")}
+                  {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("") : "E"}
                 </AvatarFallback>
               </Avatar>
               <Dialog>
@@ -246,8 +280,8 @@ export default function EmployeeProfile() {
                         className="hidden"
                         id="photo-upload"
                       />
-                      <Label htmlFor="photo-upload" asChild>
-                        <Button variant="outline" as="span">
+                      <Label htmlFor="photo-upload" className="cursor-pointer">
+                        <Button variant="outline" type="button" className="w-full">
                           Select Photo
                         </Button>
                       </Label>
@@ -260,13 +294,27 @@ export default function EmployeeProfile() {
               </Dialog>
             </div>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold">{mockEmployee.name}</h2>
-              <p className="text-muted-foreground">{mockEmployee.empCode}</p>
+              <h2 className="text-2xl font-bold">{employee.name || "N/A"}</h2>
+              <p className="text-muted-foreground">{employee.emp_code || `EMP-${employee.id}`}</p>
               <div className="flex items-center gap-4 mt-2">
-                <StatusBadge variant="success">Active</StatusBadge>
-                <span className="text-sm text-muted-foreground">
-                  {mockEmployee.documents.filter((d) => d.verified).length} of {mockEmployee.documents.length} documents verified
-                </span>
+                <StatusBadge variant={employee.status === "Active" ? "success" : employee.status === "On Leave" ? "info" : "warning"}>
+                  {employee.status || "Active"}
+                </StatusBadge>
+                {employee.role && (
+                  <span className="text-sm text-muted-foreground">
+                    {employee.role}
+                  </span>
+                )}
+                {employee.department && (
+                  <span className="text-sm text-muted-foreground">
+                    {employee.department}
+                  </span>
+                )}
+                {employee.team_lead_name && (
+                  <span className="text-sm text-muted-foreground">
+                    Team Lead: {employee.team_lead_name}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -534,7 +582,8 @@ export default function EmployeeProfile() {
             <CardContent>
               <div className="space-y-4">
                 {["Aadhaar", "PAN", "Bank Passbook"].map((docType) => {
-                  const existingDoc = mockEmployee.documents.find((d) => d.type === docType);
+                  // TODO: Fetch documents from API when document storage is implemented
+                  const existingDoc = null;
                   return (
                     <div
                       key={docType}
@@ -602,8 +651,8 @@ export default function EmployeeProfile() {
                                   className="hidden"
                                   id={`upload-${docType}`}
                                 />
-                                <Label htmlFor={`upload-${docType}`} asChild>
-                                  <Button variant="outline" as="span">
+                                <Label htmlFor={`upload-${docType}`} className="cursor-pointer">
+                                  <Button variant="outline" type="button" className="w-full">
                                     Select File
                                   </Button>
                                 </Label>

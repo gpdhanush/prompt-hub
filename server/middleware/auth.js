@@ -72,11 +72,11 @@ export const authorize = (...allowedRoles) => {
 // Check if user is admin or super admin
 export const requireAdmin = authorize('Admin', 'Super Admin');
 
-// Check if user can manage users (Admin or Super Admin)
-export const canManageUsers = authorize('Admin', 'Super Admin');
+// Check if user can manage users (Admin, Super Admin, Team Lead, or Manager)
+export const canManageUsers = authorize('Admin', 'Super Admin', 'Team Lead', 'Manager');
 
 // Check if user is Super Admin (for creating other Super Admins)
 export const requireSuperAdmin = authorize('Super Admin');
 
-// Check if user can access user/employee management (Admin, Super Admin, or Team Lead)
-export const canAccessUserManagement = authorize('Admin', 'Super Admin', 'Team Lead');
+// Check if user can access user/employee management (Admin, Super Admin, Team Lead, or Manager)
+export const canAccessUserManagement = authorize('Admin', 'Super Admin', 'Team Lead', 'Manager');

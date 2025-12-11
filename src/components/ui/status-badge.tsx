@@ -92,6 +92,7 @@ export const bugStatusMap = {
   Fixing: "warning",
   Retesting: "purple",
   Passed: "success",
+  Completed: "success",
   Rejected: "neutral",
   Duplicate: "neutral",
   "Not a Bug": "neutral",

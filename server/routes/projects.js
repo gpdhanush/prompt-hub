@@ -9,16 +9,126 @@ router.use(authenticate);
 
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const { page = 1, limit = 10, my_projects } = req.query;
     const offset = (page - 1) * limit;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
     
-    const [projects] = await db.query(`
-      SELECT * FROM projects 
-      ORDER BY created_at DESC 
-      LIMIT ? OFFSET ?
-    `, [parseInt(limit), parseInt(offset)]);
+    let query = `
+      SELECT DISTINCT
+        p.*,
+        u1.name as created_by_name,
+        u1.email as created_by_email,
+        u2.name as updated_by_name,
+        u2.email as updated_by_email,
+        tl.name as team_lead_name,
+        tl.email as team_lead_email,
+        (SELECT COUNT(*) FROM project_users WHERE project_id = p.id) as member_count
+      FROM projects p
+      LEFT JOIN users u1 ON p.created_by = u1.id
+      LEFT JOIN users u2 ON p.updated_by = u2.id
+      LEFT JOIN users tl ON p.team_lead_id = tl.id
+      LEFT JOIN project_users pu ON p.id = pu.project_id
+      WHERE 1=1
+    `;
+    const params = [];
     
-    const [countResult] = await db.query('SELECT COUNT(*) as total FROM projects');
+    // Filter by user's projects
+    if (my_projects && userId) {
+      // Show projects where user is team lead, project admin, creator, or assigned member
+      query += ` AND (
+        p.team_lead_id = ? OR 
+        p.project_admin_id = ? OR 
+        p.created_by = ? OR
+        pu.user_id = ?
+      )`;
+      params.push(userId, userId, userId, userId);
+    } else {
+      // For "all" view, show projects based on role
+      if (userRole === 'Super Admin' || userRole === 'Admin') {
+        // Super Admin and Admin see all projects - no filter needed
+      } else if (userRole === 'Team Lead') {
+        // Team Lead sees projects where they are team lead or creator
+        query += ` AND (p.team_lead_id = ? OR p.created_by = ?)`;
+        params.push(userId, userId);
+      } else if (userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester') {
+        // Employees see projects where their team lead is the project team lead OR projects they're assigned to
+        // Get their team lead's user ID from employees table
+        const [employeeData] = await db.query(`
+          SELECT tl_emp.user_id as team_lead_user_id
+          FROM employees e
+          LEFT JOIN employees tl_emp ON e.team_lead_id = tl_emp.id
+          WHERE e.user_id = ?
+        `, [userId]);
+        
+        if (employeeData.length > 0 && employeeData[0].team_lead_user_id) {
+          const teamLeadUserId = employeeData[0].team_lead_user_id;
+          query += ` AND (
+            p.team_lead_id = ? OR
+            p.created_by = ? OR
+            pu.user_id = ?
+          )`;
+          params.push(teamLeadUserId, teamLeadUserId, userId);
+        } else {
+          // If no team lead, show projects they're assigned to
+          query += ` AND pu.user_id = ?`;
+          params.push(userId);
+        }
+      }
+    }
+    
+    query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), parseInt(offset));
+    
+    const [projects] = await db.query(query, params);
+    
+    // Count query
+    let countQuery = `
+      SELECT COUNT(DISTINCT p.id) as total 
+      FROM projects p
+      LEFT JOIN project_users pu ON p.id = pu.project_id
+      WHERE 1=1
+    `;
+    const countParams = [];
+    
+    if (my_projects && userId) {
+      countQuery += ` AND (
+        p.team_lead_id = ? OR 
+        p.project_admin_id = ? OR 
+        p.created_by = ? OR
+        pu.user_id = ?
+      )`;
+      countParams.push(userId, userId, userId, userId);
+    } else {
+      if (userRole === 'Super Admin' || userRole === 'Admin') {
+        // No filter for Super Admin and Admin
+      } else if (userRole === 'Team Lead') {
+        countQuery += ` AND (p.team_lead_id = ? OR p.created_by = ?)`;
+        countParams.push(userId, userId);
+      } else if (userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester') {
+        const [employeeData] = await db.query(`
+          SELECT tl_emp.user_id as team_lead_user_id
+          FROM employees e
+          LEFT JOIN employees tl_emp ON e.team_lead_id = tl_emp.id
+          WHERE e.user_id = ?
+        `, [userId]);
+        
+        if (employeeData.length > 0 && employeeData[0].team_lead_user_id) {
+          const teamLeadUserId = employeeData[0].team_lead_user_id;
+          countQuery += ` AND (
+            p.team_lead_id = ? OR
+            p.created_by = ? OR
+            pu.user_id = ?
+          )`;
+          countParams.push(teamLeadUserId, teamLeadUserId, userId);
+        } else {
+          countQuery += ` AND pu.user_id = ?`;
+          countParams.push(userId);
+        }
+      }
+    }
+    
+    const [countResult] = await db.query(countQuery, countParams);
     const total = countResult[0].total;
     
     res.json({
@@ -32,9 +142,33 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const [projects] = await db.query('SELECT * FROM projects WHERE id = ?', [req.params.id]);
+    const [projects] = await db.query(`
+      SELECT 
+        p.*,
+        u1.name as created_by_name,
+        u1.email as created_by_email,
+        u2.name as updated_by_name,
+        u2.email as updated_by_email,
+        tl.name as team_lead_name,
+        tl.email as team_lead_email
+      FROM projects p
+      LEFT JOIN users u1 ON p.created_by = u1.id
+      LEFT JOIN users u2 ON p.updated_by = u2.id
+      LEFT JOIN users tl ON p.team_lead_id = tl.id
+      WHERE p.id = ?
+    `, [req.params.id]);
     if (projects.length === 0) return res.status(404).json({ error: 'Project not found' });
-    res.json({ data: projects[0] });
+    
+    // Fetch project members
+    const [members] = await db.query(
+      'SELECT user_id FROM project_users WHERE project_id = ?',
+      [req.params.id]
+    );
+    
+    const projectData = projects[0];
+    projectData.member_ids = members.map((m) => m.user_id.toString());
+    
+    res.json({ data: projectData });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -43,7 +177,7 @@ router.get('/:id', async (req, res) => {
 // Create project - only Team Lead and Super Admin
 router.post('/', authorize('Team Lead', 'Super Admin'), async (req, res) => {
   try {
-    const { name, description, status, start_date, end_date } = req.body;
+    const { name, description, status, start_date, end_date, team_lead_id, member_ids } = req.body;
     
     // Valid status values matching database ENUM
     const validStatuses = ['Planning', 'In Progress', 'Testing', 'Pre-Prod', 'Production', 'Completed', 'On Hold'];
@@ -86,11 +220,29 @@ router.post('/', authorize('Team Lead', 'Super Admin'), async (req, res) => {
     }
     
     const projectCode = `PRJ-${String(nextNumber).padStart(3, '0')}`;
+    const created_by = req.user.id;
+    // Use provided team_lead_id or default to current user if they're a Team Lead
+    const final_team_lead_id = team_lead_id || (req.user.role === 'Team Lead' ? req.user.id : null);
     
     const [result] = await db.query(`
-      INSERT INTO projects (project_code, name, description, status, start_date, end_date)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [projectCode, name, description, normalizedStatus, start_date || null, end_date || null]);
+      INSERT INTO projects (project_code, name, description, status, start_date, end_date, created_by, team_lead_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [projectCode, name, description, normalizedStatus, start_date || null, end_date || null, created_by, final_team_lead_id || null]);
+    
+    // Add members to project_users table if provided
+    if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
+      const memberPromises = member_ids
+        .filter(id => id && id !== '')
+        .map(userId => {
+          return db.query(`
+            INSERT INTO project_users (project_id, user_id, role_in_project)
+            VALUES (?, ?, 'employee')
+            ON DUPLICATE KEY UPDATE role_in_project = 'employee'
+          `, [result.insertId, userId]);
+        });
+      await Promise.all(memberPromises);
+    }
+    
     const [newProject] = await db.query('SELECT * FROM projects WHERE id = ?', [result.insertId]);
     res.status(201).json({ data: newProject[0] });
   } catch (error) {
@@ -110,10 +262,27 @@ router.post('/', authorize('Team Lead', 'Super Admin'), async (req, res) => {
       }
       const projectCode = `PRJ-${String(nextNumber).padStart(3, '0')}`;
       try {
+        const created_by = req.user.id;
+        const final_team_lead_id = team_lead_id || (req.user.role === 'Team Lead' ? req.user.id : null);
         const [result] = await db.query(`
-          INSERT INTO projects (project_code, name, description, status, start_date, end_date)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `, [projectCode, name, description, status || 'Planning', start_date || null, end_date || null]);
+          INSERT INTO projects (project_code, name, description, status, start_date, end_date, created_by, team_lead_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [projectCode, name, description, normalizedStatus, start_date || null, end_date || null, created_by, final_team_lead_id || null]);
+        
+        // Add members to project_users table if provided
+        if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
+          const memberPromises = member_ids
+            .filter(id => id && id !== '')
+            .map(userId => {
+              return db.query(`
+                INSERT INTO project_users (project_id, user_id, role_in_project)
+                VALUES (?, ?, 'employee')
+                ON DUPLICATE KEY UPDATE role_in_project = 'employee'
+              `, [result.insertId, userId]);
+            });
+          await Promise.all(memberPromises);
+        }
+        
         const [newProject] = await db.query('SELECT * FROM projects WHERE id = ?', [result.insertId]);
         res.status(201).json({ data: newProject[0] });
       } catch (retryError) {
@@ -129,7 +298,7 @@ router.post('/', authorize('Team Lead', 'Super Admin'), async (req, res) => {
 router.put('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, status, start_date, end_date } = req.body;
+    const { name, description, status, start_date, end_date, team_lead_id, member_ids } = req.body;
     
     console.log('=== UPDATE PROJECT REQUEST ===');
     console.log('Project ID:', id);
@@ -165,12 +334,24 @@ router.put('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
     
     // Always update all provided fields
     // Use the normalized status value
+    const updated_by = req.user.id;
+    
+    // Update team_lead_id if provided
+    if (team_lead_id !== undefined) {
+      await db.query(`
+        UPDATE projects 
+        SET team_lead_id = ?
+        WHERE id = ?
+      `, [team_lead_id || null, id]);
+    }
+    
     const updateParams = [
       name,
       description,
       normalizedStatus, // Use normalized status
       start_date || null,
       end_date || null,
+      updated_by,
       id
     ];
     
@@ -180,7 +361,7 @@ router.put('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
     
     const [result] = await db.query(`
       UPDATE projects 
-      SET name = ?, description = ?, status = ?, start_date = ?, end_date = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, description = ?, status = ?, start_date = ?, end_date = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, updateParams);
     
@@ -189,6 +370,25 @@ router.put('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
     
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Update project members if provided
+    if (member_ids !== undefined && Array.isArray(member_ids)) {
+      // Delete existing members
+      await db.query('DELETE FROM project_users WHERE project_id = ?', [id]);
+      
+      // Add new members
+      if (member_ids.length > 0) {
+        const memberPromises = member_ids
+          .filter(id => id && id !== '')
+          .map(userId => {
+            return db.query(`
+              INSERT INTO project_users (project_id, user_id, role_in_project)
+              VALUES (?, ?, 'employee')
+            `, [id, userId]);
+          });
+        await Promise.all(memberPromises);
+      }
     }
     
     const [updated] = await db.query('SELECT * FROM projects WHERE id = ?', [id]);

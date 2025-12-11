@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Users } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Users, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,10 +44,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { projectsApi } from "@/lib/api";
+import { projectsApi, usersApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
 type Project = {
@@ -60,42 +74,66 @@ type Project = {
   end_date?: string;
   created_at?: string;
   updated_at?: string;
+  created_by_name?: string;
+  created_by_email?: string;
+  updated_by_name?: string;
+  updated_by_email?: string;
+  team_lead_id?: number;
+  team_lead_name?: string;
+  team_lead_email?: string;
+  member_count?: number;
 };
 
 export default function Projects() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewFilter, setViewFilter] = useState<'all' | 'my'>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [membersPopoverOpen, setMembersPopoverOpen] = useState(false);
   const [projectForm, setProjectForm] = useState({
     name: "",
     description: "",
     status: "Planning",
     start_date: "",
     end_date: "",
+    team_lead_id: "",
+    member_ids: [] as string[],
   });
   
   // Get current user info for role-based permissions
   const userStr = localStorage.getItem('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const userRole = currentUser?.role || '';
+  const currentUserId = currentUser?.id;
   
+  // Permissions: Super Admin and Team Lead have full CRUD access
   // Admin can only view (no create/edit/delete)
-  // Team Lead can create/edit/delete
   const canCreateProject = userRole === 'Team Lead' || userRole === 'Super Admin';
   const canEditProject = userRole === 'Team Lead' || userRole === 'Super Admin';
   const canDeleteProject = userRole === 'Team Lead' || userRole === 'Super Admin';
 
   // Fetch projects from API
   const { data, isLoading, error } = useQuery({
-    queryKey: ['projects', searchQuery],
-    queryFn: () => projectsApi.getAll({ page: 1, limit: 100 }),
+    queryKey: ['projects', searchQuery, viewFilter],
+    queryFn: () => projectsApi.getAll({ page: 1, limit: 100, my_projects: viewFilter === 'my' ? currentUserId : undefined }),
+  });
+
+  // Fetch users for team lead and members dropdowns
+  const { data: usersData } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
   });
 
   const projects = data?.data || [];
+  const allUsers = usersData?.data || [];
+  const teamLeads = allUsers.filter((user: any) => user.role === 'Team Lead');
+  const assignableUsers = allUsers.filter((user: any) => 
+    ['Developer', 'Designer', 'Tester', 'Team Lead'].includes(user.role)
+  );
   
   // Filter projects based on search query
   const filteredProjects = projects.filter((project: Project) =>
@@ -149,7 +187,7 @@ export default function Projects() {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       toast({ title: "Success", description: "Project created successfully." });
       setShowAddDialog(false);
-      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "" });
+      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "", team_lead_id: "", member_ids: [] });
     },
     onError: (error: any) => {
       if (error.status === 401) {
@@ -184,7 +222,7 @@ export default function Projects() {
       toast({ title: "Success", description: "Project updated successfully." });
       setShowEditDialog(false);
       setSelectedProject(null);
-      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "" });
+      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "", team_lead_id: "", member_ids: [] });
     },
     onError: (error: any) => {
       if (error.status === 401) {
@@ -260,15 +298,33 @@ export default function Projects() {
     setShowViewDialog(true);
   };
 
-  const handleEdit = (project: Project) => {
+  const handleEdit = async (project: Project) => {
     setSelectedProject(project);
-    setProjectForm({
-      name: project.name,
-      description: project.description || "",
-      status: normalizeStatus(project.status),
-      start_date: project.start_date ? project.start_date.split('T')[0] : "",
-      end_date: project.end_date ? project.end_date.split('T')[0] : "",
-    });
+    // Fetch full project details including members
+    try {
+      const projectData = await projectsApi.getById(project.id);
+      const fullProject = projectData.data;
+      setProjectForm({
+        name: fullProject.name,
+        description: fullProject.description || "",
+        status: normalizeStatus(fullProject.status),
+        start_date: fullProject.start_date ? fullProject.start_date.split('T')[0] : "",
+        end_date: fullProject.end_date ? fullProject.end_date.split('T')[0] : "",
+        team_lead_id: fullProject.team_lead_id?.toString() || "",
+        member_ids: fullProject.member_ids || [],
+      });
+    } catch (error) {
+      // Fallback to basic project data
+      setProjectForm({
+        name: project.name,
+        description: project.description || "",
+        status: normalizeStatus(project.status),
+        start_date: project.start_date ? project.start_date.split('T')[0] : "",
+        end_date: project.end_date ? project.end_date.split('T')[0] : "",
+        team_lead_id: project.team_lead_id?.toString() || "",
+        member_ids: [],
+      });
+    }
     setShowEditDialog(true);
   };
 
@@ -302,6 +358,8 @@ export default function Projects() {
       status: normalizedStatus,
       start_date: projectForm.start_date || null,
       end_date: projectForm.end_date || null,
+      team_lead_id: projectForm.team_lead_id || null,
+      member_ids: projectForm.member_ids || [],
     });
   };
 
@@ -334,6 +392,8 @@ export default function Projects() {
         status: normalizedStatus,
         start_date: projectForm.start_date || null,
         end_date: projectForm.end_date || null,
+        team_lead_id: projectForm.team_lead_id || null,
+        member_ids: projectForm.member_ids || [],
       },
     });
   };
@@ -347,14 +407,31 @@ export default function Projects() {
             {userRole === 'Admin' ? 'View and track all projects' : 'Manage and track all projects'}
           </p>
         </div>
-        {canCreateProject && (
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New Project
-              </Button>
-            </DialogTrigger>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 border rounded-md p-1">
+            <Button
+              variant={viewFilter === 'all' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewFilter('all')}
+            >
+              All Projects
+            </Button>
+            <Button
+              variant={viewFilter === 'my' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewFilter('my')}
+            >
+              My Projects
+            </Button>
+          </div>
+          {canCreateProject && (
+            <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+              <DialogTrigger asChild>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          New Project
+        </Button>
+              </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
                 <DialogTitle>Create New Project</DialogTitle>
@@ -430,7 +507,7 @@ export default function Projects() {
                     className="flex-1"
                     onClick={() => {
                       setShowAddDialog(false);
-                      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "" });
+                      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "", team_lead_id: "", member_ids: [] });
                     }}
                   >
                     Cancel
@@ -447,6 +524,7 @@ export default function Projects() {
             </DialogContent>
           </Dialog>
         )}
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -534,63 +612,65 @@ export default function Projects() {
                 filteredProjects.map((project: Project) => {
                   const progress = calculateProgress(project);
                   return (
-                    <TableRow key={project.id}>
-                      <TableCell className="font-mono text-muted-foreground">
+                <TableRow key={project.id}>
+                  <TableCell className="font-mono text-muted-foreground">
                         {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
+                  </TableCell>
+                  <TableCell className="font-medium">{project.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {project.team_lead_name || '-'}
                       </TableCell>
-                      <TableCell className="font-medium">{project.name}</TableCell>
-                      <TableCell className="text-muted-foreground">-</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-muted-foreground">-</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Users className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">{project.member_count || 0}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
                         {formatDate(project.start_date)} - {formatDate(project.end_date)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
                           <Progress value={progress} className="h-2 w-20" />
                           <span className="text-xs text-muted-foreground">{progress}%</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge variant={projectStatusMap[project.status] || "neutral"}>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge variant={projectStatusMap[project.status] || "neutral"}>
                           {project.status || 'Planning'}
-                        </StatusBadge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => handleView(project)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              View
-                            </DropdownMenuItem>
+                          <Eye className="mr-2 h-4 w-4" />
+                          View
+                        </DropdownMenuItem>
                             {canEditProject && (
                               <DropdownMenuItem onClick={() => handleEdit(project)}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
                             )}
                             {canDeleteProject && (
                               <DropdownMenuItem 
                                 className="text-destructive"
                                 onClick={() => handleDelete(project)}
                               >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
                             )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
                   );
                 })
               )}
@@ -647,9 +727,29 @@ export default function Projects() {
                   <div className="text-sm">{formatFullDate(selectedProject.end_date)}</div>
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">Created At</Label>
-                <div className="text-sm">{formatFullDate(selectedProject.created_at)}</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Created By</Label>
+                  <div className="text-sm">
+                    {selectedProject.created_by_name || 'N/A'}
+                    {selectedProject.created_at && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {formatFullDate(selectedProject.created_at)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Last Updated By</Label>
+                  <div className="text-sm">
+                    {selectedProject.updated_by_name || selectedProject.created_by_name || 'N/A'}
+                    {selectedProject.updated_at && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {formatFullDate(selectedProject.updated_at)}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="flex gap-2 pt-2">
                 <Button
@@ -753,7 +853,7 @@ export default function Projects() {
                 onClick={() => {
                   setShowEditDialog(false);
                   setSelectedProject(null);
-                  setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "" });
+                  setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "", team_lead_id: "", member_ids: [] });
                 }}
               >
                 Cancel

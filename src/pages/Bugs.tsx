@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, AlertCircle, X, Upload, FileText, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -62,11 +63,14 @@ import { cn } from "@/lib/utils";
 import { StatusBadge, bugSeverityMap, bugStatusMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { bugsApi, tasksApi } from "@/lib/api";
+import { bugsApi, tasksApi, usersApi } from "@/lib/api";
 
 export default function Bugs() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewFilter, setViewFilter] = useState<'all' | 'my'>('all');
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -80,6 +84,7 @@ export default function Bugs() {
     description: "",
     severity: "Minor",
     status: "Open",
+    assigned_to: "",
     stepsToReproduce: "",
     expectedBehavior: "",
     actualBehavior: "",
@@ -90,18 +95,21 @@ export default function Bugs() {
   const userStr = localStorage.getItem('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const userRole = currentUser?.role || '';
+  const currentUserId = currentUser?.id;
   
-  // Tester, Admin, Team Lead, Employee can create, update, and view bugs
-  const canCreateBug = (userRole === 'Tester' || userRole === 'Admin' || userRole === 'Team Lead' || userRole === 'Employee' || userRole === 'Super Admin');
-  const canEditBug = (userRole === 'Tester' || userRole === 'Admin' || userRole === 'Team Lead' || userRole === 'Employee' || userRole === 'Super Admin');
-  // Employee and Tester can only update status
-  const canUpdateStatus = (userRole === 'Employee' || userRole === 'Tester');
+  // Permissions: Super Admin and Team Lead have full CRUD access
+  // Tester, Admin, Team Lead, Developer, Designer, Super Admin can create, update, and view bugs
+  // Developer, Designer, and Tester can only update status (limited permission)
+  // Only Super Admin and Team Lead can delete bugs
+  const canCreateBug = (userRole === 'Tester' || userRole === 'Admin' || userRole === 'Team Lead' || userRole === 'Developer' || userRole === 'Designer' || userRole === 'Super Admin');
+  const canEditBug = (userRole === 'Tester' || userRole === 'Admin' || userRole === 'Team Lead' || userRole === 'Developer' || userRole === 'Designer' || userRole === 'Super Admin');
+  const canUpdateStatus = (userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester'); // Limited to status-only updates
   const canDeleteBug = (userRole === 'Team Lead' || userRole === 'Super Admin');
 
   // Fetch bugs from API
   const { data, isLoading, error } = useQuery({
-    queryKey: ['bugs', searchQuery],
-    queryFn: () => bugsApi.getAll({ page: 1, limit: 100 }),
+    queryKey: ['bugs', searchQuery, viewFilter],
+    queryFn: () => bugsApi.getAll({ page: 1, limit: 100, my_bugs: viewFilter === 'my' ? currentUserId : undefined }),
   });
 
   // Fetch tasks for dropdown
@@ -110,8 +118,23 @@ export default function Bugs() {
     queryFn: () => tasksApi.getAll({ page: 1, limit: 100 }),
   });
 
+  // Fetch assignable users for assignment dropdown (all authenticated users can access this)
+  const { data: assignableUsersData } = useQuery({
+    queryKey: ['assignable-users'],
+    queryFn: () => usersApi.getAssignable(),
+  });
+
   const bugs = data?.data || [];
   const tasks = tasksData?.data || [];
+  const assignableUsers = assignableUsersData?.data || [];
+
+  // Fetch bug by ID if edit parameter is in URL
+  const editBugId = searchParams.get('edit');
+  const { data: editBugData } = useQuery({
+    queryKey: ['bug', editBugId],
+    queryFn: () => bugsApi.getById(Number(editBugId)),
+    enabled: !!editBugId,
+  });
 
   // Create bug mutation
   const createBugMutation = useMutation({
@@ -126,6 +149,7 @@ export default function Bugs() {
         description: "",
         severity: "Minor",
         status: "Open",
+        assigned_to: "",
         stepsToReproduce: "",
         expectedBehavior: "",
         actualBehavior: "",
@@ -173,6 +197,7 @@ export default function Bugs() {
         description: "",
         severity: "Minor",
         status: "Open",
+        assigned_to: "",
         stepsToReproduce: "",
         expectedBehavior: "",
         actualBehavior: "",
@@ -229,11 +254,10 @@ export default function Bugs() {
 
   // Handlers
   const handleView = (bug: any) => {
-    setSelectedBug(bug);
-    setShowViewDialog(true);
+    navigate(`/bugs/${bug.id}`);
   };
 
-  const handleEdit = (bug: any) => {
+  const handleEdit = useCallback((bug: any) => {
     setSelectedBug(bug);
     // Parse description to extract title if it contains title\n\ndescription format
     const descParts = bug.description?.split('\n\n') || [];
@@ -246,16 +270,43 @@ export default function Bugs() {
       description: bugDescription,
       severity: bug.severity || "Minor",
       status: bug.status || "Open",
+      assigned_to: bug.assigned_to?.toString() || "",
       stepsToReproduce: bug.steps_to_reproduce || "",
       expectedBehavior: bug.expected_behavior || "",
       actualBehavior: bug.actual_behavior || "",
     });
     setShowEditDialog(true);
-  };
+  }, []);
+
+  // Handle edit parameter from URL
+  useEffect(() => {
+    if (editBugId && editBugData?.data) {
+      const bug = editBugData.data;
+      handleEdit(bug);
+      // Remove edit parameter from URL
+      setSearchParams((params) => {
+        params.delete('edit');
+        return params;
+      });
+    }
+  }, [editBugId, editBugData, handleEdit, setSearchParams]);
+
+  // Handle edit parameter from URL
+  useEffect(() => {
+    if (editBugId && editBugData?.data) {
+      const bug = editBugData.data;
+      handleEdit(bug);
+      // Remove edit parameter from URL
+      setSearchParams((params) => {
+        params.delete('edit');
+        return params;
+      });
+    }
+  }, [editBugId, editBugData]);
 
   const handleStatusUpdate = (bug: any) => {
     setSelectedBug(bug);
-    setBugForm({ ...bugForm, status: bug.status || "Open" });
+    setBugForm({ ...bugForm, status: bug.status || "Open", assigned_to: bug.assigned_to?.toString() || "" });
     setShowStatusDialog(true);
   };
 
@@ -270,18 +321,56 @@ export default function Bugs() {
     }
   };
 
+  const formatFullDate = (dateString?: string) => {
+    if (!dateString) return "Not set";
+    return new Date(dateString).toLocaleDateString("en-US", { 
+      year: "numeric",
+      month: "long", 
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
+
   const handleUpdateBug = () => {
     if (!selectedBug) return;
     
-    updateBugMutation.mutate({
+    // Handle assigned_to: convert empty string to null, otherwise parse as integer
+    const assignedToValue = bugForm.assigned_to && bugForm.assigned_to !== '' && bugForm.assigned_to !== '__none__' 
+      ? parseInt(bugForm.assigned_to) 
+      : null;
+    
+    console.log('Updating bug:', {
       id: selectedBug.id,
-      data: {
-        title: bugForm.title,
-        description: bugForm.description,
-        severity: bugForm.severity,
-        status: bugForm.status,
-      },
+      assigned_to: bugForm.assigned_to,
+      assignedToValue: assignedToValue,
+      userRole: userRole
     });
+    
+    // Developer, Designer, Tester can only update status and assigned_to
+    // Admin, Team Lead, Super Admin can update all fields
+    if (canUpdateStatus) {
+      // Developer, Designer, Tester: only update status and assigned_to
+      updateBugMutation.mutate({
+        id: selectedBug.id,
+        data: {
+          status: bugForm.status,
+          assigned_to: assignedToValue,
+        },
+      });
+    } else {
+      // Admin, Team Lead, Super Admin: update all fields
+      updateBugMutation.mutate({
+        id: selectedBug.id,
+        data: {
+          title: bugForm.title,
+          description: bugForm.description,
+          severity: bugForm.severity,
+          status: bugForm.status,
+          assigned_to: assignedToValue,
+        },
+      });
+    }
   };
 
   const handleUpdateStatus = () => {
@@ -366,6 +455,8 @@ export default function Bugs() {
     formData.append('description', bugForm.description);
     formData.append('severity', bugForm.severity);
     formData.append('status', 'Open');
+    // Always send assigned_to, even if empty (backend will handle null)
+    formData.append('assigned_to', bugForm.assigned_to || '');
     if (bugForm.stepsToReproduce) {
       formData.append('steps_to_reproduce', bugForm.stepsToReproduce);
     }
@@ -404,13 +495,30 @@ export default function Bugs() {
             {userRole === 'Admin' ? 'View and track bugs across projects' : 'Track and resolve bugs across projects'}
           </p>
         </div>
-        {canCreateBug && (
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 border rounded-md p-1">
+            <Button
+              variant={viewFilter === 'all' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewFilter('all')}
+            >
+              All Bugs
+            </Button>
+            <Button
+              variant={viewFilter === 'my' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewFilter('my')}
+            >
+              My Bugs
+            </Button>
+          </div>
+          {canCreateBug && (
           <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Report Bug
-              </Button>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          Report Bug
+        </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
@@ -522,6 +630,25 @@ export default function Bugs() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="assigned-to">Assign To</Label>
+                    <Select
+                      value={bugForm.assigned_to || undefined}
+                      onValueChange={(value) => setBugForm({ ...bugForm, assigned_to: value || "" })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select assignee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {assignableUsers.map((user: any) => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.name} ({user.role})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="steps">Steps to Reproduce</Label>
@@ -616,6 +743,8 @@ export default function Bugs() {
                         title: "",
                         description: "",
                         severity: "Minor",
+                        status: "Open",
+                        assigned_to: "",
                         stepsToReproduce: "",
                         expectedBehavior: "",
                         actualBehavior: "",
@@ -638,6 +767,7 @@ export default function Bugs() {
             </DialogContent>
           </Dialog>
         )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -675,9 +805,9 @@ export default function Bugs() {
         <Card className="glass-card">
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-status-success">
-              {bugs.filter((b: any) => b.status === "Passed" || b.status === "Closed").length}
+              {bugs.filter((b: any) => b.status === "Completed" || b.status === "Passed" || b.status === "Closed").length}
             </div>
-            <p className="text-xs text-muted-foreground">Resolved</p>
+            <p className="text-xs text-muted-foreground">Completed</p>
           </CardContent>
         </Card>
       </div>
@@ -739,13 +869,29 @@ export default function Bugs() {
                 filteredBugs.map((bug: any) => (
                   <TableRow key={bug.id}>
                     <TableCell className="font-mono text-status-error font-medium">
-                      {bug.bug_code || `BG-${bug.id}`}
+                      <Button
+                        variant="link"
+                        className="p-0 h-auto font-mono text-status-error font-medium hover:underline"
+                        onClick={() => navigate(`/bugs/${bug.id}`)}
+                      >
+                        {bug.bug_code || `BG-${bug.id}`}
+                      </Button>
                     </TableCell>
                     <TableCell className="font-mono text-primary">
-                      {bug.task_id ? `#${bug.task_id}` : '-'}
+                      {bug.task_id ? (
+                        <Button
+                          variant="link"
+                          className="p-0 h-auto font-mono text-primary hover:underline"
+                          onClick={() => navigate(`/tasks?task=${bug.task_id}`)}
+                        >
+                          #{bug.task_id}
+                        </Button>
+                      ) : (
+                        '-'
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate">
-                      {bug.title || bug.description || '-'}
+                      {bug.title || (bug.description ? bug.description.charAt(0).toUpperCase() + bug.description.slice(1) : '-')}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {bug.reported_by_name || '-'}
@@ -753,35 +899,29 @@ export default function Bugs() {
                     <TableCell>
                       {bug.assigned_to_name || '-'}
                     </TableCell>
-                    <TableCell>
+                  <TableCell>
                       <StatusBadge variant={bugSeverityMap[bug.severity] || 'default'}>
                         {bug.severity || 'Minor'}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell>
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell>
                       <StatusBadge variant={bugStatusMap[bug.status] || 'default'}>
                         {bug.status || 'Open'}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleView(bug)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View
-                          </DropdownMenuItem>
-                          {canUpdateStatus && (
-                            <DropdownMenuItem onClick={() => handleStatusUpdate(bug)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Update Status
-                            </DropdownMenuItem>
-                          )}
-                          {canEditBug && !canUpdateStatus && (
+                          <Eye className="mr-2 h-4 w-4" />
+                          View
+                        </DropdownMenuItem>
+                          {canEditBug && (
                             <DropdownMenuItem onClick={() => handleEdit(bug)}>
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
@@ -792,14 +932,14 @@ export default function Bugs() {
                               className="text-destructive"
                               onClick={() => handleDelete(bug)}
                             >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
                           )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
                 ))
               )}
             </TableBody>
@@ -824,7 +964,7 @@ export default function Bugs() {
               </div>
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Description</Label>
-                <div className="text-sm whitespace-pre-wrap">{selectedBug.description || "No description"}</div>
+                <div className="text-sm whitespace-pre-wrap">{selectedBug.description ? selectedBug.description.charAt(0).toUpperCase() + selectedBug.description.slice(1) : "No description"}</div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -848,6 +988,30 @@ export default function Bugs() {
                 <div className="grid gap-2">
                   <Label className="text-muted-foreground">Assigned To</Label>
                   <div className="text-sm">{selectedBug.assigned_to_name || '-'}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Created By</Label>
+                  <div className="text-sm">
+                    {selectedBug.reported_by_name || 'N/A'}
+                    {selectedBug.created_at && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {formatFullDate(selectedBug.created_at)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Last Updated By</Label>
+                  <div className="text-sm">
+                    {selectedBug.updated_by_name || selectedBug.reported_by_name || 'N/A'}
+                    {selectedBug.updated_at && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {formatFullDate(selectedBug.updated_at)}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               {selectedBug.steps_to_reproduce && (
@@ -876,18 +1040,7 @@ export default function Bugs() {
                 >
                   Close
                 </Button>
-                {canUpdateStatus && (
-                  <Button
-                    className="flex-1"
-                    onClick={() => {
-                      setShowViewDialog(false);
-                      handleStatusUpdate(selectedBug);
-                    }}
-                  >
-                    Update Status
-                  </Button>
-                )}
-                {canEditBug && !canUpdateStatus && (
+                {canEditBug && (
                   <Button
                     className="flex-1"
                     onClick={() => {
@@ -914,42 +1067,48 @@ export default function Bugs() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-bug-title">Bug Title *</Label>
-              <Input
-                id="edit-bug-title"
-                placeholder="Brief description of the bug"
-                value={bugForm.title}
-                onChange={(e) => setBugForm({ ...bugForm, title: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-bug-description">Description *</Label>
-              <Textarea
-                id="edit-bug-description"
-                placeholder="Detailed description of the bug"
-                value={bugForm.description}
-                onChange={(e) => setBugForm({ ...bugForm, description: e.target.value })}
-                rows={4}
-              />
-            </div>
+            {/* Only Admin, Team Lead, Super Admin can edit title, description, and severity */}
+            {!canUpdateStatus && (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-bug-title">Bug Title *</Label>
+                  <Input
+                    id="edit-bug-title"
+                    placeholder="Brief description of the bug"
+                    value={bugForm.title}
+                    onChange={(e) => setBugForm({ ...bugForm, title: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-bug-description">Description *</Label>
+                  <Textarea
+                    id="edit-bug-description"
+                    placeholder="Detailed description of the bug"
+                    value={bugForm.description}
+                    onChange={(e) => setBugForm({ ...bugForm, description: e.target.value })}
+                    rows={4}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-bug-severity">Severity</Label>
+                  <Select
+                    value={bugForm.severity}
+                    onValueChange={(value) => setBugForm({ ...bugForm, severity: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Minor">Minor</SelectItem>
+                      <SelectItem value="Major">Major</SelectItem>
+                      <SelectItem value="Critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            {/* All users can update status and assigned_to */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-bug-severity">Severity</Label>
-                <Select
-                  value={bugForm.severity}
-                  onValueChange={(value) => setBugForm({ ...bugForm, severity: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Minor">Minor</SelectItem>
-                    <SelectItem value="Major">Major</SelectItem>
-                    <SelectItem value="Critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-bug-status">Status</Label>
                 <Select
@@ -965,9 +1124,29 @@ export default function Bugs() {
                     <SelectItem value="Fixing">Fixing</SelectItem>
                     <SelectItem value="Retesting">Retesting</SelectItem>
                     <SelectItem value="Passed">Passed</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
                     <SelectItem value="Rejected">Rejected</SelectItem>
                     <SelectItem value="Duplicate">Duplicate</SelectItem>
                     <SelectItem value="Not a Bug">Not a Bug</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-bug-assigned-to">Assign To</Label>
+                <Select
+                  value={bugForm.assigned_to || undefined}
+                  onValueChange={(value) => setBugForm({ ...bugForm, assigned_to: value === "__none__" ? "" : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select assignee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {assignableUsers.map((user: any) => (
+                      <SelectItem key={user.id} value={user.id.toString()}>
+                        {user.name} ({user.role})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -995,7 +1174,7 @@ export default function Bugs() {
         </DialogContent>
       </Dialog>
 
-      {/* Update Status Dialog (for Employee and Tester) */}
+      {/* Update Status Dialog (for Developer, Designer, and Tester) */}
       <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
@@ -1020,6 +1199,7 @@ export default function Bugs() {
                   <SelectItem value="Fixing">Fixing</SelectItem>
                   <SelectItem value="Retesting">Retesting</SelectItem>
                   <SelectItem value="Passed">Passed</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
                   <SelectItem value="Rejected">Rejected</SelectItem>
                   <SelectItem value="Duplicate">Duplicate</SelectItem>
                   <SelectItem value="Not a Bug">Not a Bug</SelectItem>

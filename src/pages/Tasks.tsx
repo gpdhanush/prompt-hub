@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, MessageSquare, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,20 +59,33 @@ type Task = {
   description?: string;
   assigned_to?: number;
   assigned_to_name?: string;
+  assigned_to_email?: string;
+  developer_id?: number;
+  developer_name?: string;
+  designer_id?: number;
+  designer_name?: string;
+  tester_id?: number;
+  tester_name?: string;
   priority?: string;
   stage?: string;
   status?: string;
   deadline?: string;
   created_at?: string;
   updated_at?: string;
+  created_by_name?: string;
+  created_by_email?: string;
+  updated_by_name?: string;
+  updated_by_email?: string;
 };
 
 const stages = ["All", "Analysis", "Documentation", "Development", "Testing", "Pre-Prod", "Production", "Closed"];
 
 export default function Tasks() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStage, setActiveStage] = useState("All");
+  const [viewFilter, setViewFilter] = useState<'all' | 'my'>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -85,6 +99,9 @@ export default function Tasks() {
     stage: "Analysis",
     status: "Open",
     assigned_to: "",
+    developer_id: "",
+    designer_id: "",
+    tester_id: "",
     deadline: "",
   });
   
@@ -94,16 +111,17 @@ export default function Tasks() {
   const userRole = currentUser?.role || '';
   const currentUserId = currentUser?.id;
   
+  // Permissions: Super Admin and Team Lead have full CRUD access
+  // Developer, Designer, Tester can create and update tasks (but not delete)
   // Admin can only view (no create/edit/delete)
-  // Team Lead and Employee can create and update tasks
-  const canCreateTask = (userRole === 'Team Lead' || userRole === 'Employee' || userRole === 'Super Admin');
-  const canEditTask = (userRole === 'Team Lead' || userRole === 'Employee' || userRole === 'Super Admin');
+  const canCreateTask = (userRole === 'Team Lead' || userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester' || userRole === 'Super Admin');
+  const canEditTask = (userRole === 'Team Lead' || userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester' || userRole === 'Super Admin');
   const canDeleteTask = (userRole === 'Team Lead' || userRole === 'Super Admin');
 
   // Fetch tasks from API
   const { data, isLoading, error } = useQuery({
-    queryKey: ['tasks', searchQuery, activeStage],
-    queryFn: () => tasksApi.getAll({ page: 1, limit: 100 }),
+    queryKey: ['tasks', searchQuery, activeStage, viewFilter],
+    queryFn: () => tasksApi.getAll({ page: 1, limit: 100, my_tasks: viewFilter === 'my' ? currentUserId : undefined }),
   });
 
   // Fetch projects for dropdown
@@ -112,7 +130,7 @@ export default function Tasks() {
     queryFn: () => projectsApi.getAll({ page: 1, limit: 100 }),
   });
 
-  // Fetch users for assignment dropdown (only Employee and Team Lead roles)
+  // Fetch users for assignment dropdown (Employee, Team Lead, and Tester roles)
   const { data: usersData } = useQuery({
     queryKey: ['users'],
     queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
@@ -122,10 +140,26 @@ export default function Tasks() {
   const projects = projectsData?.data || [];
   const allUsers = usersData?.data || [];
   
-  // Filter users to show only Employee and Team Lead roles
-  const assignableUsers = allUsers.filter((user: any) => 
-    user.role === 'Employee' || user.role === 'Team Lead'
-  );
+  // Separate users by role for different dropdowns
+  const developers = allUsers.filter((user: any) => user.role === 'Developer');
+  const designers = allUsers.filter((user: any) => user.role === 'Designer');
+  const testers = allUsers.filter((user: any) => user.role === 'Tester');
+  
+  // For backward compatibility - keep assignableUsers for the old assigned_to field
+  const assignableUsers = allUsers
+    .filter((user: any) => 
+      user.role === 'Developer' || user.role === 'Designer' || user.role === 'Tester' || user.role === 'Team Lead'
+    )
+    .sort((a: any, b: any) => {
+      const roleOrder: { [key: string]: number } = {
+        'Team Lead': 1,
+        'Developer': 2,
+        'Designer': 3,
+        'Tester': 4,
+      };
+      return (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99);
+    });
+
 
   const filteredTasks = tasks.filter((task: Task) => {
     const matchesSearch = task.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -142,7 +176,7 @@ export default function Tasks() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast({ title: "Success", description: "Task created successfully." });
       setShowAddDialog(false);
-      setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", deadline: "" });
+      setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", developer_id: "", designer_id: "", tester_id: "", deadline: "" });
     },
     onError: (error: any) => {
       if (error.status === 401) {
@@ -171,7 +205,7 @@ export default function Tasks() {
       toast({ title: "Success", description: "Task updated successfully." });
       setShowEditDialog(false);
       setSelectedTask(null);
-      setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", deadline: "" });
+      setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", developer_id: "", designer_id: "", tester_id: "", deadline: "" });
     },
     onError: (error: any) => {
       if (error.status === 401) {
@@ -227,6 +261,22 @@ export default function Tasks() {
     setShowViewDialog(true);
   };
 
+  // Handle task query parameter to open view dialog
+  const taskIdParam = searchParams.get('task');
+  useEffect(() => {
+    if (taskIdParam && tasks.length > 0) {
+      const task = tasks.find((t: Task) => t.id.toString() === taskIdParam || t.task_code === taskIdParam);
+      if (task) {
+        handleView(task);
+        // Remove task parameter from URL
+        setSearchParams((params) => {
+          params.delete('task');
+          return params;
+        });
+      }
+    }
+  }, [taskIdParam, tasks, setSearchParams]);
+
   const handleEdit = (task: Task) => {
     setSelectedTask(task);
     setTaskForm({
@@ -237,6 +287,9 @@ export default function Tasks() {
       stage: task.stage || "Analysis",
       status: task.status || "Open",
       assigned_to: task.assigned_to?.toString() || "",
+      developer_id: task.developer_id?.toString() || "",
+      designer_id: task.designer_id?.toString() || "",
+      tester_id: task.tester_id?.toString() || "",
       deadline: task.deadline ? task.deadline.split('T')[0] : "",
     });
     setShowEditDialog(true);
@@ -279,6 +332,9 @@ export default function Tasks() {
       stage: taskForm.stage,
       status: taskForm.status,
       assigned_to: taskForm.assigned_to ? parseInt(taskForm.assigned_to) : null,
+      developer_id: taskForm.developer_id ? parseInt(taskForm.developer_id) : null,
+      designer_id: taskForm.designer_id ? parseInt(taskForm.designer_id) : null,
+      tester_id: taskForm.tester_id ? parseInt(taskForm.tester_id) : null,
       deadline: taskForm.deadline || null,
     });
   };
@@ -310,6 +366,9 @@ export default function Tasks() {
         stage: taskForm.stage,
         status: taskForm.status,
         assigned_to: taskForm.assigned_to ? parseInt(taskForm.assigned_to) : null,
+        developer_id: taskForm.developer_id ? parseInt(taskForm.developer_id) : null,
+        designer_id: taskForm.designer_id ? parseInt(taskForm.designer_id) : null,
+        tester_id: taskForm.tester_id ? parseInt(taskForm.tester_id) : null,
         deadline: taskForm.deadline || null,
       },
     });
@@ -317,10 +376,21 @@ export default function Tasks() {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "Not set";
-    return new Date(dateString).toLocaleDateString("en-US", { 
-      month: "short", 
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
       day: "numeric",
       year: "numeric"
+    });
+  };
+
+  const formatFullDate = (dateString?: string) => {
+    if (!dateString) return "Not set";
+    return new Date(dateString).toLocaleDateString("en-US", { 
+      year: "numeric",
+      month: "long", 
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
     });
   };
 
@@ -338,13 +408,30 @@ export default function Tasks() {
             {userRole === 'Admin' ? 'View and track all tasks' : 'Track and manage all tasks'}
           </p>
         </div>
-        {canCreateTask && (
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 border rounded-md p-1">
+            <Button
+              variant={viewFilter === 'all' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewFilter('all')}
+            >
+              All Tasks
+            </Button>
+            <Button
+              variant={viewFilter === 'my' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewFilter('my')}
+            >
+              My Tasks
+            </Button>
+          </div>
+          {canCreateTask && (
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New Task
-              </Button>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          New Task
+        </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[600px]">
               <DialogHeader>
@@ -459,23 +546,64 @@ export default function Tasks() {
                     />
                   </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="task-assigned-to">Assigned To</Label>
-                  <Select
-                    value={taskForm.assigned_to}
-                    onValueChange={(value) => setTaskForm({ ...taskForm, assigned_to: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select employee or team lead" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {assignableUsers.map((user: any) => (
-                        <SelectItem key={user.id} value={user.id.toString()}>
-                          {user.name} ({user.role})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid gap-4 grid-cols-3">
+                  <div className="grid gap-2">
+                    <Label htmlFor="task-developer">Developer</Label>
+                    <Select
+                      value={taskForm.developer_id || undefined}
+                      onValueChange={(value) => setTaskForm({ ...taskForm, developer_id: value === "__none__" ? "" : value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select developer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {developers.map((user: any) => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="task-designer">Designer</Label>
+                    <Select
+                      value={taskForm.designer_id || undefined}
+                      onValueChange={(value) => setTaskForm({ ...taskForm, designer_id: value === "__none__" ? "" : value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select designer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {designers.map((user: any) => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="task-tester">Tester</Label>
+                    <Select
+                      value={taskForm.tester_id || undefined}
+                      onValueChange={(value) => setTaskForm({ ...taskForm, tester_id: value === "__none__" ? "" : value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select tester" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {testers.map((user: any) => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="flex gap-2 pt-2">
                   <Button
@@ -483,7 +611,7 @@ export default function Tasks() {
                     className="flex-1"
                     onClick={() => {
                       setShowAddDialog(false);
-                      setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", deadline: "" });
+                      setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", developer_id: "", designer_id: "", tester_id: "", deadline: "" });
                     }}
                   >
                     Cancel
@@ -500,6 +628,7 @@ export default function Tasks() {
             </DialogContent>
           </Dialog>
         )}
+        </div>
       </div>
 
       {/* Stage Stats */}
@@ -556,7 +685,9 @@ export default function Tasks() {
               <TableRow>
                 <TableHead>Task ID</TableHead>
                 <TableHead>Title</TableHead>
-                <TableHead>Assigned To</TableHead>
+                <TableHead>Developer</TableHead>
+                <TableHead>Designer</TableHead>
+                <TableHead>Tester</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead>Deadline</TableHead>
@@ -567,90 +698,96 @@ export default function Tasks() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     Loading tasks...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-destructive">
+                  <TableCell colSpan={10} className="text-center py-8 text-destructive">
                     Error loading tasks. Please check your database connection.
                   </TableCell>
                 </TableRow>
               ) : filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     {searchQuery || activeStage !== "All" ? 'No tasks found matching your filters.' : 'No tasks found. Create your first task to get started.'}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredTasks.map((task: Task) => (
-                  <TableRow key={task.id}>
-                    <TableCell className="font-mono text-primary font-medium">
+                <TableRow key={task.id}>
+                  <TableCell className="font-mono text-primary font-medium">
                       #{task.task_code || task.id}
-                    </TableCell>
-                    <TableCell className="font-medium max-w-[200px] truncate">
-                      {task.title}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {task.assigned_to_name || '-'}
-                    </TableCell>
-                    <TableCell>
+                  </TableCell>
+                  <TableCell className="font-medium max-w-[200px] truncate">
+                    {task.title}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {task.developer_name || '-'}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {task.designer_name || '-'}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {task.tester_name || '-'}
+                  </TableCell>
+                  <TableCell>
                       <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]}>
                         {getPriorityLabel(task.priority)}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell>
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell>
                       <StatusBadge variant={taskStageMap[task.stage || 'Analysis']}>
                         {task.stage || 'Analysis'}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
                       {task.deadline ? formatDate(task.deadline) : "Not set"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center gap-3 text-muted-foreground">
-                        <span className="flex items-center gap-1 text-xs">
-                          <MessageSquare className="h-3 w-3" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-center gap-3 text-muted-foreground">
+                      <span className="flex items-center gap-1 text-xs">
+                        <MessageSquare className="h-3 w-3" />
                           0
-                        </span>
-                        <span className="flex items-center gap-1 text-xs">
-                          <Paperclip className="h-3 w-3" />
+                      </span>
+                      <span className="flex items-center gap-1 text-xs">
+                        <Paperclip className="h-3 w-3" />
                           0
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleView(task)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View
-                          </DropdownMenuItem>
+                          <Eye className="mr-2 h-4 w-4" />
+                          View
+                        </DropdownMenuItem>
                           {canEditTask && (
                             <DropdownMenuItem onClick={() => handleEdit(task)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
                           )}
                           {canDeleteTask && (
                             <DropdownMenuItem 
                               className="text-destructive"
                               onClick={() => handleDelete(task)}
                             >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
                           )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
                 ))
               )}
             </TableBody>
@@ -703,6 +840,44 @@ export default function Tasks() {
                 <div className="grid gap-2">
                   <Label className="text-muted-foreground">Deadline</Label>
                   <div className="text-sm">{formatDate(selectedTask.deadline)}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Developer</Label>
+                  <div className="text-sm">{selectedTask.developer_name || 'Not assigned'}</div>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Designer</Label>
+                  <div className="text-sm">{selectedTask.designer_name || 'Not assigned'}</div>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Tester</Label>
+                  <div className="text-sm">{selectedTask.tester_name || 'Not assigned'}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Created By</Label>
+                  <div className="text-sm">
+                    {selectedTask.created_by_name || 'N/A'}
+                    {selectedTask.created_at && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {formatFullDate(selectedTask.created_at)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Last Updated By</Label>
+                  <div className="text-sm">
+                    {selectedTask.updated_by_name || selectedTask.created_by_name || 'N/A'}
+                    {selectedTask.updated_at && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {formatFullDate(selectedTask.updated_at)}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
@@ -827,23 +1002,64 @@ export default function Tasks() {
                 />
               </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-task-assigned-to">Assigned To</Label>
-              <Select
-                value={taskForm.assigned_to}
-                onValueChange={(value) => setTaskForm({ ...taskForm, assigned_to: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select employee or team lead" />
-                </SelectTrigger>
-                <SelectContent>
-                  {assignableUsers.map((user: any) => (
-                    <SelectItem key={user.id} value={user.id.toString()}>
-                      {user.name} ({user.role})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 grid-cols-3">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-task-developer">Developer</Label>
+                <Select
+                  value={taskForm.developer_id || undefined}
+                  onValueChange={(value) => setTaskForm({ ...taskForm, developer_id: value === "__none__" ? "" : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select developer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {developers.map((user: any) => (
+                      <SelectItem key={user.id} value={user.id.toString()}>
+                        {user.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-task-designer">Designer</Label>
+                <Select
+                  value={taskForm.designer_id || undefined}
+                  onValueChange={(value) => setTaskForm({ ...taskForm, designer_id: value === "__none__" ? "" : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select designer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {designers.map((user: any) => (
+                      <SelectItem key={user.id} value={user.id.toString()}>
+                        {user.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-task-tester">Tester</Label>
+                <Select
+                  value={taskForm.tester_id || undefined}
+                  onValueChange={(value) => setTaskForm({ ...taskForm, tester_id: value === "__none__" ? "" : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select tester" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {testers.map((user: any) => (
+                      <SelectItem key={user.id} value={user.id.toString()}>
+                        {user.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="flex gap-2 pt-2">
               <Button
@@ -852,7 +1068,7 @@ export default function Tasks() {
                 onClick={() => {
                   setShowEditDialog(false);
                   setSelectedTask(null);
-                  setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", deadline: "" });
+                  setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", developer_id: "", designer_id: "", tester_id: "", deadline: "" });
                 }}
               >
                 Cancel

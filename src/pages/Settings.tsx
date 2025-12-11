@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
+import { useQuery } from "@tanstack/react-query";
 import { Settings as SettingsIcon, Users, Shield, Building, Bell, Database, Palette } from "lucide-react";
+import { rolesApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +36,14 @@ export default function Settings() {
   const [auditEnabled, setAuditEnabled] = useState(true);
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [selectedColor, setSelectedColor] = useState("217 91% 60%");
+
+  // Fetch roles from API
+  const { data: rolesData } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => rolesApi.getAll(),
+  });
+
+  const roles = rolesData?.data || [];
 
   useEffect(() => {
     setMounted(true);
@@ -221,16 +231,12 @@ export default function Settings() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {["Super Admin", "Admin", "Team Lead", "Employee", "Viewer"].map((role) => (
-                  <div key={role} className="flex items-center justify-between rounded-lg border border-border p-4">
+                {roles.map((role: any) => (
+                  <div key={role.id} className="flex items-center justify-between rounded-lg border border-border p-4">
                     <div>
-                      <p className="font-medium">{role}</p>
+                      <p className="font-medium">{role.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {role === "Super Admin" ? "Full system access" :
-                         role === "Admin" ? "Manage users and projects" :
-                         role === "Team Lead" ? "Project-level management" :
-                         role === "Employee" ? "Task and self-management" :
-                         "Read-only access"}
+                        {role.description || "No description available"}
                       </p>
                     </div>
                     <Button variant="outline" size="sm">Configure</Button>

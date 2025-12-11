@@ -16,6 +16,10 @@ import auditLogsRoutes from './routes/auditLogs.js';
 import notificationsRoutes from './routes/notifications.js';
 import reportsRoutes from './routes/reports.js';
 import settingsRoutes from './routes/settings.js';
+import rolesRoutes from './routes/roles.js';
+import positionsRoutes from './routes/positions.js';
+import rolePositionsRoutes from './routes/rolePositions.js';
+import { performHealthCheck } from './utils/dbHealthCheck.js';
 
 dotenv.config();
 
@@ -49,6 +53,9 @@ app.use('/api/employees', employeesRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/bugs', bugsRoutes);
+app.use('/api/roles', rolesRoutes);
+app.use('/api/positions', positionsRoutes);
+app.use('/api/role-positions', rolePositionsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/leaves', leavesRoutes);
 app.use('/api/reimbursements', reimbursementsRoutes);
@@ -72,8 +79,16 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
+  
+  // Perform database health check on startup
+  try {
+    await performHealthCheck();
+  } catch (error) {
+    console.error('❌ Health check failed:', error);
+    console.error('⚠️  Server started but database may have issues');
+  }
 });
 
 server.on('error', (err) => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { usersApi } from "@/lib/api";
+import { usersApi, rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
 
 type User = {
   id: number;
@@ -90,6 +90,7 @@ export default function Users() {
     role: "",
     position: "",
     mobile: "",
+    team_lead_id: "",
   });
 
   // Fetch users
@@ -97,6 +98,151 @@ export default function Users() {
     queryKey: ['users', currentPage, pageLimit, searchQuery],
     queryFn: () => usersApi.getAll({ page: currentPage, limit: pageLimit, search: searchQuery }),
   });
+
+  // Helper function to map role name to frontend value (needed before useQuery)
+  const roleNameToValue = (roleName: string): string => {
+    return roleName.toLowerCase().replace(/\s+/g, "-");
+  };
+
+  // Fetch roles from API
+  const { data: rolesData } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => rolesApi.getAll(),
+  });
+
+  // Fetch positions from API
+  const { data: positionsData } = useQuery({
+    queryKey: ['positions'],
+    queryFn: () => positionsApi.getAll(),
+  });
+
+  // Fetch position mappings for selected role
+  const { data: rolePositionsData } = useQuery({
+    queryKey: ['role-positions', userForm.role],
+    queryFn: async () => {
+      if (!userForm.role || !rolesData?.data) {
+        return { data: [] };
+      }
+      // Get role ID from role name
+      const role = rolesData.data.find((r: any) => roleNameToValue(r.name) === userForm.role);
+      if (!role) {
+        return { data: [] };
+      }
+      const result = await rolePositionsApi.getByRole(role.id);
+      return result;
+    },
+    enabled: !!userForm.role && !!rolesData?.data,
+  });
+
+  // Fetch Team Lead users for Developer, Designer, and Tester role assignment
+  const { data: teamLeadsData } = useQuery({
+    queryKey: ['team-leads'],
+    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
+    enabled: userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester', // Fetch when Developer, Designer, or Tester role is selected
+  });
+
+  const roles = rolesData?.data || [];
+  const allPositions = positionsData?.data || [];
+  const rolePositions = rolePositionsData?.data || [];
+  const teamLeads = teamLeadsData?.data?.filter((user: User) => user.role === 'Team Lead') || [];
+
+  // Filter positions based on selected role
+  // The API returns all positions with is_mapped flag (0 or 1 from MySQL), so we filter to show only mapped ones
+  let positions = allPositions;
+  
+  if (userForm.role && rolePositions.length > 0) {
+    // Filter to only show positions that are mapped to the selected role
+    // MySQL returns is_mapped as 0 or 1 (number), handle both number and boolean
+    const mappedPositions = rolePositions.filter((rp: any) => {
+      const isMapped = rp.is_mapped;
+      return isMapped === 1 || isMapped === true || isMapped === '1';
+    });
+    
+    if (mappedPositions.length > 0) {
+      // Map to full position objects from allPositions to ensure we have complete data
+      positions = mappedPositions.map((rp: any) => {
+        const fullPosition = allPositions.find((p: any) => p.id === rp.id);
+        return fullPosition || rp;
+      }).filter((p: any) => p !== undefined && p !== null);
+    } else {
+      // Check if there are any mappings at all (some might be 0)
+      const hasAnyMappings = rolePositions.some((rp: any) => 
+        rp.is_mapped === 1 || rp.is_mapped === true || rp.is_mapped === '1'
+      );
+      
+      if (!hasAnyMappings) {
+        // No positions mapped to this role, show empty array
+        positions = [];
+      }
+    }
+  } else if (userForm.role && rolePositions.length === 0) {
+    // API returned empty array - might mean table doesn't exist or no data
+    // Fallback: show all positions (backward compatibility)
+    positions = allPositions;
+  }
+
+
+
+  // Helper function to map position name to frontend value
+  const positionNameToValue = (positionName: string): string => {
+    const mapping: Record<string, string> = {
+      'Developer': 'developer',
+      'Senior Developer': 'senior-dev',
+      'Team Lead': 'tech-lead',
+      'Project Manager': 'pm',
+      'QA Engineer': 'qa',
+      'Senior QA Engineer': 'senior-qa',
+    };
+    return mapping[positionName] || positionName.toLowerCase().replace(/\s+/g, "-");
+  };
+
+  // Helper function to map frontend value to role name
+  const roleValueToName = (value: string): string => {
+    const mapping: Record<string, string> = {
+      'admin': 'Admin',
+      'team-lead': 'Team Lead',
+      'developer': 'Developer',
+      'designer': 'Designer',
+      'tester': 'Tester',
+      'viewer': 'Viewer',
+      'super-admin': 'Super Admin',
+    };
+    return mapping[value] || value;
+  };
+
+  // Helper function to map frontend value to position name
+  const positionValueToName = (value: string): string => {
+    const mapping: Record<string, string> = {
+      'developer': 'Developer',
+      'senior-dev': 'Senior Developer',
+      'tech-lead': 'Team Lead',
+      'pm': 'Project Manager',
+      'qa': 'QA Engineer',
+      'senior-qa': 'Senior QA Engineer',
+    };
+    return mapping[value] || value;
+  };
+
+  // Clear position if it's not valid for the selected role
+  useEffect(() => {
+    if (userForm.role && userForm.position && positions.length > 0) {
+      const currentPositionValue = userForm.position;
+      // Check if current position is in the filtered positions list
+      const isValidPosition = positions.some((pos: any) => {
+        const posValue = positionNameToValue(pos.name);
+        return posValue === currentPositionValue;
+      });
+      
+      if (!isValidPosition) {
+        // Position is not valid for the selected role, clear it
+        setUserForm(prev => ({ ...prev, position: '' }));
+      }
+    } else if (userForm.role && userForm.position && positions.length === 0 && rolePositions.length > 0) {
+      // If role has mappings but no positions are available, clear position
+      setUserForm(prev => ({ ...prev, position: '' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userForm.role, positions.length, userForm.position]);
 
   const users = data?.data || [];
   const pagination = data?.pagination || { total: 0, totalPages: 0 };
@@ -130,7 +276,7 @@ export default function Users() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({ title: "Success", description: "User created successfully." });
       setShowAddDialog(false);
-      setUserForm({ name: "", email: "", password: "", role: "", position: "", mobile: "" });
+      setUserForm({ name: "", email: "", password: "", role: "", position: "", mobile: "", team_lead_id: "" });
     },
     onError: (error: any) => {
       if (error.status === 401) {
@@ -160,7 +306,7 @@ export default function Users() {
       toast({ title: "Success", description: "User updated successfully." });
       setShowEditDialog(false);
       setSelectedUser(null);
-      setUserForm({ name: "", email: "", password: "", role: "", position: "", mobile: "" });
+      setUserForm({ name: "", email: "", password: "", role: "", position: "", mobile: "", team_lead_id: "" });
     },
     onError: (error: any) => {
       if (error.status === 401) {
@@ -227,32 +373,14 @@ export default function Users() {
 
   const handleEdit = (user: User) => {
     setSelectedUser(user);
-    // Map database role names back to frontend values
-    const roleMapping: Record<string, string> = {
-      'Admin': 'admin',
-      'Team Lead': 'team-lead',
-      'Employee': 'employee',
-      'Tester': 'tester',
-      'Viewer': 'viewer',
-      'Super Admin': 'super-admin'
-    };
-    
-    // Map database position names back to frontend values
-    const positionMapping: Record<string, string> = {
-      'Developer': 'developer',
-      'Senior Developer': 'senior-dev',
-      'Team Lead': 'tech-lead',
-      'Project Manager': 'pm',
-      'QA Engineer': 'qa'
-    };
-    
     setUserForm({
       name: user.name,
       email: user.email,
       password: "",
-      role: roleMapping[user.role] || user.role.toLowerCase().replace(/\s+/g, "-"),
-      position: user.position ? (positionMapping[user.position] || user.position.toLowerCase().replace(/\s+/g, "-")) : "",
+      role: roleNameToValue(user.role),
+      position: user.position ? positionNameToValue(user.position) : "",
       mobile: user.mobile || "",
+      team_lead_id: "", // Will be populated from employees table if needed
     });
     setShowEditDialog(true);
   };
@@ -273,8 +401,8 @@ export default function Users() {
       const updateData: any = {
         name: userForm.name,
         email: userForm.email,
-        role: userForm.role,
-        position: userForm.position,
+        role: roleValueToName(userForm.role),
+        position: userForm.position ? positionValueToName(userForm.position) : undefined,
       };
       if (userForm.password) {
         updateData.password = userForm.password;
@@ -297,20 +425,48 @@ export default function Users() {
       return;
     }
 
+    // Additional validation for Developer, Designer, and Tester roles
+    if (userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester') {
+      const roleNameMap: Record<string, string> = {
+        'developer': 'Developer',
+        'designer': 'Designer',
+        'tester': 'Tester'
+      };
+      const roleName = roleNameMap[userForm.role] || userForm.role;
+      if (!userForm.position) {
+        toast({
+          title: "Validation Error",
+          description: `Position is required for ${roleName} role`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!userForm.team_lead_id) {
+        toast({
+          title: "Validation Error",
+          description: `Team Lead is required for ${roleName} role`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     console.log('Creating user with data:', {
       name: userForm.name,
       email: userForm.email,
       role: userForm.role,
       position: userForm.position,
+      team_lead_id: userForm.team_lead_id,
     });
 
     createMutation.mutate({
       name: userForm.name,
       email: userForm.email,
       password: userForm.password,
-      role: userForm.role,
-      position: userForm.position,
+      role: roleValueToName(userForm.role),
+      position: userForm.position ? positionValueToName(userForm.position) : undefined,
       mobile: userForm.mobile,
+      team_lead_id: (userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester') ? userForm.team_lead_id : undefined,
     });
   };
 
@@ -369,22 +525,31 @@ export default function Users() {
                   <Select 
                     value={userForm.role} 
                     onValueChange={(value) => {
-                      console.log('Role selected:', value);
-                      setUserForm({ ...userForm, role: value });
+                      const needsTeamLead = value === 'developer' || value === 'designer' || value === 'tester';
+                      // Clear position when role changes (position will be filtered based on new role)
+                      setUserForm({ 
+                        ...userForm, 
+                        role: value, 
+                        position: '', // Clear position when role changes
+                        team_lead_id: needsTeamLead ? userForm.team_lead_id : '' 
+                      });
                     }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      {currentUser?.role === 'Super Admin' && (
-                        <SelectItem value="super-admin">Super Admin</SelectItem>
-                      )}
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="team-lead">Team Lead</SelectItem>
-                      <SelectItem value="employee">Employee</SelectItem>
-                      <SelectItem value="tester">Tester</SelectItem>
-                      <SelectItem value="viewer">Viewer</SelectItem>
+                      {roles.map((role: any) => {
+                        // Hide Super Admin from non-Super Admin users
+                        if (role.name === 'Super Admin' && currentUser?.role !== 'Super Admin') {
+                          return null;
+                        }
+                        return (
+                          <SelectItem key={role.id} value={roleNameToValue(role.name)}>
+                            {role.name}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   {!userForm.role && (
@@ -392,31 +557,76 @@ export default function Users() {
                   )}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="position">Position</Label>
+                  <Label htmlFor="position">Position{(userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester') ? ' *' : ''}</Label>
                   <Select 
                     value={userForm.position} 
                     onValueChange={(value) => setUserForm({ ...userForm, position: value })}
+                    disabled={!userForm.role}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select position" />
+                      <SelectValue placeholder={!userForm.role ? "Select role first" : positions.length === 0 ? "No positions available for this role" : "Select position"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="developer">Developer</SelectItem>
-                      <SelectItem value="senior-dev">Senior Developer</SelectItem>
-                      <SelectItem value="tech-lead">Tech Lead</SelectItem>
-                      <SelectItem value="pm">Project Manager</SelectItem>
-                      <SelectItem value="qa">QA Engineer</SelectItem>
+                      {!userForm.role ? (
+                        <div className="p-2 text-sm text-muted-foreground">Please select a role first</div>
+                      ) : positions.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">
+                          {rolePositions.length === 0 
+                            ? "Loading positions or no mappings found. If this persists, check if role_positions table exists in database."
+                            : rolePositions.some((rp: any) => rp.is_mapped === 1 || rp.is_mapped === true)
+                            ? "No positions available for this role"
+                            : "No positions mapped to this role. Map positions in Roles & Positions page."}
+                        </div>
+                      ) : (
+                        positions.map((position: any) => (
+                          <SelectItem key={position.id} value={positionNameToValue(position.name)}>
+                            {position.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
+                  {(userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester') && !userForm.position && (
+                    <p className="text-xs text-destructive">Position is required for {userForm.role === 'developer' ? 'Developer' : userForm.role === 'designer' ? 'Designer' : 'Tester'} role</p>
+                  )}
                 </div>
               </div>
+              {(userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester') && (
+                <div className="grid gap-2">
+                  <Label htmlFor="team-lead">Team Lead *</Label>
+                  {teamLeads.length === 0 ? (
+                    <div className="text-sm text-muted-foreground p-2 border rounded-md">
+                      No Team Leads available. Please create a Team Lead user first.
+                    </div>
+                  ) : (
+                    <Select 
+                      value={userForm.team_lead_id} 
+                      onValueChange={(value) => setUserForm({ ...userForm, team_lead_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Team Lead" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teamLeads.map((tl: User) => (
+                          <SelectItem key={tl.id} value={tl.id.toString()}>
+                            {tl.name} ({tl.email})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {!userForm.team_lead_id && (userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester') && (
+                    <p className="text-xs text-destructive">Team Lead is required for {userForm.role === 'developer' ? 'Developer' : userForm.role === 'designer' ? 'Designer' : 'Tester'} role</p>
+                  )}
+                </div>
+              )}
               <div className="flex gap-2 pt-2">
                 <Button 
                   variant="outline" 
                   className="flex-1" 
                   onClick={() => {
                     setShowAddDialog(false);
-                    setUserForm({ name: "", email: "", password: "", role: "", position: "", mobile: "" });
+                    setUserForm({ name: "", email: "", password: "", role: "", position: "", mobile: "", team_lead_id: "" });
                   }}
                 >
                   Cancel
@@ -517,7 +727,7 @@ export default function Users() {
                         user.role === "Super Admin" ? "purple" :
                         user.role === "Admin" ? "purple" :
                         user.role === "Team Lead" ? "info" :
-                        user.role === "Employee" ? "neutral" : "neutral"
+                        (user.role === "Developer" || user.role === "Designer" || user.role === "Tester") ? "neutral" : "neutral"
                       }
                     >
                       {user.role}
@@ -652,7 +862,7 @@ export default function Users() {
                       selectedUser.role === "Super Admin" ? "purple" :
                       selectedUser.role === "Admin" ? "purple" :
                       selectedUser.role === "Team Lead" ? "info" :
-                      selectedUser.role === "Employee" ? "neutral" : "neutral"
+                      (selectedUser.role === "Developer" || selectedUser.role === "Designer" || selectedUser.role === "Tester") ? "neutral" : "neutral"
                     }
                   >
                     {selectedUser.role}
@@ -742,38 +952,57 @@ export default function Users() {
                 <Label htmlFor="edit-role">Role</Label>
                 <Select 
                   value={userForm.role} 
-                  onValueChange={(value) => setUserForm({ ...userForm, role: value })}
+                  onValueChange={(value) => {
+                    // Clear position when role changes (position will be filtered based on new role)
+                    setUserForm({ ...userForm, role: value, position: '' });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                     <SelectContent>
-                      {currentUser?.role === 'Super Admin' && (
-                        <SelectItem value="super-admin">Super Admin</SelectItem>
-                      )}
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="team-lead">Team Lead</SelectItem>
-                      <SelectItem value="employee">Employee</SelectItem>
-                      <SelectItem value="tester">Tester</SelectItem>
-                      <SelectItem value="viewer">Viewer</SelectItem>
+                      {roles.map((role: any) => {
+                        // Hide Super Admin from non-Super Admin users
+                        if (role.name === 'Super Admin' && currentUser?.role !== 'Super Admin') {
+                          return null;
+                        }
+                        return (
+                          <SelectItem key={role.id} value={roleNameToValue(role.name)}>
+                            {role.name}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-position">Position</Label>
                 <Select 
-                  value={userForm.position} 
+                  value={userForm.position}
                   onValueChange={(value) => setUserForm({ ...userForm, position: value })}
+                  disabled={!userForm.role}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select position" />
+                    <SelectValue placeholder={!userForm.role ? "Select role first" : positions.length === 0 ? "No positions available for this role" : "Select position"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="developer">Developer</SelectItem>
-                    <SelectItem value="senior-dev">Senior Developer</SelectItem>
-                    <SelectItem value="tech-lead">Tech Lead</SelectItem>
-                    <SelectItem value="pm">Project Manager</SelectItem>
-                    <SelectItem value="qa">QA Engineer</SelectItem>
+                    {!userForm.role ? (
+                      <div className="p-2 text-sm text-muted-foreground">Please select a role first</div>
+                    ) : positions.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground">
+                        {rolePositions.length === 0 
+                          ? "Loading positions or no mappings found. If this persists, check if role_positions table exists in database."
+                          : rolePositions.some((rp: any) => rp.is_mapped === 1 || rp.is_mapped === true)
+                          ? "No positions available for this role"
+                          : "No positions mapped to this role. Map positions in Roles & Positions page."}
+                      </div>
+                    ) : (
+                      positions.map((position: any) => (
+                        <SelectItem key={position.id} value={positionNameToValue(position.name)}>
+                          {position.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -785,7 +1014,7 @@ export default function Users() {
                 onClick={() => {
                   setShowEditDialog(false);
                   setSelectedUser(null);
-                  setUserForm({ name: "", email: "", password: "", role: "", position: "", mobile: "" });
+                  setUserForm({ name: "", email: "", password: "", role: "", position: "", mobile: "", team_lead_id: "" });
                 }}
               >
                 Cancel

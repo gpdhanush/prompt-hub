@@ -7,6 +7,36 @@ const router = express.Router();
 // Apply authentication to all routes
 router.use(authenticate);
 
+// Get assignable users (for bug/task assignment) - all authenticated users can access
+router.get('/assignable', async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        r.name as role
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE r.name IN ('Developer', 'Designer', 'Tester', 'Team Lead')
+      ORDER BY 
+        CASE r.name
+          WHEN 'Team Lead' THEN 1
+          WHEN 'Developer' THEN 2
+          WHEN 'Designer' THEN 3
+          WHEN 'Tester' THEN 4
+          ELSE 99
+        END,
+        u.name ASC
+    `;
+    
+    const [users] = await db.query(query);
+    res.json({ data: users });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Restrict access to Users page - only Admin, Super Admin, and Team Lead can view
 router.use(canAccessUserManagement);
 
@@ -127,13 +157,14 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create user - requires Admin or Super Admin
+// Create user - requires Admin, Super Admin, Team Lead, or Manager
+// Team Lead and Manager can only create Developer, Designer, and Tester roles
 router.post('/', canManageUsers, async (req, res) => {
   try {
     console.log('=== CREATE USER REQUEST ===');
     console.log('Full request body:', JSON.stringify(req.body, null, 2));
     
-    const { name, email, password, role, position, mobile, status = 'Active' } = req.body;
+    const { name, email, password, role, position, mobile, status = 'Active', team_lead_id } = req.body;
     
     // Validate required fields
     if (!name || !email || !password || !role) {
@@ -148,7 +179,8 @@ router.post('/', canManageUsers, async (req, res) => {
       'admin': 'Admin',
       'team-lead': 'Team Lead',
       'team lead': 'Team Lead', // Handle space variant
-      'employee': 'Employee',
+      'developer': 'Developer',
+      'designer': 'Designer',
       'tester': 'Tester',
       'viewer': 'Viewer',
       'super-admin': 'Super Admin',
@@ -161,6 +193,23 @@ router.post('/', canManageUsers, async (req, res) => {
     if (dbRoleName === 'Super Admin' && req.user.role !== 'Super Admin') {
       return res.status(403).json({ 
         error: 'Only Super Admins can create other Super Admin users' 
+      });
+    }
+    
+    // Team Lead and Manager can only create Developer, Designer, and Tester roles
+    const currentUserRole = req.user.role;
+    if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+        !['Developer', 'Designer', 'Tester'].includes(dbRoleName)) {
+      return res.status(403).json({ 
+        error: `${currentUserRole} can only create employees with Developer, Designer, or Tester roles` 
+      });
+    }
+    
+    // Team Lead and Manager cannot create Admin roles
+    if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+        dbRoleName === 'Admin') {
+      return res.status(403).json({ 
+        error: `${currentUserRole} cannot create Admin users. Only Super Admin can create Admin users.` 
       });
     }
     
@@ -187,6 +236,11 @@ router.post('/', canManageUsers, async (req, res) => {
       });
     }
     const roleId = roles[0].id;
+    
+    // Get reporting person role from the role's reporting_person_role_id
+    // This determines who the user reports to based on their role
+    const [roleInfo] = await db.query('SELECT reporting_person_role_id FROM roles WHERE id = ?', [roleId]);
+    const reportingPersonRoleId = roleInfo[0]?.reporting_person_role_id || null;
     
     // Get position_id if provided
     let positionId = null;
@@ -215,10 +269,53 @@ router.post('/', canManageUsers, async (req, res) => {
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.default.hash(password, 10);
     
+    // Validate team_lead_id for Developer, Designer, and Tester roles
+    if ((dbRoleName === 'Developer' || dbRoleName === 'Designer' || dbRoleName === 'Tester') && team_lead_id) {
+      // Verify that the team_lead_id exists and is a Team Lead
+      const [teamLeadCheck] = await db.query(`
+        SELECT u.id, r.name as role 
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE u.id = ? AND r.name = 'Team Lead'
+      `, [team_lead_id]);
+      
+      if (teamLeadCheck.length === 0) {
+        return res.status(400).json({ 
+          error: `Invalid Team Lead ID: ${team_lead_id}. Must be a user with Team Lead role.` 
+        });
+      }
+    }
+    
     const [result] = await db.query(`
       INSERT INTO users (name, email, mobile, password_hash, role_id, position_id, status)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [name, email, mobile || null, passwordHash, roleId, positionId, status]);
+    
+    // If Developer, Designer, or Tester role and team_lead_id provided, create/update employee record
+    if ((dbRoleName === 'Developer' || dbRoleName === 'Designer' || dbRoleName === 'Tester') && team_lead_id) {
+      const newUserId = result.insertId;
+      // Check if employee record already exists
+      const [existingEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [newUserId]);
+      
+      // First, get the team lead's employee ID (convert user_id to employee_id)
+      const [teamLeadEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [team_lead_id]);
+      const teamLeadEmployeeId = teamLeadEmployee.length > 0 ? teamLeadEmployee[0].id : null;
+      
+      if (existingEmployee.length > 0) {
+        // Update existing employee record
+        await db.query('UPDATE employees SET team_lead_id = ? WHERE user_id = ?', [teamLeadEmployeeId, newUserId]);
+      } else {
+        // Create new employee record
+        // Generate employee code
+        const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
+        const empCode = `EMP-${String(empCount[0].count + 1).padStart(4, '0')}`;
+        
+        await db.query(`
+          INSERT INTO employees (user_id, emp_code, team_lead_id)
+          VALUES (?, ?, ?)
+        `, [newUserId, empCode, teamLeadEmployeeId]);
+      }
+    }
     
     const [newUser] = await db.query(`
       SELECT 
@@ -240,7 +337,8 @@ router.post('/', canManageUsers, async (req, res) => {
   }
 });
 
-// Update user - requires Admin or Super Admin
+// Update user - requires Admin, Super Admin, Team Lead, or Manager
+// Team Lead and Manager can only update Developer, Designer, and Tester roles
 router.put('/:id', canManageUsers, async (req, res) => {
   try {
     const { id } = req.params;
@@ -257,7 +355,9 @@ router.put('/:id', canManageUsers, async (req, res) => {
         'admin': 'Admin',
         'team-lead': 'Team Lead',
         'team lead': 'Team Lead', // Handle space variant
-        'employee': 'Employee',
+        'developer': 'Developer',
+        'designer': 'Designer',
+        'tester': 'Tester',
         'viewer': 'Viewer',
         'super-admin': 'Super Admin',
         'super admin': 'Super Admin' // Handle space variant
@@ -269,6 +369,23 @@ router.put('/:id', canManageUsers, async (req, res) => {
       if (dbRoleName === 'Super Admin' && req.user.role !== 'Super Admin') {
         return res.status(403).json({ 
           error: 'Only Super Admins can assign Super Admin role to other users' 
+        });
+      }
+      
+      // Team Lead and Manager can only update users to Developer, Designer, and Tester roles
+      const currentUserRole = req.user.role;
+      if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+          !['Developer', 'Designer', 'Tester'].includes(dbRoleName)) {
+        return res.status(403).json({ 
+          error: `${currentUserRole} can only assign Developer, Designer, or Tester roles` 
+        });
+      }
+      
+      // Team Lead and Manager cannot update users to Admin role
+      if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+          dbRoleName === 'Admin') {
+        return res.status(403).json({ 
+          error: `${currentUserRole} cannot assign Admin role. Only Super Admin can assign Admin role.` 
         });
       }
       
@@ -357,7 +474,7 @@ router.put('/:id', canManageUsers, async (req, res) => {
   }
 });
 
-// Delete user - requires Admin or Super Admin
+// Delete user - requires Admin, Super Admin, Team Lead, or Manager
 router.delete('/:id', canManageUsers, async (req, res) => {
   try {
     const { id } = req.params;
@@ -380,6 +497,15 @@ router.delete('/:id', canManageUsers, async (req, res) => {
     if (userToDelete.role === 'Super Admin') {
       return res.status(403).json({ 
         error: 'Cannot delete Super Admin users. Super Admin accounts are protected.' 
+      });
+    }
+    
+    // Team Lead and Manager can only delete Developer, Designer, and Tester users
+    const currentUserRole = req.user.role;
+    if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+        !['Developer', 'Designer', 'Tester'].includes(userToDelete.role)) {
+      return res.status(403).json({ 
+        error: `${currentUserRole} can only delete employees with Developer, Designer, or Tester roles` 
       });
     }
     

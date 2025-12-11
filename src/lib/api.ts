@@ -70,6 +70,8 @@ export const usersApi = {
     request<{ data: any[]; pagination: any }>(
       `/users?${new URLSearchParams(params as any).toString()}`
     ),
+  getAssignable: () =>
+    request<{ data: any[] }>('/users/assignable'),
   getById: (id: number) =>
     request<{ data: any }>(`/users/${id}`),
   create: (data: any) => {
@@ -116,7 +118,7 @@ export const employeesApi = {
 
 // Projects API
 export const projectsApi = {
-  getAll: (params?: { page?: number; limit?: number }) =>
+  getAll: (params?: { page?: number; limit?: number; my_projects?: number }) =>
     request<{ data: any[]; pagination: any }>(
       `/projects?${new URLSearchParams(params as any).toString()}`
     ),
@@ -140,7 +142,7 @@ export const projectsApi = {
 
 // Tasks API
 export const tasksApi = {
-  getAll: (params?: { page?: number; limit?: number; project_id?: number }) =>
+  getAll: (params?: { page?: number; limit?: number; project_id?: number; my_tasks?: number }) =>
     request<{ data: any[]; pagination: any }>(
       `/tasks?${new URLSearchParams(params as any).toString()}`
     ),
@@ -164,10 +166,18 @@ export const tasksApi = {
 
 // Bugs API
 export const bugsApi = {
-  getAll: (params?: { page?: number; limit?: number }) =>
-    request<{ data: any[]; pagination: any }>(
-      `/bugs?${new URLSearchParams(params as any).toString()}`
-    ),
+  getAll: (params?: { page?: number; limit?: number; my_bugs?: number }) => {
+    // Filter out undefined values to avoid sending "undefined" as string
+    const cleanParams: any = {};
+    if (params) {
+      if (params.page !== undefined) cleanParams.page = params.page;
+      if (params.limit !== undefined) cleanParams.limit = params.limit;
+      if (params.my_bugs !== undefined) cleanParams.my_bugs = params.my_bugs;
+    }
+    return request<{ data: any[]; pagination: any }>(
+      `/bugs?${new URLSearchParams(cleanParams).toString()}`
+    );
+  },
   getById: (id: number) =>
     request<{ data: any }>(`/bugs/${id}`),
   create: (formData: FormData) => {
@@ -340,4 +350,68 @@ export const settingsApi = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+};
+
+// Roles API
+export const rolesApi = {
+  getAll: () =>
+    request<{ data: any[] }>('/roles'),
+  getById: (id: number) =>
+    request<{ data: any }>(`/roles/${id}`),
+  create: (data: any) =>
+    request<{ data: any }>('/roles', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: number, data: any) =>
+    request<{ data: any }>(`/roles/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: number) =>
+    request<{ message: string }>(`/roles/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
+// Positions API
+export const positionsApi = {
+  getAll: () =>
+    request<{ data: any[] }>('/positions'),
+  getById: (id: number) =>
+    request<{ data: any }>(`/positions/${id}`),
+  create: (data: any) =>
+    request<{ data: any }>('/positions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: number, data: any) =>
+    request<{ data: any }>(`/positions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: number) =>
+    request<{ message: string }>(`/positions/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
+// Role-Position Mappings API
+export const rolePositionsApi = {
+  getByRole: (roleId: number) =>
+    request<{ data: any[] }>(`/role-positions/role/${roleId}`),
+  getByPosition: (positionId: number) =>
+    request<{ data: any[] }>(`/role-positions/position/${positionId}`),
+  updateRoleMappings: (roleId: number, positionIds: number[]) =>
+    request<{ data: any[] }>(`/role-positions/role/${roleId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ position_ids: positionIds }),
+    }),
+  updatePositionMappings: (positionId: number, roleIds: number[]) =>
+    request<{ data: any[] }>(`/role-positions/position/${positionId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role_ids: roleIds }),
+    }),
+  getAll: () =>
+    request<{ data: any[] }>('/role-positions'),
 };
