@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Upload, Trash2, Download, Eye, Clock, Calendar, Key, MessageSquare, FileText, AlertCircle, CheckCircle2, X, Save } from "lucide-react";
+import { Plus, Upload, Trash2, Download, Eye, Clock, Calendar, Key, MessageSquare, FileText, AlertCircle, CheckCircle2, X, Save, Image as ImageIcon, File, FileType, Presentation, FileSpreadsheet, Video, Music, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,119 @@ const formatFullDate = (dateString?: string) => {
     minute: "2-digit"
   });
 };
+
+// Get file icon based on file extension
+const getFileIcon = (fileName: string) => {
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  
+  // Image files
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico'].includes(extension)) {
+    return ImageIcon;
+  }
+  
+  // PDF files
+  if (extension === 'pdf') {
+    return FileType;
+  }
+  
+  // Document files
+  if (['doc', 'docx', 'txt', 'rtf', 'odt'].includes(extension)) {
+    return FileText;
+  }
+  
+  // Spreadsheet files
+  if (['xls', 'xlsx', 'csv', 'ods'].includes(extension)) {
+    return FileSpreadsheet;
+  }
+  
+  // Presentation files
+  if (['ppt', 'pptx', 'odp'].includes(extension)) {
+    return Presentation;
+  }
+  
+  // Video files
+  if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'].includes(extension)) {
+    return Video;
+  }
+  
+  // Audio files
+  if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma'].includes(extension)) {
+    return Music;
+  }
+  
+  // Archive files
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(extension)) {
+    return Archive;
+  }
+  
+  // Default file icon
+  return File;
+};
+
+// Component for file item with image fallback
+function FileItemWithImage({ file, isImage, FileIcon, projectId, canEdit, queryClient }: { 
+  file: any; 
+  isImage: boolean; 
+  FileIcon: any;
+  projectId: number;
+  canEdit: boolean;
+  queryClient: any;
+}) {
+  const [imageError, setImageError] = useState(false);
+  
+  return (
+    <div className="flex items-center justify-between p-3 border rounded">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        {isImage && file.file_url && !imageError ? (
+          <div className="h-12 w-12 rounded border overflow-hidden flex-shrink-0 bg-muted">
+            <img 
+              src={file.file_url} 
+              alt={file.file_name}
+              className="h-full w-full object-cover"
+              onError={() => setImageError(true)}
+            />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-12 w-12 rounded border flex-shrink-0 bg-muted">
+            <FileIcon className="h-6 w-6 text-muted-foreground" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate">{file.file_name}</div>
+          <div className="text-sm text-muted-foreground">
+            {file.file_type} {file.file_category && `• ${file.file_category}`}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <a href={file.file_url} target="_blank" rel="noopener noreferrer">
+          <Button variant="ghost" size="icon">
+            <Download className="h-4 w-4" />
+          </Button>
+        </a>
+        {canEdit && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={async () => {
+              if (confirm("Are you sure you want to delete this file?")) {
+                try {
+                  await projectsApi.deleteFile(projectId, file.id);
+                  queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
+                  toast({ title: "Success", description: "File deleted successfully." });
+                } catch (error: any) {
+                  toast({ title: "Error", description: error.message, variant: "destructive" });
+                }
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface ProjectTabsProps {
   projectId: number;
@@ -85,7 +198,19 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
   const credentials = credentialsData?.data || [];
   const dailyStatus = dailyStatusData?.data || [];
   const comments = commentsData?.data || [];
-  const workedTime = workedTimeData?.data || { total_hours: 0, total_minutes: 0, unique_contributors: 0 };
+  const workedTime = workedTimeData?.data 
+    ? {
+        total_hours: typeof workedTimeData.data.total_hours === 'number' 
+          ? workedTimeData.data.total_hours 
+          : parseFloat(workedTimeData.data.total_hours) || 0,
+        total_minutes: typeof workedTimeData.data.total_minutes === 'number'
+          ? workedTimeData.data.total_minutes
+          : parseInt(workedTimeData.data.total_minutes) || 0,
+        unique_contributors: typeof workedTimeData.data.unique_contributors === 'number'
+          ? workedTimeData.data.unique_contributors
+          : parseInt(workedTimeData.data.unique_contributors) || 0,
+      }
+    : { total_hours: 0, total_minutes: 0, unique_contributors: 0 };
 
   // File upload
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -190,6 +315,29 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
     },
   });
 
+  // Credential form
+  const [credentialForm, setCredentialForm] = useState({
+    credential_type: "Login",
+    service_name: "",
+    username: "",
+    password: "",
+    url: "",
+    api_key: "",
+    notes: "",
+  });
+
+  const createCredentialMutation = useMutation({
+    mutationFn: (data: any) => projectsApi.createCredential(projectId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project-credentials', projectId] });
+      toast({ title: "Success", description: "Credential added successfully." });
+      setCredentialForm({ credential_type: "Login", service_name: "", username: "", password: "", url: "", api_key: "", notes: "" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to add credential.", variant: "destructive" });
+    },
+  });
+
   // Comment form
   const [commentForm, setCommentForm] = useState({
     comment: "",
@@ -241,7 +389,7 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
         )}
 
         {/* Total Worked Time */}
-        {workedTime.total_hours > 0 && (
+        {(workedTime.total_hours > 0 || workedTime.total_minutes > 0) && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -253,15 +401,27 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <Label className="text-muted-foreground text-sm">Total Hours</Label>
-                  <div className="text-2xl font-bold">{workedTime.total_hours.toFixed(2)}</div>
+                  <div className="text-2xl font-bold">
+                    {typeof workedTime.total_hours === 'number' 
+                      ? workedTime.total_hours.toFixed(2) 
+                      : (parseFloat(String(workedTime.total_hours)) || 0).toFixed(2)}
+                  </div>
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-sm">Total Minutes</Label>
-                  <div className="text-2xl font-bold">{workedTime.total_minutes || 0}</div>
+                  <div className="text-2xl font-bold">
+                    {typeof workedTime.total_minutes === 'number'
+                      ? workedTime.total_minutes
+                      : parseInt(String(workedTime.total_minutes)) || 0}
+                  </div>
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-sm">Contributors</Label>
-                  <div className="text-2xl font-bold">{workedTime.unique_contributors || 0}</div>
+                  <div className="text-2xl font-bold">
+                    {typeof workedTime.unique_contributors === 'number'
+                      ? workedTime.unique_contributors
+                      : parseInt(String(workedTime.unique_contributors)) || 0}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -335,45 +495,23 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
               <p className="text-sm text-muted-foreground">No files uploaded yet</p>
             ) : (
               <div className="space-y-2">
-                {files.map((file: any) => (
-                  <div key={file.id} className="flex items-center justify-between p-3 border rounded">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">{file.file_name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {file.file_type} {file.file_category && `• ${file.file_category}`}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <a href={file.file_url} target="_blank" rel="noopener noreferrer">
-                        <Button variant="ghost" size="icon">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </a>
-                      {canEdit && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={async () => {
-                            if (confirm("Are you sure you want to delete this file?")) {
-                              try {
-                                await projectsApi.deleteFile(projectId, file.id);
-                                queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
-                                toast({ title: "Success", description: "File deleted successfully." });
-                              } catch (error: any) {
-                                toast({ title: "Error", description: error.message, variant: "destructive" });
-                              }
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                {files.map((file: any) => {
+                  const FileIcon = getFileIcon(file.file_name);
+                  const extension = file.file_name.split('.').pop()?.toLowerCase() || '';
+                  const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico'].includes(extension);
+                  
+                  return (
+                    <FileItemWithImage 
+                      key={file.id} 
+                      file={file} 
+                      isImage={isImage} 
+                      FileIcon={FileIcon}
+                      projectId={projectId}
+                      canEdit={canEdit}
+                      queryClient={queryClient}
+                    />
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -582,7 +720,103 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
       </TabsContent>
 
       <TabsContent value="credentials" className="space-y-6 mt-6">
-        {/* Credentials management - similar structure */}
+        {canEdit && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Add Credential</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Credential Type</Label>
+                  <Select
+                    value={credentialForm.credential_type}
+                    onValueChange={(value) => setCredentialForm({ ...credentialForm, credential_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Login">Login</SelectItem>
+                      <SelectItem value="API Key">API Key</SelectItem>
+                      <SelectItem value="Database">Database</SelectItem>
+                      <SelectItem value="Server">Server</SelectItem>
+                      <SelectItem value="Third-party Service">Third-party Service</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Service Name *</Label>
+                  <Input
+                    value={credentialForm.service_name}
+                    onChange={(e) => setCredentialForm({ ...credentialForm, service_name: e.target.value })}
+                    placeholder="Enter service name"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Username</Label>
+                  <Input
+                    value={credentialForm.username}
+                    onChange={(e) => setCredentialForm({ ...credentialForm, username: e.target.value })}
+                    placeholder="Enter username"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Password</Label>
+                  <Input
+                    type="password"
+                    value={credentialForm.password}
+                    onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
+                    placeholder="Enter password"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label>URL</Label>
+                <Input
+                  value={credentialForm.url}
+                  onChange={(e) => setCredentialForm({ ...credentialForm, url: e.target.value })}
+                  placeholder="https://example.com"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>API Key</Label>
+                <Input
+                  type="password"
+                  value={credentialForm.api_key}
+                  onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
+                  placeholder="Enter API key"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={credentialForm.notes}
+                  onChange={(e) => setCredentialForm({ ...credentialForm, notes: e.target.value })}
+                  rows={2}
+                  placeholder="Additional notes..."
+                />
+              </div>
+              <Button 
+                onClick={() => {
+                  if (!credentialForm.service_name.trim()) {
+                    toast({ title: "Validation Error", description: "Service name is required", variant: "destructive" });
+                    return;
+                  }
+                  createCredentialMutation.mutate(credentialForm);
+                }} 
+                disabled={createCredentialMutation.isPending}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                {createCredentialMutation.isPending ? "Adding..." : "Add Credential"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>Credentials ({credentials.length})</CardTitle>
@@ -598,6 +832,7 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
                       <div>
                         <div className="font-medium">{cred.service_name}</div>
                         <div className="text-sm text-muted-foreground">{cred.credential_type}</div>
+                        {cred.url && <div className="text-xs text-muted-foreground">{cred.url}</div>}
                       </div>
                       <StatusBadge variant={cred.is_active ? 'success' : 'neutral'}>
                         {cred.is_active ? 'Active' : 'Inactive'}

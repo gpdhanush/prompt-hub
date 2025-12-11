@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, MessageSquare, Paperclip } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, MessageSquare, Paperclip, CheckSquare, User, Clock, CalendarDays, FileText, AlertCircle, Target, Users, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge, taskStageMap, taskPriorityMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { tasksApi, projectsApi, usersApi } from "@/lib/api";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -539,11 +540,11 @@ export default function Tasks() {
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="task-deadline">Deadline</Label>
-                    <Input
+                    <DatePicker
                       id="task-deadline"
-                      type="date"
                       value={taskForm.deadline}
-                      onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })}
+                      onChange={(date) => setTaskForm({ ...taskForm, deadline: date })}
+                      placeholder="Select deadline"
                     />
                   </div>
                 </div>
@@ -798,90 +799,191 @@ export default function Tasks() {
 
       {/* View Task Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Task Details</DialogTitle>
-            <DialogDescription>
-              View task information and details
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+              <CheckSquare className="h-6 w-6 text-primary" />
+              Task Details
+            </DialogTitle>
+            <DialogDescription className="text-base">
+              View complete information about this task
             </DialogDescription>
           </DialogHeader>
           {selectedTask && (
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">Task ID</Label>
-                <div className="font-mono text-sm">#{selectedTask.task_code || selectedTask.id}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">Task Title</Label>
-                <div className="font-medium">{selectedTask.title}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">Description</Label>
-                <div className="text-sm">{selectedTask.description || "No description provided"}</div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Priority</Label>
-                  <StatusBadge variant={taskPriorityMap[getPriorityLabel(selectedTask.priority)]}>
+            <div className="space-y-6 py-2">
+              {/* Header Section */}
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <CheckSquare className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Task ID</p>
+                    <p className="text-lg font-bold font-mono">#{selectedTask.task_code || selectedTask.id}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge variant={taskPriorityMap[getPriorityLabel(selectedTask.priority)]} className="text-sm px-3 py-1.5">
                     {getPriorityLabel(selectedTask.priority)}
                   </StatusBadge>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Stage</Label>
-                  <StatusBadge variant={taskStageMap[selectedTask.stage || 'Analysis']}>
+                  <StatusBadge variant={taskStageMap[selectedTask.stage || 'Analysis']} className="text-sm px-3 py-1.5">
                     {selectedTask.stage || 'Analysis'}
                   </StatusBadge>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Status</Label>
-                  <div className="text-sm">{selectedTask.status || 'Open'}</div>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Deadline</Label>
-                  <div className="text-sm">{formatDate(selectedTask.deadline)}</div>
+
+              <Separator />
+
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Basic Information
+                </h3>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">Task Title</Label>
+                    <p className="text-base font-semibold">{selectedTask.title}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">Status</Label>
+                    <div className="mt-1">
+                      <StatusBadge variant="neutral" className="text-sm px-3 py-1">
+                        {selectedTask.status || 'Open'}
+                      </StatusBadge>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Developer</Label>
-                  <div className="text-sm">{selectedTask.developer_name || 'Not assigned'}</div>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Designer</Label>
-                  <div className="text-sm">{selectedTask.designer_name || 'Not assigned'}</div>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Tester</Label>
-                  <div className="text-sm">{selectedTask.tester_name || 'Not assigned'}</div>
+
+              <Separator />
+
+              {/* Description */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Description
+                </h3>
+                <div className="p-4 bg-muted/30 rounded-md border">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+                    {selectedTask.description || "No description provided"}
+                  </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Created By</Label>
-                  <div className="text-sm">
-                    {selectedTask.created_by_name || 'N/A'}
+
+              <Separator />
+
+              {/* Date Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Date Information
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {selectedTask.deadline && (
+                    <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        Deadline
+                      </Label>
+                      <p className="text-sm font-semibold">
+                        {formatDate(selectedTask.deadline) !== "Not set" 
+                          ? new Date(selectedTask.deadline).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })
+                          : "Not set"}
+                      </p>
+                    </div>
+                  )}
+                  {selectedTask.created_at && (
+                    <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" />
+                        Created At
+                      </Label>
+                      <p className="text-sm font-semibold">
+                        {new Date(selectedTask.created_at).toLocaleDateString("en-US", {
+                          weekday: "short",
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Team Assignment */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Team Assignment
+                </h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5" />
+                      Developer
+                    </Label>
+                    <p className="text-sm font-medium">{selectedTask.developer_name || 'Not assigned'}</p>
+                  </div>
+                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5" />
+                      Designer
+                    </Label>
+                    <p className="text-sm font-medium">{selectedTask.designer_name || 'Not assigned'}</p>
+                  </div>
+                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5" />
+                      Tester
+                    </Label>
+                    <p className="text-sm font-medium">{selectedTask.tester_name || 'Not assigned'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Audit Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Audit Information
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                    <Label className="text-xs font-medium text-muted-foreground">Created By</Label>
+                    <p className="text-sm font-medium">{selectedTask.created_by_name || 'N/A'}</p>
                     {selectedTask.created_at && (
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {formatFullDate(selectedTask.created_at)}
-                      </div>
+                      </p>
                     )}
                   </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Last Updated By</Label>
-                  <div className="text-sm">
-                    {selectedTask.updated_by_name || selectedTask.created_by_name || 'N/A'}
+                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                    <Label className="text-xs font-medium text-muted-foreground">Last Updated By</Label>
+                    <p className="text-sm font-medium">
+                      {selectedTask.updated_by_name || selectedTask.created_by_name || 'N/A'}
+                    </p>
                     {selectedTask.updated_at && (
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {formatFullDate(selectedTask.updated_at)}
-                      </div>
+                      </p>
                     )}
                   </div>
                 </div>
               </div>
-              <div className="flex gap-2 pt-2">
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2 border-t">
                 <Button
                   variant="outline"
                   className="flex-1"
@@ -897,6 +999,7 @@ export default function Tasks() {
                       handleEdit(selectedTask);
                     }}
                   >
+                    <Edit className="mr-2 h-4 w-4" />
                     Edit Task
                   </Button>
                 )}

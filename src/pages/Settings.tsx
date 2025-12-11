@@ -192,40 +192,14 @@ export default function Settings() {
         <p className="text-muted-foreground">Manage system configuration and preferences</p>
       </div>
 
-      <Tabs defaultValue={isSuperAdmin ? "general" : "appearance"} className="space-y-6">
+      <Tabs defaultValue="appearance" className="space-y-6">
         <TabsList className="bg-muted/50">
-          {isSuperAdmin && <TabsTrigger value="general">General</TabsTrigger>}
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           {isSuperAdmin && <TabsTrigger value="system">System</TabsTrigger>}
           {canAccessRoles && <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>}
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
-
-        {isSuperAdmin && (
-          <TabsContent value="general" className="space-y-6">
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="h-5 w-5" />
-                  Organization
-                </CardTitle>
-                <CardDescription>Basic organization settings</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-2">
-                  <Label>Organization Name</Label>
-                  <Input defaultValue="Naethra Technologies Pvt. Ltd" />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Admin Email</Label>
-                  <Input defaultValue="admin@naethra.com" type="email" />
-                </div>
-                <Button onClick={handleSaveOrganization}>Save Changes</Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
 
         <TabsContent value="appearance" className="space-y-6">
           <Card className="glass-card">
@@ -501,32 +475,6 @@ export default function Settings() {
                   Users will be logged out after this period of inactivity (5-1440 minutes)
                 </p>
               </div>
-              {isSuperAdmin && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label>Password Policy</Label>
-                    <div className="space-y-2 pl-4">
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" defaultChecked className="rounded" />
-                        <span className="text-sm">Minimum 8 characters</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" defaultChecked className="rounded" />
-                        <span className="text-sm">Require uppercase and lowercase letters</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" defaultChecked className="rounded" />
-                        <span className="text-sm">Require at least one number</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" defaultChecked className="rounded" />
-                        <span className="text-sm">Require at least one special character</span>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
               <Button onClick={handleSaveSecurity}>Save Security Settings</Button>
             </CardContent>
           </Card>

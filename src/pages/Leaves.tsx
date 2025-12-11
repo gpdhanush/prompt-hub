@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Check, X, Eye, Filter, Calendar, Edit, Trash2, Loader2 } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Check, X, Eye, Filter, Calendar, Edit, Trash2, Loader2, User, Clock, CalendarDays, FileText, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { StatusBadge, leaveStatusMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { leavesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -56,6 +57,8 @@ export default function Leaves() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
   const [selectedLeave, setSelectedLeave] = useState<any>(null);
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -130,11 +133,13 @@ export default function Leaves() {
 
   // Approve/Reject mutation
   const approveRejectMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) => 
-      leavesApi.update(id, { status, approved_by: userId }),
+    mutationFn: ({ id, status, rejection_reason }: { id: number; status: string; rejection_reason?: string }) => 
+      leavesApi.update(id, { status, approved_by: userId, rejection_reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leaves'] });
       toast({ title: "Success", description: "Leave request status updated successfully." });
+      setShowRejectDialog(false);
+      setRejectionReason("");
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to update leave status.", variant: "destructive" });
@@ -194,7 +199,23 @@ export default function Leaves() {
   };
 
   const handleReject = (leave: any) => {
-    approveRejectMutation.mutate({ id: leave.id, status: 'Rejected' });
+    setSelectedLeave(leave);
+    setRejectionReason("");
+    setShowRejectDialog(true);
+  };
+
+  const confirmReject = () => {
+    if (!rejectionReason.trim()) {
+      toast({ title: "Error", description: "Please provide a reason for rejection.", variant: "destructive" });
+      return;
+    }
+    if (selectedLeave) {
+      approveRejectMutation.mutate({ 
+        id: selectedLeave.id, 
+        status: 'Rejected',
+        rejection_reason: rejectionReason.trim()
+      });
+    }
   };
 
   const handleView = (leave: any) => {
@@ -566,61 +587,170 @@ export default function Leaves() {
 
       {/* View Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Leave Request Details</DialogTitle>
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+              <CalendarDays className="h-6 w-6 text-primary" />
+              Leave Request Details
+            </DialogTitle>
+            <DialogDescription className="text-base">
+              View complete information about this leave request
+            </DialogDescription>
           </DialogHeader>
           {selectedLeave && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Leave ID</Label>
-                  <p className="font-mono">LV-{String(selectedLeave.id).padStart(4, '0')}</p>
-                </div>
-                {canApproveLeaves && (
-                  <div>
-                    <Label className="text-muted-foreground">Employee</Label>
-                    <p className="font-medium">{selectedLeave.employee_name || 'N/A'}</p>
+            <div className="space-y-6 py-2">
+              {/* Header Section */}
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <CalendarDays className="h-6 w-6 text-primary" />
                   </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Leave Type</Label>
-                  <p>{selectedLeave.leave_type}</p>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Leave ID</p>
+                    <p className="text-lg font-bold font-mono">LV-{String(selectedLeave.id).padStart(4, '0')}</p>
+                  </div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">Duration</Label>
-                  <p>{selectedLeave.duration || 0} day{(selectedLeave.duration || 0) > 1 ? "s" : ""}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Start Date</Label>
-                  <p>{new Date(selectedLeave.start_date).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">End Date</Label>
-                  <p>{new Date(selectedLeave.end_date).toLocaleDateString()}</p>
-                </div>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Status</Label>
-                <div className="mt-1">
-                  <StatusBadge variant={leaveStatusMap[selectedLeave.status as keyof typeof leaveStatusMap] || 'neutral'}>
+                  <StatusBadge variant={leaveStatusMap[selectedLeave.status as keyof typeof leaveStatusMap] || 'neutral'} className="text-sm px-3 py-1.5">
                     {selectedLeave.status}
                   </StatusBadge>
                 </div>
               </div>
-              <div>
-                <Label className="text-muted-foreground">Reason</Label>
-                <p className="mt-1 whitespace-pre-wrap">{selectedLeave.reason}</p>
-              </div>
-              {selectedLeave.approved_by_name && (
-                <div>
-                  <Label className="text-muted-foreground">Approved By</Label>
-                  <p>{selectedLeave.approved_by_name}</p>
+
+              <Separator />
+
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Basic Information
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {canApproveLeaves && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5" />
+                        Employee
+                      </Label>
+                      <p className="text-sm font-medium">{selectedLeave.employee_name || 'N/A'}</p>
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5" />
+                      Leave Type
+                    </Label>
+                    <p className="text-sm font-medium">{selectedLeave.leave_type}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" />
+                      Duration
+                    </Label>
+                    <p className="text-sm font-medium">
+                      {selectedLeave.duration || 0} day{(selectedLeave.duration || 0) > 1 ? "s" : ""}
+                    </p>
+                  </div>
                 </div>
+              </div>
+
+              <Separator />
+
+              {/* Date Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Date Information
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                    <Label className="text-xs font-medium text-muted-foreground">Start Date</Label>
+                    <p className="text-sm font-semibold">
+                      {new Date(selectedLeave.start_date).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
+                    <Label className="text-xs font-medium text-muted-foreground">End Date</Label>
+                    <p className="text-sm font-semibold">
+                      {new Date(selectedLeave.end_date).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Reason */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Reason
+                </h3>
+                <div className="p-4 bg-muted/30 rounded-md border">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+                    {selectedLeave.reason}
+                  </p>
+                </div>
+              </div>
+
+              {/* Approval/Rejection Information */}
+              {(selectedLeave.status === 'Approved' || selectedLeave.status === 'Rejected') && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                      {selectedLeave.status === 'Approved' ? (
+                        <CheckCircle2 className="h-4 w-4 text-status-success" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-status-error" />
+                      )}
+                      {selectedLeave.status === 'Approved' ? 'Approval' : 'Rejection'} Information
+                    </h3>
+                    {selectedLeave.status === 'Approved' && selectedLeave.approved_by_name && (
+                      <div className="p-4 bg-status-success/10 rounded-md border border-status-success/20">
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle2 className="h-4 w-4 text-status-success" />
+                          <Label className="text-xs font-medium text-muted-foreground">Approved By</Label>
+                        </div>
+                        <p className="text-sm font-semibold text-status-success">{selectedLeave.approved_by_name}</p>
+                      </div>
+                    )}
+                    {selectedLeave.status === 'Rejected' && (
+                      <div className="space-y-3">
+                        {selectedLeave.approved_by_name && (
+                          <div className="p-4 bg-status-error/10 rounded-md border border-status-error/20">
+                            <div className="flex items-center gap-2 mb-2">
+                              <XCircle className="h-4 w-4 text-status-error" />
+                              <Label className="text-xs font-medium text-muted-foreground">Rejected By</Label>
+                            </div>
+                            <p className="text-sm font-semibold text-status-error">{selectedLeave.approved_by_name}</p>
+                          </div>
+                        )}
+                        {selectedLeave.rejection_reason && (
+                          <div className="p-4 bg-status-error/10 rounded-md border border-status-error/20">
+                            <div className="flex items-center gap-2 mb-2">
+                              <AlertCircle className="h-4 w-4 text-status-error" />
+                              <Label className="text-xs font-medium text-muted-foreground">Rejection Reason</Label>
+                            </div>
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap text-status-error font-medium">
+                              {selectedLeave.rejection_reason}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -647,6 +777,51 @@ export default function Leaves() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reject Confirmation Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Reject Leave Request</DialogTitle>
+            <DialogDescription>Please provide a reason for rejecting this leave request</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="rejection-reason">Rejection Reason *</Label>
+              <Textarea
+                id="rejection-reason"
+                placeholder="Enter reason for rejection"
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                A reason is required when rejecting a leave request.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button 
+                variant="outline" 
+                className="flex-1" 
+                onClick={() => {
+                  setShowRejectDialog(false);
+                  setRejectionReason("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" 
+                onClick={confirmReject}
+                disabled={approveRejectMutation.isPending || !rejectionReason.trim()}
+              >
+                {approveRejectMutation.isPending ? "Rejecting..." : "Reject Leave"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

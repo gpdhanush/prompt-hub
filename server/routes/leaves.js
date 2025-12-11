@@ -172,7 +172,7 @@ router.put('/:id', async (req, res) => {
   try {
     const userId = req.user?.id;
     const userRole = req.user?.role || '';
-    const { leave_type, start_date, end_date, reason, status, approved_by } = req.body;
+    const { leave_type, start_date, end_date, reason, status, approved_by, rejection_reason } = req.body;
     
     // Get the leave first
     const [leaves] = await db.query('SELECT * FROM leaves WHERE id = ?', [req.params.id]);
@@ -218,6 +218,22 @@ router.put('/:id', async (req, res) => {
     if (status !== undefined && (userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Lead')) {
       updates.push('status = ?');
       params.push(status);
+      
+      // If rejecting, require rejection_reason
+      if (status === 'Rejected' && !rejection_reason) {
+        return res.status(400).json({ error: 'Rejection reason is required when rejecting a leave request' });
+      }
+      
+      // If rejecting, set rejection_reason
+      if (status === 'Rejected' && rejection_reason) {
+        updates.push('rejection_reason = ?');
+        params.push(rejection_reason);
+      }
+      
+      // If approving, clear rejection_reason
+      if (status === 'Approved') {
+        updates.push('rejection_reason = NULL');
+      }
     }
     if (approved_by !== undefined && (userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Lead')) {
       updates.push('approved_by = ?');

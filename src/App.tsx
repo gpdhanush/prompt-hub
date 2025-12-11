@@ -21,7 +21,11 @@ import FileManager from "./pages/FileManager";
 import Notifications from "./pages/Notifications";
 import Reports from "./pages/Reports";
 import EmployeeProfile from "./pages/EmployeeProfile";
+import EmployeeCreate from "./pages/EmployeeCreate";
+import EmployeeEdit from "./pages/EmployeeEdit";
 import BugDetail from "./pages/BugDetail";
+import BugCreate from "./pages/BugCreate";
+import BugEdit from "./pages/BugEdit";
 import ProjectDetail from "./pages/ProjectDetail";
 import ProjectCreate from "./pages/ProjectCreate";
 import ProjectEdit from "./pages/ProjectEdit";
@@ -91,13 +95,27 @@ const App = () => (
                   </ProtectedRoute>
                 } 
               />
+              <Route 
+                path="/employees/new" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Lead']}>
+                    <EmployeeCreate />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/employees/:id/edit" 
+                element={<EmployeeEdit />} 
+              />
               <Route path="/projects" element={<Projects />} />
               <Route path="/projects/new" element={<ProjectCreate />} />
               <Route path="/projects/:id" element={<ProjectDetail />} />
               <Route path="/projects/:id/edit" element={<ProjectEdit />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/bugs" element={<Bugs />} />
+              <Route path="/bugs/new" element={<BugCreate />} />
               <Route path="/bugs/:id" element={<BugDetail />} />
+              <Route path="/bugs/:id/edit" element={<BugEdit />} />
               <Route path="/leaves" element={<Leaves />} />
               <Route path="/reimbursements" element={<Reimbursements />} />
               <Route path="/prompts" element={<AIPrompts />} />

@@ -1,18 +1,20 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, X, Upload, Trash2, FileText, MessageSquare, AlertCircle, Phone, Key, Clock, Save } from "lucide-react";
+import { ArrowLeft, Plus, X, Upload, Trash2, FileText, MessageSquare, AlertCircle, Phone, Key, Clock, Save, Download, Image as ImageIcon, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { DatePicker } from "@/components/ui/date-picker";
 import { TimePicker } from "@/components/ui/time-picker";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Separator } from "@/components/ui/separator";
-import { projectsApi, usersApi } from "@/lib/api";
+import { projectsApi, usersApi, employeesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -69,7 +71,7 @@ export default function ProjectCreate() {
     member_ids: [] as string[],
     member_roles: {} as Record<string, string>,
     milestones: [] as Milestone[],
-    // Additional features
+    // Additional features - only saved items
     files: [] as Array<{ file: File; type: string; category?: string; description?: string }>,
     comments: [] as Array<{ comment: string; comment_type: string; is_internal: boolean }>,
     change_requests: [] as Array<{ title: string; description: string; priority: string; impact?: string; estimated_effort_hours?: string }>,
@@ -78,17 +80,105 @@ export default function ProjectCreate() {
     daily_status: [] as Array<{ work_date: string; hours_worked: string; minutes_worked: string; work_description: string; tasks_completed?: string; blockers?: string }>,
   });
 
+  // Separate state for form visibility and temporary form data
+  const [showCommentForm, setShowCommentForm] = useState(false);
+  const [commentForm, setCommentForm] = useState({ comment: '', comment_type: 'General', is_internal: true });
+
+  const [showChangeRequestForm, setShowChangeRequestForm] = useState(false);
+  const [changeRequestForm, setChangeRequestForm] = useState({ title: '', description: '', priority: 'Medium', impact: '', estimated_effort_hours: '' });
+
+  const [showCallNoteForm, setShowCallNoteForm] = useState(false);
+  const [callNoteForm, setCallNoteForm] = useState({ call_date: '', call_duration_minutes: '', participants: '', notes: '', action_items: '' });
+
+  const [showCredentialForm, setShowCredentialForm] = useState(false);
+  const [credentialForm, setCredentialForm] = useState({ credential_type: 'Login', service_name: '', username: '', password: '', url: '', api_key: '', notes: '' });
+
+  const [showDailyStatusForm, setShowDailyStatusForm] = useState(false);
+  const [dailyStatusForm, setDailyStatusForm] = useState({ work_date: new Date().toISOString().split('T')[0], hours_worked: '', minutes_worked: '', work_description: '', tasks_completed: '', blockers: '' });
+
+  // State for showing credential details
+  const [visibleCredentials, setVisibleCredentials] = useState<Record<number, boolean>>({});
+
+  // Simple encryption/decryption functions (Note: For production, use proper encryption libraries)
+  const encryptCredential = (text: string): string => {
+    if (!text) return '';
+    // Simple base64 encoding (in production, use proper encryption with keys)
+    try {
+      return btoa(unescape(encodeURIComponent(text)));
+    } catch (e) {
+      return text;
+    }
+  };
+
+  const decryptCredential = (encrypted: string): string => {
+    if (!encrypted) return '';
+    try {
+      return decodeURIComponent(escape(atob(encrypted)));
+    } catch (e) {
+      return encrypted;
+    }
+  };
+
+  const toggleCredentialVisibility = (index: number) => {
+    setVisibleCredentials(prev => ({
+      ...prev,
+      [index]: !prev[index]
+    }));
+  };
+
   // Fetch users for dropdowns
   const { data: usersData } = useQuery({
     queryKey: ['users'],
     queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
   });
 
+  // Fetch employees to get team lead relationships
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => employeesApi.getAll({ page: 1, limit: 1000 }),
+  });
+
   const allUsers = usersData?.data || [];
+  const allEmployees = employeesData?.data || [];
   const teamLeads = allUsers.filter((user: any) => user.role === 'Team Lead');
-  const assignableUsers = allUsers.filter((user: any) => 
-    ['Developer', 'Designer', 'Tester', 'Team Lead'].includes(user.role)
-  );
+  
+  // Filter assignable users based on selected team lead
+  const assignableUsers = useMemo(() => {
+    // If no team lead selected, don't show any employees
+    if (!formData.team_lead_id) {
+      return [];
+    }
+    
+    // Find the selected team lead user
+    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.team_lead_id);
+    if (!selectedTeamLeadUser) {
+      return [];
+    }
+    
+    // Find the employee record for the selected team lead (by user_id)
+    const teamLeadEmployee = allEmployees.find((emp: any) => 
+      emp.user_id === selectedTeamLeadUser.id
+    );
+    
+    if (!teamLeadEmployee) {
+      // If team lead doesn't have an employee record, return empty
+      return [];
+    }
+    
+    // Find all employees under this team lead (using team_lead_id which references employee.id)
+    const teamEmployees = allEmployees.filter((emp: any) => 
+      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
+    );
+    
+    // Get user IDs of employees under this team lead
+    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
+    
+    // Filter users who are employees under this team lead
+    return allUsers.filter((user: any) => 
+      teamEmployeeUserIds.includes(user.id) && 
+      ['Developer', 'Designer', 'Tester'].includes(user.role)
+    );
+  }, [formData.team_lead_id, allUsers, allEmployees]);
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -215,19 +305,28 @@ export default function ProjectCreate() {
     });
   };
 
-  const toggleMember = (userId: string) => {
+  const toggleMember = (userId: string, userRole: string) => {
     const memberIds = formData.member_ids.includes(userId)
       ? formData.member_ids.filter(id => id !== userId)
       : [...formData.member_ids, userId];
-    
-    setFormData({ ...formData, member_ids: memberIds });
-  };
 
-  const updateMemberRole = (userId: string, role: string) => {
-    setFormData({
-      ...formData,
-      member_roles: { ...formData.member_roles, [userId]: role }
-    });
+    // Map user role to project role
+    const roleMap: Record<string, string> = {
+      'Team Lead': 'tl',
+      'Developer': 'developer',
+      'Tester': 'qa',
+      'Designer': 'designer',
+    };
+    const projectRole = roleMap[userRole] || 'employee';
+
+    const memberRoles = { ...formData.member_roles };
+    if (memberIds.includes(userId)) {
+      memberRoles[userId] = projectRole;
+    } else {
+      delete memberRoles[userId];
+    }
+
+    setFormData({ ...formData, member_ids: memberIds, member_roles: memberRoles });
   };
 
   return (
@@ -245,6 +344,17 @@ export default function ProjectCreate() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <Tabs defaultValue="basic" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="basic">Basic Info</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            <TabsTrigger value="team">Team & Status</TabsTrigger>
+            <TabsTrigger value="additional">Additional</TabsTrigger>
+            <TabsTrigger value="notes">Notes & Tech</TabsTrigger>
+          </TabsList>
+
+          {/* Basic Information Tab */}
+          <TabsContent value="basic" className="space-y-6">
         {/* Basic Information */}
         <Card>
           <CardHeader>
@@ -352,7 +462,10 @@ export default function ProjectCreate() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
 
+          {/* Timeline Tab */}
+          <TabsContent value="timeline" className="space-y-6">
         {/* Timeline & Scheduling */}
         <Card>
           <CardHeader>
@@ -482,7 +595,10 @@ export default function ProjectCreate() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
 
+          {/* Team & Status Tab */}
+          <TabsContent value="team" className="space-y-6">
         {/* Resource Allocation */}
         <Card>
           <CardHeader>
@@ -493,7 +609,15 @@ export default function ProjectCreate() {
               <Label htmlFor="team_lead_id">Assigned Team Lead</Label>
               <Select
                 value={formData.team_lead_id}
-                onValueChange={(value) => setFormData({ ...formData, team_lead_id: value })}
+                onValueChange={(value) => {
+                  // Clear member selections when team lead changes
+                  setFormData({ 
+                    ...formData, 
+                    team_lead_id: value,
+                    member_ids: [],
+                    member_roles: {}
+                  });
+                }}
               >
                 <SelectTrigger id="team_lead_id">
                   <SelectValue placeholder="Select team lead" />
@@ -510,39 +634,50 @@ export default function ProjectCreate() {
             <div className="grid gap-2">
               <Label>Assigned Employees</Label>
               <div className="border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
-                {assignableUsers.map((user: any) => {
-                  const isSelected = formData.member_ids.includes(user.id.toString());
-                  return (
-                    <div key={user.id} className="flex items-center justify-between p-2 hover:bg-muted rounded">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleMember(user.id.toString())}
-                          className="rounded"
-                        />
-                        <span className="text-sm">{user.name} ({user.email})</span>
+                {assignableUsers.length === 0 ? (
+                  <div className="text-center py-4 text-sm text-muted-foreground">
+                    {formData.team_lead_id 
+                      ? "No employees available for the selected team lead. Please assign employees to this team lead first."
+                      : "Please select a team lead to see available employees."}
+                  </div>
+                ) : (
+                  assignableUsers.map((user: any) => {
+                    const isSelected = formData.member_ids.includes(user.id.toString());
+                    const roleMap: Record<string, string> = {
+                      'Team Lead': 'TL',
+                      'Developer': 'Developer',
+                      'Tester': 'QA',
+                      'Designer': 'Designer',
+                    };
+                    const displayRole = roleMap[user.role] || user.role;
+                    return (
+                      <div 
+                        key={user.id} 
+                        className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
+                          isSelected ? 'bg-primary/10 border border-primary' : 'hover:bg-muted border border-transparent'
+                        }`}
+                        onClick={() => toggleMember(user.id.toString(), user.role)}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className={`h-4 w-4 rounded border-2 flex items-center justify-center ${
+                            isSelected ? 'bg-primary border-primary' : 'border-muted-foreground'
+                          }`}>
+                            {isSelected && (
+                              <svg className="h-3 w-3 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-sm font-medium">{user.name}</span>
+                            <span className="text-xs text-muted-foreground ml-2">({user.email})</span>
+                            <span className="text-xs text-muted-foreground ml-2">• {displayRole}</span>
+                          </div>
+                        </div>
                       </div>
-                      {isSelected && (
-                        <Select
-                          value={formData.member_roles[user.id] || 'employee'}
-                          onValueChange={(value) => updateMemberRole(user.id.toString(), value)}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="tl">Team Lead</SelectItem>
-                            <SelectItem value="developer">Developer</SelectItem>
-                            <SelectItem value="qa">QA</SelectItem>
-                            <SelectItem value="designer">Designer</SelectItem>
-                            <SelectItem value="employee">Employee</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           </CardContent>
@@ -665,7 +800,920 @@ export default function ProjectCreate() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
 
+          {/* Additional Features Tab */}
+          <TabsContent value="additional" className="space-y-6">
+        {/* File Uploads */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Project Files ({formData.files.length})
+            </CardTitle>
+            <CardDescription>Upload project-related files</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {formData.files.length > 0 && (
+              <div className="space-y-2">
+                {formData.files.map((fileItem, index) => {
+                  const isImage = fileItem.file.type.startsWith('image/');
+                  return (
+                    <div key={index} className={`flex items-center gap-3 p-3 border rounded ${isImage ? 'border-primary/20 bg-primary/5' : ''}`}>
+                      {isImage ? (
+                        <div className="h-12 w-12 rounded border overflow-hidden flex-shrink-0">
+                          <img 
+                            src={URL.createObjectURL(fileItem.file)} 
+                            alt={fileItem.file.name}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-12 w-12 rounded border flex items-center justify-center flex-shrink-0">
+                          <FileText className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{fileItem.file.name}</div>
+                        <div className="text-xs text-muted-foreground">{fileItem.type} {fileItem.category && `• ${fileItem.category}`}</div>
+                        <div className="text-xs text-muted-foreground">{(fileItem.file.size / 1024).toFixed(2)} KB</div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const url = URL.createObjectURL(fileItem.file);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = fileItem.file.name;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                          title="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const newFiles = [...formData.files];
+                            newFiles.splice(index, 1);
+                            setFormData({ ...formData, files: newFiles });
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            <div className="grid gap-4 border-t pt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>File Type</Label>
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      const fileInput = document.createElement('input');
+                      fileInput.type = 'file';
+                      fileInput.onchange = (e: any) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setFormData({
+                            ...formData,
+                            files: [...formData.files, { file, type: value, category: '', description: '' }]
+                          });
+                        }
+                      };
+                      fileInput.click();
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select file type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Document">Document</SelectItem>
+                      <SelectItem value="Image">Image</SelectItem>
+                      <SelectItem value="Design">Design</SelectItem>
+                      <SelectItem value="Code">Code</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Category (Optional)</Label>
+                  <Input
+                    placeholder="e.g., Requirements, Mockups"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Description (Optional)</Label>
+                <Textarea
+                  placeholder="File description"
+                  rows={2}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Comments */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              Comments ({formData.comments.length})
+            </CardTitle>
+            <CardDescription>Add project comments</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {formData.comments.length > 0 && (
+              <div className="space-y-2">
+                {formData.comments.map((comment, index) => (
+                  <div key={index} className="p-3 border rounded">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="font-medium">{comment.comment_type}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {comment.is_internal ? 'Internal' : 'Client Visible'}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const newComments = [...formData.comments];
+                          newComments.splice(index, 1);
+                          setFormData({ ...formData, comments: newComments });
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-sm">{comment.comment}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {!showCommentForm ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCommentForm(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Comment
+              </Button>
+            ) : (
+              <div className="grid gap-4 border-t pt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Comment Type</Label>
+                    <Select
+                      value={commentForm.comment_type}
+                      onValueChange={(value) => setCommentForm({ ...commentForm, comment_type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="General">General</SelectItem>
+                        <SelectItem value="Issue">Issue</SelectItem>
+                        <SelectItem value="Update">Update</SelectItem>
+                        <SelectItem value="Question">Question</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center space-x-2 pt-8">
+                    <Switch
+                      id="is_internal_comment"
+                      checked={commentForm.is_internal}
+                      onCheckedChange={(checked) => setCommentForm({ ...commentForm, is_internal: checked })}
+                    />
+                    <Label htmlFor="is_internal_comment">Internal Only</Label>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Comment</Label>
+                  <Textarea
+                    value={commentForm.comment}
+                    onChange={(e) => setCommentForm({ ...commentForm, comment: e.target.value })}
+                    rows={4}
+                    placeholder="Enter comment..."
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowCommentForm(false);
+                      setCommentForm({ comment: '', comment_type: 'General', is_internal: true });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (commentForm.comment.trim()) {
+                        setFormData({
+                          ...formData,
+                          comments: [...formData.comments, { ...commentForm }]
+                        });
+                        setCommentForm({ comment: '', comment_type: 'General', is_internal: true });
+                        setShowCommentForm(false);
+                      }
+                    }}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Add Comment
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Change Requests */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />
+              Change Requests ({formData.change_requests.length})
+            </CardTitle>
+            <CardDescription>Track project change requests</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {formData.change_requests.length > 0 && (
+              <div className="space-y-2">
+                {formData.change_requests.map((cr, index) => (
+                  <div key={index} className="p-3 border rounded">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="font-medium">{cr.title}</div>
+                        <div className="text-xs text-muted-foreground">Priority: {cr.priority}</div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const newCRs = [...formData.change_requests];
+                          newCRs.splice(index, 1);
+                          setFormData({ ...formData, change_requests: newCRs });
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-sm">{cr.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {!showChangeRequestForm ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowChangeRequestForm(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Change Request
+              </Button>
+            ) : (
+              <div className="grid gap-4 border-t pt-4">
+                <div className="grid gap-2">
+                  <Label>Title *</Label>
+                  <Input
+                    value={changeRequestForm.title}
+                    onChange={(e) => setChangeRequestForm({ ...changeRequestForm, title: e.target.value })}
+                    placeholder="Enter change request title"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Description *</Label>
+                  <Textarea
+                    value={changeRequestForm.description}
+                    onChange={(e) => setChangeRequestForm({ ...changeRequestForm, description: e.target.value })}
+                    rows={4}
+                    placeholder="Describe the change request..."
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Priority</Label>
+                    <Select
+                      value={changeRequestForm.priority}
+                      onValueChange={(value) => setChangeRequestForm({ ...changeRequestForm, priority: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Low">Low</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="High">High</SelectItem>
+                        <SelectItem value="Critical">Critical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Impact</Label>
+                    <Input
+                      value={changeRequestForm.impact}
+                      onChange={(e) => setChangeRequestForm({ ...changeRequestForm, impact: e.target.value })}
+                      placeholder="Impact assessment"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Estimated Effort (Hours)</Label>
+                  <Input
+                    type="number"
+                    value={changeRequestForm.estimated_effort_hours}
+                    onChange={(e) => setChangeRequestForm({ ...changeRequestForm, estimated_effort_hours: e.target.value })}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowChangeRequestForm(false);
+                      setChangeRequestForm({ title: '', description: '', priority: 'Medium', impact: '', estimated_effort_hours: '' });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (changeRequestForm.title.trim() && changeRequestForm.description.trim()) {
+                        setFormData({
+                          ...formData,
+                          change_requests: [...formData.change_requests, { ...changeRequestForm }]
+                        });
+                        setChangeRequestForm({ title: '', description: '', priority: 'Medium', impact: '', estimated_effort_hours: '' });
+                        setShowChangeRequestForm(false);
+                      }
+                    }}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Add Change Request
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Call Notes */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Phone className="h-5 w-5" />
+              Client Call Notes ({formData.call_notes.length})
+            </CardTitle>
+            <CardDescription>Record client call information</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {formData.call_notes.length > 0 && (
+              <div className="space-y-2">
+                {formData.call_notes.map((note, index) => {
+                  const formatDateTime = (dateTimeStr: string) => {
+                    if (!dateTimeStr) return 'Not set';
+                    try {
+                      const dt = new Date(dateTimeStr.includes('T') ? dateTimeStr : dateTimeStr.replace(' ', 'T'));
+                      if (!isNaN(dt.getTime())) {
+                        return dt.toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        });
+                      }
+                    } catch (e) {
+                      return dateTimeStr;
+                    }
+                    return dateTimeStr;
+                  };
+                  return (
+                  <div key={index} className="p-3 border rounded">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="font-medium">{formatDateTime(note.call_date)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Duration: {note.call_duration_minutes} minutes
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const newNotes = [...formData.call_notes];
+                          newNotes.splice(index, 1);
+                          setFormData({ ...formData, call_notes: newNotes });
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-sm">{note.notes}</p>
+                  </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            {!showCallNoteForm ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCallNoteForm(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Call Note
+              </Button>
+            ) : (
+              <div className="grid gap-4 border-t pt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Call Date & Time</Label>
+                    <DateTimePicker
+                      value={callNoteForm.call_date}
+                      onChange={(datetime) => setCallNoteForm({ ...callNoteForm, call_date: datetime })}
+                      placeholder="Select date and time"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Duration (Minutes)</Label>
+                    <Input
+                      type="number"
+                      value={callNoteForm.call_duration_minutes}
+                      onChange={(e) => setCallNoteForm({ ...callNoteForm, call_duration_minutes: e.target.value })}
+                      placeholder="30"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Participants</Label>
+                  <Input
+                    value={callNoteForm.participants}
+                    onChange={(e) => setCallNoteForm({ ...callNoteForm, participants: e.target.value })}
+                    placeholder="List participants"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Notes *</Label>
+                  <Textarea
+                    value={callNoteForm.notes}
+                    onChange={(e) => setCallNoteForm({ ...callNoteForm, notes: e.target.value })}
+                    rows={4}
+                    placeholder="Call notes..."
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Action Items</Label>
+                  <Textarea
+                    value={callNoteForm.action_items}
+                    onChange={(e) => setCallNoteForm({ ...callNoteForm, action_items: e.target.value })}
+                    rows={2}
+                    placeholder="Action items from the call"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowCallNoteForm(false);
+                      setCallNoteForm({ call_date: '', call_duration_minutes: '', participants: '', notes: '', action_items: '' });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (callNoteForm.call_date && callNoteForm.notes.trim()) {
+                        setFormData({
+                          ...formData,
+                          call_notes: [...formData.call_notes, { ...callNoteForm }]
+                        });
+                        setCallNoteForm({ call_date: '', call_duration_minutes: '', participants: '', notes: '', action_items: '' });
+                        setShowCallNoteForm(false);
+                      }
+                    }}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Add Call Note
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Credentials */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5" />
+              Credentials Management ({formData.credentials.length})
+            </CardTitle>
+            <CardDescription>Store login info, API keys, and credentials</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {formData.credentials.length > 0 && (
+              <div className="space-y-2">
+                {formData.credentials.map((cred, index) => {
+                  const isVisible = visibleCredentials[index];
+                  return (
+                    <div key={index} className="p-3 border rounded">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="font-medium">{cred.service_name}</div>
+                          <div className="text-xs text-muted-foreground">{cred.credential_type}</div>
+                          {cred.url && <div className="text-xs text-muted-foreground">{cred.url}</div>}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => toggleCredentialVisibility(index)}
+                            title={isVisible ? "Hide details" : "Show details"}
+                          >
+                            {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              const newCreds = [...formData.credentials];
+                              newCreds.splice(index, 1);
+                              setFormData({ ...formData, credentials: newCreds });
+                              const newVisible = { ...visibleCredentials };
+                              delete newVisible[index];
+                              setVisibleCredentials(newVisible);
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {isVisible && (
+                        <div className="mt-3 pt-3 border-t space-y-2">
+                          {cred.username && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Username</Label>
+                              <div className="text-sm font-mono bg-muted p-2 rounded">{cred.username}</div>
+                            </div>
+                          )}
+                          {cred.password && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Password</Label>
+                              <div className="text-sm font-mono bg-muted p-2 rounded">
+                                {decryptCredential(cred.password)}
+                              </div>
+                            </div>
+                          )}
+                          {cred.api_key && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">API Key</Label>
+                              <div className="text-sm font-mono bg-muted p-2 rounded break-all">
+                                {decryptCredential(cred.api_key)}
+                              </div>
+                            </div>
+                          )}
+                          {cred.notes && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Notes</Label>
+                              <div className="text-sm bg-muted p-2 rounded">{cred.notes}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            {!showCredentialForm ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCredentialForm(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Credential
+              </Button>
+            ) : (
+              <div className="grid gap-4 border-t pt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Credential Type</Label>
+                    <Select
+                      value={credentialForm.credential_type}
+                      onValueChange={(value) => setCredentialForm({ ...credentialForm, credential_type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Login">Login</SelectItem>
+                        <SelectItem value="API Key">API Key</SelectItem>
+                        <SelectItem value="Database">Database</SelectItem>
+                        <SelectItem value="Server">Server</SelectItem>
+                        <SelectItem value="Third-party Service">Third-party Service</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Service Name *</Label>
+                    <Input
+                      value={credentialForm.service_name}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, service_name: e.target.value })}
+                      placeholder="Enter service name"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Username</Label>
+                    <Input
+                      value={credentialForm.username}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, username: e.target.value })}
+                      placeholder="Enter username"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Password</Label>
+                    <Input
+                      type="password"
+                      value={credentialForm.password}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
+                      placeholder="Enter password"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>URL</Label>
+                  <Input
+                    value={credentialForm.url}
+                    onChange={(e) => setCredentialForm({ ...credentialForm, url: e.target.value })}
+                    placeholder="https://example.com"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>API Key</Label>
+                  <Input
+                    type="password"
+                    value={credentialForm.api_key}
+                    onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
+                    placeholder="Enter API key"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Notes</Label>
+                  <Textarea
+                    value={credentialForm.notes}
+                    onChange={(e) => setCredentialForm({ ...credentialForm, notes: e.target.value })}
+                    rows={2}
+                    placeholder="Additional notes..."
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowCredentialForm(false);
+                      setCredentialForm({ credential_type: 'Login', service_name: '', username: '', password: '', url: '', api_key: '', notes: '' });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (credentialForm.service_name.trim()) {
+                        // Encrypt sensitive fields before storing
+                        const encryptedCred = {
+                          ...credentialForm,
+                          password: credentialForm.password ? encryptCredential(credentialForm.password) : '',
+                          api_key: credentialForm.api_key ? encryptCredential(credentialForm.api_key) : '',
+                        };
+                        setFormData({
+                          ...formData,
+                          credentials: [...formData.credentials, encryptedCred]
+                        });
+                        setCredentialForm({ credential_type: 'Login', service_name: '', username: '', password: '', url: '', api_key: '', notes: '' });
+                        setShowCredentialForm(false);
+                      } else {
+                        toast({
+                          title: "Validation Error",
+                          description: "Service name is required",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Credential
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Daily Status Entry */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Daily Status Entry ({formData.daily_status.length})
+            </CardTitle>
+            <CardDescription>Track daily work hours and minutes</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {formData.daily_status.length > 0 && (
+              <div className="space-y-2">
+                {formData.daily_status.map((status, index) => (
+                  <div key={index} className="p-3 border rounded">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="font-medium">{status.work_date ? formatDate(status.work_date) : 'No date'}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {status.hours_worked || 0}h {status.minutes_worked || 0}m
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const newStatus = [...formData.daily_status];
+                          newStatus.splice(index, 1);
+                          setFormData({ ...formData, daily_status: newStatus });
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {status.work_description && <p className="text-sm">{status.work_description}</p>}
+                    {status.tasks_completed && (
+                      <div className="mt-2 text-sm">
+                        <span className="font-medium">Tasks: </span>
+                        <span className="text-muted-foreground">{status.tasks_completed}</span>
+                      </div>
+                    )}
+                    {status.blockers && (
+                      <div className="mt-2 text-sm">
+                        <span className="font-medium text-destructive">Blockers: </span>
+                        <span className="text-muted-foreground">{status.blockers}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {!showDailyStatusForm ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowDailyStatusForm(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Daily Status
+              </Button>
+            ) : (
+              <div className="grid gap-4 border-t pt-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Work Date</Label>
+                    <DatePicker
+                      value={dailyStatusForm.work_date}
+                      onChange={(date) => setDailyStatusForm({ ...dailyStatusForm, work_date: date })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Hours</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="24"
+                      value={dailyStatusForm.hours_worked}
+                      onChange={(e) => setDailyStatusForm({ ...dailyStatusForm, hours_worked: e.target.value })}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Minutes</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={dailyStatusForm.minutes_worked}
+                      onChange={(e) => setDailyStatusForm({ ...dailyStatusForm, minutes_worked: e.target.value })}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Work Description</Label>
+                  <Textarea
+                    value={dailyStatusForm.work_description}
+                    onChange={(e) => setDailyStatusForm({ ...dailyStatusForm, work_description: e.target.value })}
+                    rows={3}
+                    placeholder="Describe the work done..."
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Tasks Completed</Label>
+                  <Textarea
+                    value={dailyStatusForm.tasks_completed}
+                    onChange={(e) => setDailyStatusForm({ ...dailyStatusForm, tasks_completed: e.target.value })}
+                    rows={2}
+                    placeholder="List completed tasks..."
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Blockers</Label>
+                  <Textarea
+                    value={dailyStatusForm.blockers}
+                    onChange={(e) => setDailyStatusForm({ ...dailyStatusForm, blockers: e.target.value })}
+                    rows={2}
+                    placeholder="List any blockers..."
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowDailyStatusForm(false);
+                      setDailyStatusForm({ work_date: new Date().toISOString().split('T')[0], hours_worked: '', minutes_worked: '', work_description: '', tasks_completed: '', blockers: '' });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (dailyStatusForm.work_date && (dailyStatusForm.hours_worked || dailyStatusForm.minutes_worked)) {
+                        setFormData({
+                          ...formData,
+                          daily_status: [...formData.daily_status, { ...dailyStatusForm }]
+                        });
+                        setDailyStatusForm({ work_date: new Date().toISOString().split('T')[0], hours_worked: '', minutes_worked: '', work_description: '', tasks_completed: '', blockers: '' });
+                        setShowDailyStatusForm(false);
+                      } else {
+                        toast({
+                          title: "Validation Error",
+                          description: "Work date and at least hours or minutes are required",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    Save Daily Status
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+          </TabsContent>
+
+          {/* Notes & Technology Tab */}
+          <TabsContent value="notes" className="space-y-6">
         {/* Additional Notes */}
         <Card>
           <CardHeader>
@@ -796,631 +1844,8 @@ export default function ProjectCreate() {
             </div>
           </CardContent>
         </Card>
-
-        {/* File Uploads */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Project Files
-            </CardTitle>
-            <CardDescription>Upload project-related files</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.files.map((fileItem, index) => (
-              <div key={index} className="flex items-center gap-2 p-3 border rounded">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                <div className="flex-1">
-                  <div className="text-sm font-medium">{fileItem.file.name}</div>
-                  <div className="text-xs text-muted-foreground">{fileItem.type} {fileItem.category && `• ${fileItem.category}`}</div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    const newFiles = [...formData.files];
-                    newFiles.splice(index, 1);
-                    setFormData({ ...formData, files: newFiles });
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-            <div className="grid gap-4 border-t pt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>File Type</Label>
-                  <Select
-                    value=""
-                    onValueChange={(value) => {
-                      const fileInput = document.createElement('input');
-                      fileInput.type = 'file';
-                      fileInput.onchange = (e: any) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setFormData({
-                            ...formData,
-                            files: [...formData.files, { file, type: value, category: '', description: '' }]
-                          });
-                        }
-                      };
-                      fileInput.click();
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select file type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SOW">SOW</SelectItem>
-                      <SelectItem value="Contract">Contract</SelectItem>
-                      <SelectItem value="Design Document">Design Document</SelectItem>
-                      <SelectItem value="Requirement Doc">Requirement Doc</SelectItem>
-                      <SelectItem value="Change Request">Change Request</SelectItem>
-                      <SelectItem value="Meeting Notes">Meeting Notes</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Comments */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Project Comments
-            </CardTitle>
-            <CardDescription>Add comments by role</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.comments.map((comment, index) => (
-              <div key={index} className="p-3 border rounded">
-                <div className="flex items-center justify-between mb-2">
-                  <StatusBadge variant="neutral">{comment.comment_type}</StatusBadge>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      const newComments = [...formData.comments];
-                      newComments.splice(index, 1);
-                      setFormData({ ...formData, comments: newComments });
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-sm">{comment.comment}</p>
-              </div>
-            ))}
-            <div className="grid gap-4 border-t pt-4">
-              <div className="grid gap-2">
-                <Label>Comment Type</Label>
-                <Select
-                  value=""
-                  onValueChange={(value) => {
-                    setFormData({
-                      ...formData,
-                      comments: [...formData.comments, { comment: '', comment_type: value, is_internal: true }]
-                    });
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select comment type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="General">General</SelectItem>
-                    <SelectItem value="Developer">Developer</SelectItem>
-                    <SelectItem value="Tester">Tester</SelectItem>
-                    <SelectItem value="Designer">Designer</SelectItem>
-                    <SelectItem value="Team Lead">Team Lead</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {formData.comments.length > 0 && formData.comments[formData.comments.length - 1]?.comment === '' && (
-                <div className="grid gap-2">
-                  <Label>Comment</Label>
-                  <Textarea
-                    value={formData.comments[formData.comments.length - 1].comment}
-                    onChange={(e) => {
-                      const newComments = [...formData.comments];
-                      newComments[newComments.length - 1].comment = e.target.value;
-                      setFormData({ ...formData, comments: newComments });
-                    }}
-                    rows={3}
-                  />
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Change Requests */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5" />
-              Change Requests
-            </CardTitle>
-            <CardDescription>Add change requests for this project</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.change_requests.map((cr, index) => (
-              <div key={index} className="p-3 border rounded">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium">{cr.title}</h4>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      const newCRs = [...formData.change_requests];
-                      newCRs.splice(index, 1);
-                      setFormData({ ...formData, change_requests: newCRs });
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground mb-1">{cr.description}</p>
-                <div className="text-xs text-muted-foreground">Priority: {cr.priority}</div>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setFormData({
-                  ...formData,
-                  change_requests: [...formData.change_requests, { title: '', description: '', priority: 'Medium', impact: '', estimated_effort_hours: '' }]
-                });
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Change Request
-            </Button>
-            {formData.change_requests.length > 0 && formData.change_requests[formData.change_requests.length - 1]?.title === '' && (
-              <div className="grid gap-4 border-t pt-4">
-                <div className="grid gap-2">
-                  <Label>Title *</Label>
-                  <Input
-                    value={formData.change_requests[formData.change_requests.length - 1].title}
-                    onChange={(e) => {
-                      const newCRs = [...formData.change_requests];
-                      newCRs[newCRs.length - 1].title = e.target.value;
-                      setFormData({ ...formData, change_requests: newCRs });
-                    }}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={formData.change_requests[formData.change_requests.length - 1].description}
-                    onChange={(e) => {
-                      const newCRs = [...formData.change_requests];
-                      newCRs[newCRs.length - 1].description = e.target.value;
-                      setFormData({ ...formData, change_requests: newCRs });
-                    }}
-                    rows={3}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Priority</Label>
-                    <Select
-                      value={formData.change_requests[formData.change_requests.length - 1].priority}
-                      onValueChange={(value) => {
-                        const newCRs = [...formData.change_requests];
-                        newCRs[newCRs.length - 1].priority = value;
-                        setFormData({ ...formData, change_requests: newCRs });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Low">Low</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="High">High</SelectItem>
-                        <SelectItem value="Critical">Critical</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Estimated Effort (Hours)</Label>
-                    <Input
-                      type="number"
-                      value={formData.change_requests[formData.change_requests.length - 1].estimated_effort_hours}
-                      onChange={(e) => {
-                        const newCRs = [...formData.change_requests];
-                        newCRs[newCRs.length - 1].estimated_effort_hours = e.target.value;
-                        setFormData({ ...formData, change_requests: newCRs });
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Client Call Notes */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Phone className="h-5 w-5" />
-              Client Call Notes
-            </CardTitle>
-            <CardDescription>Record client call notes with date/time</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.call_notes.map((note, index) => (
-              <div key={index} className="p-3 border rounded">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className="font-medium">{note.call_date ? new Date(note.call_date).toLocaleString() : 'No date'}</div>
-                    {note.call_duration_minutes && (
-                      <div className="text-xs text-muted-foreground">Duration: {note.call_duration_minutes} minutes</div>
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      const newNotes = [...formData.call_notes];
-                      newNotes.splice(index, 1);
-                      setFormData({ ...formData, call_notes: newNotes });
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-sm">{note.notes}</p>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setFormData({
-                  ...formData,
-                  call_notes: [...formData.call_notes, { call_date: '', call_duration_minutes: '', participants: '', notes: '', action_items: '' }]
-                });
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Call Note
-            </Button>
-            {formData.call_notes.length > 0 && formData.call_notes[formData.call_notes.length - 1]?.call_date === '' && (
-              <div className="grid gap-4 border-t pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Call Date & Time *</Label>
-                    <Input
-                      type="datetime-local"
-                      value={formData.call_notes[formData.call_notes.length - 1].call_date}
-                      onChange={(e) => {
-                        const newNotes = [...formData.call_notes];
-                        newNotes[newNotes.length - 1].call_date = e.target.value;
-                        setFormData({ ...formData, call_notes: newNotes });
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Duration (Minutes)</Label>
-                    <Input
-                      type="number"
-                      value={formData.call_notes[formData.call_notes.length - 1].call_duration_minutes}
-                      onChange={(e) => {
-                        const newNotes = [...formData.call_notes];
-                        newNotes[newNotes.length - 1].call_duration_minutes = e.target.value;
-                        setFormData({ ...formData, call_notes: newNotes });
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Participants</Label>
-                  <Input
-                    value={formData.call_notes[formData.call_notes.length - 1].participants}
-                    onChange={(e) => {
-                      const newNotes = [...formData.call_notes];
-                      newNotes[newNotes.length - 1].participants = e.target.value;
-                      setFormData({ ...formData, call_notes: newNotes });
-                    }}
-                    placeholder="Comma-separated list"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Notes *</Label>
-                  <Textarea
-                    value={formData.call_notes[formData.call_notes.length - 1].notes}
-                    onChange={(e) => {
-                      const newNotes = [...formData.call_notes];
-                      newNotes[newNotes.length - 1].notes = e.target.value;
-                      setFormData({ ...formData, call_notes: newNotes });
-                    }}
-                    rows={4}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Action Items</Label>
-                  <Textarea
-                    value={formData.call_notes[formData.call_notes.length - 1].action_items}
-                    onChange={(e) => {
-                      const newNotes = [...formData.call_notes];
-                      newNotes[newNotes.length - 1].action_items = e.target.value;
-                      setFormData({ ...formData, call_notes: newNotes });
-                    }}
-                    rows={2}
-                  />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Credentials */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5" />
-              Credentials Management
-            </CardTitle>
-            <CardDescription>Store login info, API keys, and credentials</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.credentials.map((cred, index) => (
-              <div key={index} className="p-3 border rounded">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className="font-medium">{cred.service_name}</div>
-                    <div className="text-xs text-muted-foreground">{cred.credential_type}</div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      const newCreds = [...formData.credentials];
-                      newCreds.splice(index, 1);
-                      setFormData({ ...formData, credentials: newCreds });
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setFormData({
-                  ...formData,
-                  credentials: [...formData.credentials, { credential_type: 'Login', service_name: '', username: '', password: '', url: '', api_key: '', notes: '' }]
-                });
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Credential
-            </Button>
-            {formData.credentials.length > 0 && formData.credentials[formData.credentials.length - 1]?.service_name === '' && (
-              <div className="grid gap-4 border-t pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Credential Type</Label>
-                    <Select
-                      value={formData.credentials[formData.credentials.length - 1].credential_type}
-                      onValueChange={(value) => {
-                        const newCreds = [...formData.credentials];
-                        newCreds[newCreds.length - 1].credential_type = value;
-                        setFormData({ ...formData, credentials: newCreds });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Login">Login</SelectItem>
-                        <SelectItem value="API Key">API Key</SelectItem>
-                        <SelectItem value="Database">Database</SelectItem>
-                        <SelectItem value="Server">Server</SelectItem>
-                        <SelectItem value="Third-party Service">Third-party Service</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Service Name *</Label>
-                    <Input
-                      value={formData.credentials[formData.credentials.length - 1].service_name}
-                      onChange={(e) => {
-                        const newCreds = [...formData.credentials];
-                        newCreds[newCreds.length - 1].service_name = e.target.value;
-                        setFormData({ ...formData, credentials: newCreds });
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Username</Label>
-                    <Input
-                      value={formData.credentials[formData.credentials.length - 1].username}
-                      onChange={(e) => {
-                        const newCreds = [...formData.credentials];
-                        newCreds[newCreds.length - 1].username = e.target.value;
-                        setFormData({ ...formData, credentials: newCreds });
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Password</Label>
-                    <Input
-                      type="password"
-                      value={formData.credentials[formData.credentials.length - 1].password}
-                      onChange={(e) => {
-                        const newCreds = [...formData.credentials];
-                        newCreds[newCreds.length - 1].password = e.target.value;
-                        setFormData({ ...formData, credentials: newCreds });
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label>URL</Label>
-                  <Input
-                    value={formData.credentials[formData.credentials.length - 1].url}
-                    onChange={(e) => {
-                      const newCreds = [...formData.credentials];
-                      newCreds[newCreds.length - 1].url = e.target.value;
-                      setFormData({ ...formData, credentials: newCreds });
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Daily Status Entry */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Daily Status Entry
-            </CardTitle>
-            <CardDescription>Track daily work hours and minutes</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.daily_status.map((status, index) => (
-              <div key={index} className="p-3 border rounded">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className="font-medium">{status.work_date ? formatDate(status.work_date) : 'No date'}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {status.hours_worked}h {status.minutes_worked}m
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      const newStatus = [...formData.daily_status];
-                      newStatus.splice(index, 1);
-                      setFormData({ ...formData, daily_status: newStatus });
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                {status.work_description && <p className="text-sm">{status.work_description}</p>}
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setFormData({
-                  ...formData,
-                  daily_status: [...formData.daily_status, { work_date: new Date().toISOString().split('T')[0], hours_worked: '', minutes_worked: '', work_description: '', tasks_completed: '', blockers: '' }]
-                });
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Daily Status
-            </Button>
-            {formData.daily_status.length > 0 && formData.daily_status[formData.daily_status.length - 1]?.hours_worked === '' && (
-              <div className="grid gap-4 border-t pt-4">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Work Date</Label>
-                    <DatePicker
-                      value={formData.daily_status[formData.daily_status.length - 1].work_date}
-                      onChange={(date) => {
-                        const newStatus = [...formData.daily_status];
-                        newStatus[newStatus.length - 1].work_date = date;
-                        setFormData({ ...formData, daily_status: newStatus });
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Hours</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="24"
-                      value={formData.daily_status[formData.daily_status.length - 1].hours_worked}
-                      onChange={(e) => {
-                        const newStatus = [...formData.daily_status];
-                        newStatus[newStatus.length - 1].hours_worked = e.target.value;
-                        setFormData({ ...formData, daily_status: newStatus });
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Minutes</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="59"
-                      value={formData.daily_status[formData.daily_status.length - 1].minutes_worked}
-                      onChange={(e) => {
-                        const newStatus = [...formData.daily_status];
-                        newStatus[newStatus.length - 1].minutes_worked = e.target.value;
-                        setFormData({ ...formData, daily_status: newStatus });
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Work Description</Label>
-                  <Textarea
-                    value={formData.daily_status[formData.daily_status.length - 1].work_description}
-                    onChange={(e) => {
-                      const newStatus = [...formData.daily_status];
-                      newStatus[newStatus.length - 1].work_description = e.target.value;
-                      setFormData({ ...formData, daily_status: newStatus });
-                    }}
-                    rows={3}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Tasks Completed</Label>
-                  <Textarea
-                    value={formData.daily_status[formData.daily_status.length - 1].tasks_completed}
-                    onChange={(e) => {
-                      const newStatus = [...formData.daily_status];
-                      newStatus[newStatus.length - 1].tasks_completed = e.target.value;
-                      setFormData({ ...formData, daily_status: newStatus });
-                    }}
-                    rows={2}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Blockers</Label>
-                  <Textarea
-                    value={formData.daily_status[formData.daily_status.length - 1].blockers}
-                    onChange={(e) => {
-                      const newStatus = [...formData.daily_status];
-                      newStatus[newStatus.length - 1].blockers = e.target.value;
-                      setFormData({ ...formData, daily_status: newStatus });
-                    }}
-                    rows={2}
-                  />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Form Actions */}
         <div className="flex justify-end gap-4">

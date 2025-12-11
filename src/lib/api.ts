@@ -339,6 +339,13 @@ export const bugsApi = {
     request<{ message: string }>(`/bugs/${id}`, {
       method: 'DELETE',
     }),
+  getComments: (id: number) =>
+    request<{ data: any[] }>(`/bugs/${id}/comments`),
+  createComment: (id: number, data: { comment_text: string; parent_id?: number }) =>
+    request<{ data: any }>(`/bugs/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 
