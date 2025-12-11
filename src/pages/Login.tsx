@@ -1,22 +1,52 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Lock, Mail, Shield, Sparkles } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { authApi } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
+import { Logo } from "@/components/Logo";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Demo login - in production this would validate against backend
-    navigate("/dashboard");
+    setIsLoading(true);
+
+    try {
+      const response = await authApi.login(email, password);
+      
+      // Store token and user info
+      localStorage.setItem('auth_token', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      
+      if (rememberMe) {
+        localStorage.setItem('remember_me', 'true');
+      }
+      
+      toast({
+        title: "Login successful",
+        description: `Welcome back, ${response.user.name}!`,
+      });
+      
+      navigate("/dashboard");
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
+        description: error.message || "Invalid email or password",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -24,25 +54,24 @@ export default function Login() {
       {/* Left side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-gradient-to-br from-primary/20 via-background to-background p-12 relative overflow-hidden">
         <div className="relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-              <Sparkles className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">AdminHub</h1>
-              <p className="text-sm text-muted-foreground">Internal Management System</p>
+          <div className="flex flex-col items-center gap-4">
+            <Logo  iconSize={128} showText={false} noBox={true} />
+            <div className="text-center">
+              <h1 className="text-4xl font-bold">Naethra EMS</h1>
+              <p className="text-lg text-muted-foreground mt-2">Employee and Project Management System</p>
+              <p className="text-sm text-muted-foreground mt-1">Naethra Technologies Pvt. Ltd</p>
             </div>
           </div>
         </div>
 
         <div className="relative z-10 space-y-6">
           <h2 className="text-4xl font-bold leading-tight">
-            Enterprise-Grade<br />
-            <span className="text-primary">Admin Dashboard</span>
+            Employee and Project<br />
+            <span className="text-primary">Management System</span>
           </h2>
           <p className="text-lg text-muted-foreground max-w-md">
-            Manage projects, users, tasks, and AI prompts with a powerful,
-            secure internal dashboard built for productivity.
+            Manage projects, employees, tasks, and resources with a powerful,
+            secure management system built for productivity.
           </p>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
@@ -67,11 +96,12 @@ export default function Login() {
       <div className="flex w-full lg:w-1/2 items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8 animate-fade-in">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
+          <div className="lg:hidden flex flex-col items-center justify-center mb-8 gap-3">
+            <Logo className="h-24 w-24" iconSize={96} showText={false} noBox={true} />
+            <div className="text-center">
+              <h1 className="text-2xl font-bold">Naethra EMS</h1>
+              <p className="text-sm text-muted-foreground">Employee and Project Management System</p>
             </div>
-            <span className="text-xl font-bold">AdminHub</span>
           </div>
 
           <div className="space-y-2 text-center lg:text-left">
@@ -89,7 +119,7 @@ export default function Login() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@company.com"
+                  placeholder="user@naethra.com"
                   className="pl-10"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -137,14 +167,17 @@ export default function Login() {
               </a>
             </div>
 
-            <Button type="submit" className="w-full" size="lg">
-              Sign in
+            <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+              {isLoading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
 
-          <div className="text-center text-sm text-muted-foreground">
+          <div className="text-center text-sm text-muted-foreground space-y-1">
             <p>
-              Internal use only. Unauthorized access is prohibited.
+              © {new Date().getFullYear()} Naethra Technologies Pvt. Ltd. All rights reserved.
+            </p>
+            <p>
+              Created by <span className="font-semibold">gpdhanush</span>
             </p>
           </div>
         </div>

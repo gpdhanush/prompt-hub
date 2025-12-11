@@ -95,11 +95,11 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div className="grid gap-2">
                 <Label>Organization Name</Label>
-                <Input defaultValue="Acme Corporation" />
+                <Input defaultValue="Naethra Technologies Pvt. Ltd" />
               </div>
               <div className="grid gap-2">
                 <Label>Admin Email</Label>
-                <Input defaultValue="admin@acme.com" type="email" />
+                <Input defaultValue="admin@naethra.com" type="email" />
               </div>
               <Button>Save Changes</Button>
             </CardContent>

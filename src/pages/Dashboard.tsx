@@ -42,11 +42,16 @@ const topPerformers = [
 ];
 
 export default function Dashboard() {
+  // Get current user from localStorage
+  const userStr = localStorage.getItem('user');
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const userName = currentUser?.name || 'User';
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, Super Admin</p>
+        <p className="text-muted-foreground">Welcome back, {userName}</p>
       </div>
 
       {/* Stats Grid */}

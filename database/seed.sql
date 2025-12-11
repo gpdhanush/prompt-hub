@@ -81,15 +81,16 @@ INSERT INTO `positions` (`id`, `name`, `description`) VALUES
 -- USERS SEED DATA
 -- ============================================
 
--- Password hash for 'admin123' (bcrypt, rounds=10)
--- In production, use proper password hashing
+-- Password hash for 'admin123' (bcryptjs, rounds=10)
+-- All users have password: admin123
+-- Hash format: $2a$ (Node.js bcryptjs compatible)
 INSERT INTO `users` (`id`, `name`, `email`, `mobile`, `password_hash`, `role_id`, `position_id`, `status`, `mfa_enabled`, `last_login`) VALUES
-(1, 'Super Admin', 'superadmin@example.com', '+1234567890', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 1, 5, 'Active', TRUE, NOW()),
-(2, 'John Admin', 'admin@example.com', '+1234567891', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 2, 4, 'Active', FALSE, NOW()),
-(3, 'Ravi Kumar', 'ravi@example.com', '+1234567892', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 3, 5, 'Active', FALSE, NOW()),
-(4, 'Priya Sharma', 'priya@example.com', '+1234567893', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 4, 1, 'Active', FALSE, NOW()),
-(5, 'Amit Patel', 'amit@example.com', '+1234567894', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 4, 2, 'Active', FALSE, NOW()),
-(6, 'Sarah Chen', 'sarah@example.com', '+1234567895', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 4, 3, 'Active', FALSE, NOW());
+(1, 'Super Admin', 'superadmin@example.com', '+1234567890', '$2a$10$n8vxNPCKiG4jMPRIe5moPuyYPayj7lIohNR1wn31A5BYHNh/3O/ya', 1, 5, 'Active', TRUE, NOW()),
+(2, 'John Admin', 'admin@example.com', '+1234567891', '$2a$10$n8vxNPCKiG4jMPRIe5moPuyYPayj7lIohNR1wn31A5BYHNh/3O/ya', 2, 4, 'Active', FALSE, NOW()),
+(3, 'Ravi Kumar', 'ravi@example.com', '+1234567892', '$2a$10$n8vxNPCKiG4jMPRIe5moPuyYPayj7lIohNR1wn31A5BYHNh/3O/ya', 3, 5, 'Active', FALSE, NOW()),
+(4, 'Priya Sharma', 'priya@example.com', '+1234567893', '$2a$10$n8vxNPCKiG4jMPRIe5moPuyYPayj7lIohNR1wn31A5BYHNh/3O/ya', 4, 1, 'Active', FALSE, NOW()),
+(5, 'Amit Patel', 'amit@example.com', '+1234567894', '$2a$10$n8vxNPCKiG4jMPRIe5moPuyYPayj7lIohNR1wn31A5BYHNh/3O/ya', 4, 2, 'Active', FALSE, NOW()),
+(6, 'Sarah Chen', 'sarah@example.com', '+1234567895', '$2a$10$n8vxNPCKiG4jMPRIe5moPuyYPayj7lIohNR1wn31A5BYHNh/3O/ya', 4, 3, 'Active', FALSE, NOW());
 
 -- ============================================
 -- EMPLOYEES SEED DATA

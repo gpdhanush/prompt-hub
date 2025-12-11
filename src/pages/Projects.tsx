@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -16,64 +19,459 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { projectsApi } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
-const projects = [
-  { id: "PRJ-001", name: "E-Commerce Platform", tl: "Ravi Kumar", members: 8, startDate: "2025-01-15", endDate: "2025-06-30", progress: 65, status: "In Progress" as const },
-  { id: "PRJ-002", name: "Mobile Banking App", tl: "Sarah Chen", members: 12, startDate: "2025-02-01", endDate: "2025-08-15", progress: 40, status: "Development" as const },
-  { id: "PRJ-003", name: "HR Management System", tl: "Priya Sharma", members: 5, startDate: "2024-11-01", endDate: "2025-03-31", progress: 90, status: "Testing" as const },
-  { id: "PRJ-004", name: "Analytics Dashboard", tl: "Amit Patel", members: 4, startDate: "2025-03-01", endDate: "2025-05-15", progress: 20, status: "Planning" as const },
-  { id: "PRJ-005", name: "Customer Portal", tl: "John Smith", members: 6, startDate: "2024-09-01", endDate: "2025-01-31", progress: 100, status: "Completed" as const },
-  { id: "PRJ-006", name: "API Gateway", tl: "Maria Garcia", members: 3, startDate: "2025-01-01", endDate: "2025-04-30", progress: 0, status: "On Hold" as const },
-];
+type Project = {
+  id: number;
+  project_code?: string;
+  name: string;
+  description?: string;
+  status: string;
+  start_date?: string;
+  end_date?: string;
+  created_at?: string;
+  updated_at?: string;
+};
 
 export default function Projects() {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projectForm, setProjectForm] = useState({
+    name: "",
+    description: "",
+    status: "Planning",
+    start_date: "",
+    end_date: "",
+  });
+  
+  // Get current user info for role-based permissions
+  const userStr = localStorage.getItem('user');
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const userRole = currentUser?.role || '';
+  
+  // Admin can only view (no create/edit/delete)
+  // Team Lead can create/edit/delete
+  const canCreateProject = userRole === 'Team Lead' || userRole === 'Super Admin';
+  const canEditProject = userRole === 'Team Lead' || userRole === 'Super Admin';
+  const canDeleteProject = userRole === 'Team Lead' || userRole === 'Super Admin';
 
-  const filteredProjects = projects.filter(
-    (project) =>
-      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.id.toLowerCase().includes(searchQuery.toLowerCase())
+  // Fetch projects from API
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['projects', searchQuery],
+    queryFn: () => projectsApi.getAll({ page: 1, limit: 100 }),
+  });
+
+  const projects = data?.data || [];
+  
+  // Filter projects based on search query
+  const filteredProjects = projects.filter((project: Project) =>
+    project.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    project.id?.toString().includes(searchQuery)
   );
+
+  // Calculate stats from actual data
+  const totalProjects = projects.length;
+  const inProgressCount = projects.filter((p: Project) => 
+    p.status === 'In Progress' || p.status === 'Testing' || p.status === 'Pre-Prod' || p.status === 'Production'
+  ).length;
+  const completedCount = projects.filter((p: Project) => 
+    p.status === 'Completed'
+  ).length;
+  const onHoldCount = projects.filter((p: Project) => 
+    p.status === 'On Hold'
+  ).length;
+
+  // Calculate progress (mock for now - can be enhanced with actual task completion data)
+  const calculateProgress = (project: Project) => {
+    // This is a placeholder - in real app, calculate from tasks
+    if (project.status === 'Completed') return 100;
+    if (project.status === 'Planning') return 10;
+    if (project.status === 'In Progress') return 30;
+    if (project.status === 'Testing') return 70;
+    if (project.status === 'Pre-Prod') return 85;
+    if (project.status === 'Production') return 95;
+    if (project.status === 'On Hold') return 0;
+    return 0;
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  const formatFullDate = (dateString?: string) => {
+    if (!dateString) return "Not set";
+    return new Date(dateString).toLocaleDateString("en-US", { 
+      year: "numeric",
+      month: "long", 
+      day: "numeric" 
+    });
+  };
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: projectsApi.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      toast({ title: "Success", description: "Project created successfully." });
+      setShowAddDialog(false);
+      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "" });
+    },
+    onError: (error: any) => {
+      if (error.status === 401) {
+        toast({ 
+          title: "Authentication Required", 
+          description: "Please login to continue.",
+          variant: "destructive",
+        });
+        window.location.href = '/login';
+      } else if (error.status === 403) {
+        toast({ 
+          title: "Access Denied", 
+          description: "You don't have permission to create projects. Only Team Leads can create projects.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Error", description: error.message || "Failed to create project." });
+      }
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => {
+      console.log('Frontend: Calling update API with:', { id, data });
+      return projectsApi.update(id, data);
+    },
+    onSuccess: (response) => {
+      console.log('Frontend: Update successful, response:', response);
+      // Invalidate and refetch projects
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.refetchQueries({ queryKey: ['projects'] });
+      toast({ title: "Success", description: "Project updated successfully." });
+      setShowEditDialog(false);
+      setSelectedProject(null);
+      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "" });
+    },
+    onError: (error: any) => {
+      if (error.status === 401) {
+        toast({ 
+          title: "Authentication Required", 
+          description: "Please login to continue.",
+          variant: "destructive",
+        });
+        window.location.href = '/login';
+      } else if (error.status === 403) {
+        toast({ 
+          title: "Access Denied", 
+          description: "You don't have permission to update projects.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Error", description: error.message || "Failed to update project." });
+      }
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: projectsApi.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      toast({ title: "Success", description: "Project deleted successfully." });
+      setShowDeleteDialog(false);
+      setSelectedProject(null);
+    },
+    onError: (error: any) => {
+      if (error.status === 401) {
+        toast({ 
+          title: "Authentication Required", 
+          description: "Please login to continue.",
+          variant: "destructive",
+        });
+        window.location.href = '/login';
+      } else if (error.status === 403) {
+        toast({ 
+          title: "Access Denied", 
+          description: "You don't have permission to delete projects.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Error", description: error.message || "Failed to delete project." });
+      }
+    },
+  });
+
+  // Valid status values matching database ENUM
+  const validStatuses = ['Planning', 'In Progress', 'Testing', 'Pre-Prod', 'Production', 'Completed', 'On Hold'];
+  
+  // Normalize status to ensure it's valid
+  const normalizeStatus = (status: string | undefined): string => {
+    if (!status) return 'Planning';
+    // Map old/invalid statuses to valid ones
+    const statusMap: Record<string, string> = {
+      'Development': 'In Progress',
+      'Dev': 'In Progress',
+      'In-Progress': 'In Progress',
+      'PreProd': 'Pre-Prod',
+      'Pre Prod': 'Pre-Prod',
+    };
+    
+    const normalized = statusMap[status] || status;
+    // If normalized status is valid, return it; otherwise default to Planning
+    return validStatuses.includes(normalized) ? normalized : 'Planning';
+  };
+
+  // Handlers
+  const handleView = (project: Project) => {
+    setSelectedProject(project);
+    setShowViewDialog(true);
+  };
+
+  const handleEdit = (project: Project) => {
+    setSelectedProject(project);
+    setProjectForm({
+      name: project.name,
+      description: project.description || "",
+      status: normalizeStatus(project.status),
+      start_date: project.start_date ? project.start_date.split('T')[0] : "",
+      end_date: project.end_date ? project.end_date.split('T')[0] : "",
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleDelete = (project: Project) => {
+    setSelectedProject(project);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (selectedProject) {
+      deleteMutation.mutate(selectedProject.id);
+    }
+  };
+
+  const handleCreateProject = () => {
+    if (!projectForm.name) {
+      toast({
+        title: "Validation Error",
+        description: "Project name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Ensure status is valid
+    const normalizedStatus = normalizeStatus(projectForm.status);
+
+    createMutation.mutate({
+      name: projectForm.name,
+      description: projectForm.description,
+      status: normalizedStatus,
+      start_date: projectForm.start_date || null,
+      end_date: projectForm.end_date || null,
+    });
+  };
+
+  const handleUpdateProject = () => {
+    if (!projectForm.name || !selectedProject) {
+      toast({
+        title: "Validation Error",
+        description: "Project name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Ensure status is valid
+    const normalizedStatus = normalizeStatus(projectForm.status);
+
+    console.log('Updating project:', {
+      id: selectedProject.id,
+      currentStatus: selectedProject.status,
+      newStatus: projectForm.status,
+      normalizedStatus: normalizedStatus,
+      formData: projectForm
+    });
+
+    updateMutation.mutate({
+      id: selectedProject.id,
+      data: {
+        name: projectForm.name,
+        description: projectForm.description,
+        status: normalizedStatus,
+        start_date: projectForm.start_date || null,
+        end_date: projectForm.end_date || null,
+      },
+    });
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="text-muted-foreground">Manage and track all projects</p>
+          <p className="text-muted-foreground">
+            {userRole === 'Admin' ? 'View and track all projects' : 'Manage and track all projects'}
+          </p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          New Project
-        </Button>
+        {canCreateProject && (
+          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Project
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle>Create New Project</DialogTitle>
+                <DialogDescription>
+                  Add a new project to track and manage
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="project-name">Project Name *</Label>
+                  <Input
+                    id="project-name"
+                    placeholder="Enter project name"
+                    value={projectForm.name}
+                    onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="project-description">Description</Label>
+                  <Textarea
+                    id="project-description"
+                    placeholder="Enter project description"
+                    value={projectForm.description}
+                    onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                    rows={4}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="project-status">Status</Label>
+                    <Select
+                      value={projectForm.status}
+                      onValueChange={(value) => setProjectForm({ ...projectForm, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Planning">Planning</SelectItem>
+                        <SelectItem value="In Progress">In Progress</SelectItem>
+                        <SelectItem value="Testing">Testing</SelectItem>
+                        <SelectItem value="Pre-Prod">Pre-Prod</SelectItem>
+                        <SelectItem value="Production">Production</SelectItem>
+                        <SelectItem value="Completed">Completed</SelectItem>
+                        <SelectItem value="On Hold">On Hold</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="start-date">Start Date</Label>
+                    <Input
+                      id="start-date"
+                      type="date"
+                      value={projectForm.start_date}
+                      onChange={(e) => setProjectForm({ ...projectForm, start_date: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="end-date">End Date</Label>
+                    <Input
+                      id="end-date"
+                      type="date"
+                      value={projectForm.end_date}
+                      onChange={(e) => setProjectForm({ ...projectForm, end_date: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setShowAddDialog(false);
+                      setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "" });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={handleCreateProject}
+                    disabled={createMutation.isPending}
+                  >
+                    {createMutation.isPending ? "Creating..." : "Create Project"}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="glass-card">
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">6</div>
+            <div className="text-2xl font-bold">{totalProjects}</div>
             <p className="text-xs text-muted-foreground">Total Projects</p>
           </CardContent>
         </Card>
         <Card className="glass-card">
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-warning">3</div>
+            <div className="text-2xl font-bold text-status-warning">{inProgressCount}</div>
             <p className="text-xs text-muted-foreground">In Progress</p>
           </CardContent>
         </Card>
         <Card className="glass-card">
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-success">1</div>
+            <div className="text-2xl font-bold text-status-success">{completedCount}</div>
             <p className="text-xs text-muted-foreground">Completed</p>
           </CardContent>
         </Card>
         <Card className="glass-card">
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-neutral">1</div>
+            <div className="text-2xl font-bold text-status-neutral">{onHoldCount}</div>
             <p className="text-xs text-muted-foreground">On Hold</p>
           </CardContent>
         </Card>
@@ -114,62 +512,288 @@ export default function Projects() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProjects.map((project) => (
-                <TableRow key={project.id}>
-                  <TableCell className="font-mono text-muted-foreground">
-                    {project.id}
-                  </TableCell>
-                  <TableCell className="font-medium">{project.name}</TableCell>
-                  <TableCell>{project.tl}</TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Users className="h-3 w-3 text-muted-foreground" />
-                      {project.members}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {new Date(project.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - {new Date(project.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Progress value={project.progress} className="h-2 w-20" />
-                      <span className="text-xs text-muted-foreground">{project.progress}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge variant={projectStatusMap[project.status] || "neutral"}>
-                      {project.status}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    Loading projects...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-destructive">
+                    Error loading projects. Please check your database connection.
+                  </TableCell>
+                </TableRow>
+              ) : filteredProjects.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    {searchQuery ? 'No projects found matching your search.' : 'No projects found. Create your first project to get started.'}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredProjects.map((project: Project) => {
+                  const progress = calculateProgress(project);
+                  return (
+                    <TableRow key={project.id}>
+                      <TableCell className="font-mono text-muted-foreground">
+                        {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
+                      </TableCell>
+                      <TableCell className="font-medium">{project.name}</TableCell>
+                      <TableCell className="text-muted-foreground">-</TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Users className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">-</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {formatDate(project.start_date)} - {formatDate(project.end_date)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress value={progress} className="h-2 w-20" />
+                          <span className="text-xs text-muted-foreground">{progress}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={projectStatusMap[project.status] || "neutral"}>
+                          {project.status || 'Planning'}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleView(project)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View
+                            </DropdownMenuItem>
+                            {canEditProject && (
+                              <DropdownMenuItem onClick={() => handleEdit(project)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {canDeleteProject && (
+                              <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={() => handleDelete(project)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* View Project Dialog */}
+      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Project Details</DialogTitle>
+            <DialogDescription>
+              View project information and details
+            </DialogDescription>
+          </DialogHeader>
+          {selectedProject && (
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Project ID</Label>
+                <div className="font-mono text-sm">{selectedProject.project_code || `PRJ-${String(selectedProject.id).padStart(3, '0')}`}</div>
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Project Name</Label>
+                <div className="font-medium">{selectedProject.name}</div>
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Description</Label>
+                <div className="text-sm">{selectedProject.description || "No description provided"}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Status</Label>
+                  <StatusBadge variant={projectStatusMap[selectedProject.status] || "neutral"}>
+                    {selectedProject.status || 'Planning'}
+                  </StatusBadge>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Progress</Label>
+                  <div className="flex items-center gap-2">
+                    <Progress value={calculateProgress(selectedProject)} className="h-2 w-32" />
+                    <span className="text-sm">{calculateProgress(selectedProject)}%</span>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">Start Date</Label>
+                  <div className="text-sm">{formatFullDate(selectedProject.start_date)}</div>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">End Date</Label>
+                  <div className="text-sm">{formatFullDate(selectedProject.end_date)}</div>
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Created At</Label>
+                <div className="text-sm">{formatFullDate(selectedProject.created_at)}</div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowViewDialog(false)}
+                >
+                  Close
+                </Button>
+                {canEditProject && (
+                  <Button
+                    className="flex-1"
+                    onClick={() => {
+                      setShowViewDialog(false);
+                      handleEdit(selectedProject);
+                    }}
+                  >
+                    Edit Project
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Project Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>
+              Update project information
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-name">Project Name *</Label>
+              <Input
+                id="edit-project-name"
+                placeholder="Enter project name"
+                value={projectForm.name}
+                onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-project-description">Description</Label>
+              <Textarea
+                id="edit-project-description"
+                placeholder="Enter project description"
+                value={projectForm.description}
+                onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                rows={4}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-project-status">Status</Label>
+                <Select
+                  value={projectForm.status}
+                  onValueChange={(value) => setProjectForm({ ...projectForm, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Planning">Planning</SelectItem>
+                    <SelectItem value="In Progress">In Progress</SelectItem>
+                    <SelectItem value="Development">Development</SelectItem>
+                    <SelectItem value="Testing">Testing</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="On Hold">On Hold</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-start-date">Start Date</Label>
+                <Input
+                  id="edit-start-date"
+                  type="date"
+                  value={projectForm.start_date}
+                  onChange={(e) => setProjectForm({ ...projectForm, start_date: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-end-date">End Date</Label>
+                <Input
+                  id="edit-end-date"
+                  type="date"
+                  value={projectForm.end_date}
+                  onChange={(e) => setProjectForm({ ...projectForm, end_date: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowEditDialog(false);
+                  setSelectedProject(null);
+                  setProjectForm({ name: "", description: "", status: "Planning", start_date: "", end_date: "" });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleUpdateProject}
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Alert Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the project{" "}
+              <span className="font-semibold">{selectedProject?.name}</span> and remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedProject(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

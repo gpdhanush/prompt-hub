@@ -1,8 +1,16 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, Navigate } from "react-router-dom";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminHeader } from "./AdminHeader";
 
 export function AdminLayout() {
+  // Check if user is authenticated
+  const token = localStorage.getItem('auth_token');
+  const userStr = localStorage.getItem('user');
+  
+  if (!token || !userStr) {
+    return <Navigate to="/login" replace />;
+  }
+  
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       <AdminSidebar />
