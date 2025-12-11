@@ -1120,14 +1120,11 @@ export default function Bugs() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Open">Open</SelectItem>
-                    <SelectItem value="In Review">In Review</SelectItem>
-                    <SelectItem value="Fixing">Fixing</SelectItem>
-                    <SelectItem value="Retesting">Retesting</SelectItem>
-                    <SelectItem value="Passed">Passed</SelectItem>
+                    <SelectItem value="In Progress">In Progress</SelectItem>
                     <SelectItem value="Completed">Completed</SelectItem>
-                    <SelectItem value="Rejected">Rejected</SelectItem>
                     <SelectItem value="Duplicate">Duplicate</SelectItem>
                     <SelectItem value="Not a Bug">Not a Bug</SelectItem>
+                    <SelectItem value="TBD">TBD</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

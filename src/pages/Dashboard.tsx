@@ -4,7 +4,6 @@ import {
   CheckSquare,
   Bug,
   Receipt,
-  Clock,
   Sparkles,
   TrendingUp,
 } from "lucide-react";
@@ -87,11 +86,6 @@ export default function Dashboard() {
           title="Pending Reimbursements"
           value="$4,250"
           icon={Receipt}
-        />
-        <StatCard
-          title="Attendance Today"
-          value="142/156"
-          icon={Clock}
         />
         <StatCard
           title="Prompt Runs (7 days)"

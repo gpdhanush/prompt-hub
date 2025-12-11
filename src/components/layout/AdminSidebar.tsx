@@ -8,7 +8,6 @@ import {
   CheckSquare,
   Bug,
   Calendar,
-  Clock,
   Receipt,
   Settings,
   Bell,
@@ -40,7 +39,6 @@ const navItems = [
   { name: "Projects", href: "/projects", icon: FolderKanban },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Bugs", href: "/bugs", icon: Bug },
-  { name: "Attendance", href: "/attendance", icon: Clock },
   { name: "Leaves", href: "/leaves", icon: Calendar },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt },
   { name: "Reports", href: "/reports", icon: BarChart3 },
@@ -70,6 +68,9 @@ export function AdminSidebar() {
   // Only Admin, Super Admin, and Team Lead can access Users and Employees pages
   // Developer, Designer, Tester, and Viewer roles cannot access these pages
   const canAccessUserManagement = userRole === 'Admin' || userRole === 'Super Admin' || userRole === 'Team Lead';
+  
+  // Only Super Admin, Admin, and Team Lead can access Reports
+  const canAccessReports = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Lead';
 
   const isActive = (href: string) => location.pathname === href;
 
@@ -148,6 +149,10 @@ export function AdminSidebar() {
           .filter((item) => {
             // Hide Users and Employees for Developer, Designer, Tester, and Viewer roles
             if ((item.href === '/users' || item.href === '/employees') && !canAccessUserManagement) {
+              return false;
+            }
+            // Hide Reports for roles other than Super Admin, Admin, and Team Lead
+            if (item.href === '/reports' && !canAccessReports) {
               return false;
             }
             return true;

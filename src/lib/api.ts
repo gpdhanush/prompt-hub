@@ -230,23 +230,6 @@ export const bugsApi = {
     }),
 };
 
-// Attendance API
-export const attendanceApi = {
-  getAll: (params?: { page?: number; limit?: number; employee_id?: number; date?: string }) =>
-    request<{ data: any[]; pagination: any }>(
-      `/attendance?${new URLSearchParams(params as any).toString()}`
-    ),
-  create: (data: any) =>
-    request<{ data: any }>('/attendance', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  update: (id: number, data: any) =>
-    request<{ data: any }>(`/attendance/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-};
 
 // Leaves API
 export const leavesApi = {
@@ -254,6 +237,8 @@ export const leavesApi = {
     request<{ data: any[]; pagination: any }>(
       `/leaves?${new URLSearchParams(params as any).toString()}`
     ),
+  getById: (id: number) =>
+    request<{ data: any }>(`/leaves/${id}`),
   create: (data: any) =>
     request<{ data: any }>('/leaves', {
       method: 'POST',
@@ -263,6 +248,10 @@ export const leavesApi = {
     request<{ data: any }>(`/leaves/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    }),
+  delete: (id: number) =>
+    request<{ message: string }>(`/leaves/${id}`, {
+      method: 'DELETE',
     }),
 };
 
@@ -299,6 +288,16 @@ export const authApi = {
 export const reportsApi = {
   getDashboard: () =>
     request<{ data: any }>('/reports/dashboard'),
+  getTaskMetrics: (params?: { period?: string }) =>
+    request<{ data: any }>(`/reports/tasks?${new URLSearchParams(params as any).toString()}`),
+  getBugMetrics: (params?: { period?: string }) =>
+    request<{ data: any }>(`/reports/bugs?${new URLSearchParams(params as any).toString()}`),
+  getLeaderboard: (params?: { period?: string; limit?: number }) =>
+    request<{ data: any[] }>(`/reports/leaderboard?${new URLSearchParams(params as any).toString()}`),
+  getProjectStats: () =>
+    request<{ data: any[] }>('/reports/projects'),
+  getTopPerformer: (params?: { period?: string }) =>
+    request<{ data: any }>(`/reports/top-performer?${new URLSearchParams(params as any).toString()}`),
 };
 
 // Notifications API

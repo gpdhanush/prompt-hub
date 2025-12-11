@@ -12,7 +12,6 @@ import Employees from "./pages/Employees";
 import Projects from "./pages/Projects";
 import Tasks from "./pages/Tasks";
 import Bugs from "./pages/Bugs";
-import Attendance from "./pages/Attendance";
 import Leaves from "./pages/Leaves";
 import Reimbursements from "./pages/Reimbursements";
 import AIPrompts from "./pages/AIPrompts";
@@ -93,14 +92,20 @@ const App = () => (
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/bugs" element={<Bugs />} />
               <Route path="/bugs/:id" element={<BugDetail />} />
-              <Route path="/attendance" element={<Attendance />} />
               <Route path="/leaves" element={<Leaves />} />
               <Route path="/reimbursements" element={<Reimbursements />} />
               <Route path="/prompts" element={<AIPrompts />} />
               <Route path="/audit-logs" element={<AuditLogs />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/notifications" element={<Notifications />} />
-              <Route path="/reports" element={<Reports />} />
+              <Route 
+                path="/reports" 
+                element={
+                  <ProtectedRoute allowedRoles={['Super Admin', 'Admin', 'Team Lead']}>
+                    <Reports />
+                  </ProtectedRoute>
+                } 
+              />
               <Route 
                 path="/roles-positions" 
                 element={

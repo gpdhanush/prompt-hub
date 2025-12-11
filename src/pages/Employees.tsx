@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { StatusBadge, attendanceStatusMap } from "@/components/ui/status-badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -523,7 +523,7 @@ export default function Employees() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Employees</h1>
-          <p className="text-muted-foreground">Manage employee records and attendance</p>
+          <p className="text-muted-foreground">Manage employee records</p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild>

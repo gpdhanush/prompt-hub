@@ -112,9 +112,3 @@ export const leaveStatusMap = {
   Rejected: "error",
   Cancelled: "neutral",
 } as const;
-
-export const attendanceStatusMap = {
-  Present: "success",
-  Absent: "error",
-  "On Leave": "info",
-} as const;
