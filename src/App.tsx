@@ -22,6 +22,9 @@ import Notifications from "./pages/Notifications";
 import Reports from "./pages/Reports";
 import EmployeeProfile from "./pages/EmployeeProfile";
 import BugDetail from "./pages/BugDetail";
+import ProjectDetail from "./pages/ProjectDetail";
+import ProjectCreate from "./pages/ProjectCreate";
+import ProjectEdit from "./pages/ProjectEdit";
 import RolesPositions from "./pages/RolesPositions";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
@@ -89,6 +92,9 @@ const App = () => (
                 } 
               />
               <Route path="/projects" element={<Projects />} />
+              <Route path="/projects/new" element={<ProjectCreate />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
+              <Route path="/projects/:id/edit" element={<ProjectEdit />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/bugs" element={<Bugs />} />
               <Route path="/bugs/:id" element={<BugDetail />} />

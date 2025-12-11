@@ -164,9 +164,10 @@ export default function BugDetail() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
-            variant="ghost"
+            variant="default"
             size="icon"
             onClick={() => navigate('/bugs')}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>

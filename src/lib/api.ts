@@ -118,10 +118,20 @@ export const employeesApi = {
 
 // Projects API
 export const projectsApi = {
-  getAll: (params?: { page?: number; limit?: number; my_projects?: number }) =>
-    request<{ data: any[]; pagination: any }>(
-      `/projects?${new URLSearchParams(params as any).toString()}`
-    ),
+  getAll: (params?: { page?: number; limit?: number; my_projects?: number }) => {
+    // Filter out undefined values to avoid sending "undefined" as string
+    const cleanParams: any = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        if (params[key as keyof typeof params] !== undefined) {
+          cleanParams[key] = params[key as keyof typeof params];
+        }
+      });
+    }
+    return request<{ data: any[]; pagination: any }>(
+      `/projects?${new URLSearchParams(cleanParams as any).toString()}`
+    );
+  },
   getById: (id: number) =>
     request<{ data: any }>(`/projects/${id}`),
   create: (data: any) =>
@@ -137,6 +147,107 @@ export const projectsApi = {
   delete: (id: number) =>
     request<{ message: string }>(`/projects/${id}`, {
       method: 'DELETE',
+    }),
+  // Files
+  uploadFile: (id: number, formData: FormData) => {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    const token = localStorage.getItem('auth_token');
+    const userStr = localStorage.getItem('user');
+    
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          if (user.id) {
+            headers['user-id'] = user.id.toString();
+          }
+        } catch (e) {
+          console.error('Error parsing user from localStorage:', e);
+        }
+      }
+    }
+    
+    return fetch(`${API_BASE_URL}/projects/${id}/files`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    }).then(async (response) => {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new ApiError(response.status, errorData.error || 'Request failed');
+      }
+      return response.json();
+    });
+  },
+  getFiles: (id: number) =>
+    request<{ data: any[] }>(`/projects/${id}/files`),
+  deleteFile: (id: number, fileId: number) =>
+    request<{ message: string }>(`/projects/${id}/files/${fileId}`, {
+      method: 'DELETE',
+    }),
+  // Change Requests
+  createChangeRequest: (id: number, data: any) =>
+    request<{ data: any }>(`/projects/${id}/change-requests`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getChangeRequests: (id: number) =>
+    request<{ data: any[] }>(`/projects/${id}/change-requests`),
+  updateChangeRequest: (id: number, requestId: number, data: any) =>
+    request<{ data: any }>(`/projects/${id}/change-requests/${requestId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  // Client Call Notes
+  createCallNote: (id: number, data: any) =>
+    request<{ data: any }>(`/projects/${id}/call-notes`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getCallNotes: (id: number) =>
+    request<{ data: any[] }>(`/projects/${id}/call-notes`),
+  // Credentials
+  createCredential: (id: number, data: any) =>
+    request<{ data: any }>(`/projects/${id}/credentials`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getCredentials: (id: number) =>
+    request<{ data: any[] }>(`/projects/${id}/credentials`),
+  updateCredential: (id: number, credId: number, data: any) =>
+    request<{ data: any }>(`/projects/${id}/credentials/${credId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  // Daily Status
+  createDailyStatus: (id: number, data: any) =>
+    request<{ data: any }>(`/projects/${id}/daily-status`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getDailyStatus: (id: number, params?: { user_id?: number; start_date?: string; end_date?: string }) => {
+    const queryParams = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return request<{ data: any[] }>(`/projects/${id}/daily-status${queryParams}`);
+  },
+  getTotalWorkedTime: (id: number) =>
+    request<{ data: any }>(`/projects/${id}/total-worked-time`),
+  // Comments
+  createComment: (id: number, data: any) =>
+    request<{ data: any }>(`/projects/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getComments: (id: number, params?: { comment_type?: string }) => {
+    const queryParams = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return request<{ data: any[] }>(`/projects/${id}/comments${queryParams}`);
+  },
+  // Technologies
+  updateTechnologies: (id: number, technologies: string[]) =>
+    request<{ data: any }>(`/projects/${id}/technologies`, {
+      method: 'PUT',
+      body: JSON.stringify({ technologies_used: technologies }),
     }),
 };
 
@@ -357,6 +468,8 @@ export const rolesApi = {
     request<{ data: any[] }>('/roles'),
   getById: (id: number) =>
     request<{ data: any }>(`/roles/${id}`),
+  getPermissions: (id: number) =>
+    request<{ data: any[] }>(`/roles/${id}/permissions`),
   create: (data: any) =>
     request<{ data: any }>('/roles', {
       method: 'POST',

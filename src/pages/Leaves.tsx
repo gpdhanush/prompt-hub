@@ -48,6 +48,7 @@ import { StatusBadge, leaveStatusMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { leavesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { DatePicker } from "@/components/ui/date-picker";
 
 export default function Leaves() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -262,20 +263,20 @@ export default function Leaves() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="start-date">Start Date *</Label>
-                  <Input
+                  <DatePicker
                     id="start-date"
-                    type="date"
                     value={leaveForm.start_date}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
+                    onChange={(date) => setLeaveForm({ ...leaveForm, start_date: date })}
+                    placeholder="Select start date"
                   />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="end-date">End Date *</Label>
-                  <Input
+                  <DatePicker
                     id="end-date"
-                    type="date"
                     value={leaveForm.end_date}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
+                    onChange={(date) => setLeaveForm({ ...leaveForm, end_date: date })}
+                    placeholder="Select end date"
                   />
                 </div>
               </div>
@@ -522,24 +523,24 @@ export default function Leaves() {
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-start-date">Start Date *</Label>
-                <Input
-                  id="edit-start-date"
-                  type="date"
-                  value={leaveForm.start_date}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, start_date: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-end-date">End Date *</Label>
-                <Input
-                  id="edit-end-date"
-                  type="date"
-                  value={leaveForm.end_date}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
-                />
-              </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-start-date">Start Date *</Label>
+                    <DatePicker
+                      id="edit-start-date"
+                      value={leaveForm.start_date}
+                      onChange={(date) => setLeaveForm({ ...leaveForm, start_date: date })}
+                      placeholder="Select start date"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-end-date">End Date *</Label>
+                    <DatePicker
+                      id="edit-end-date"
+                      value={leaveForm.end_date}
+                      onChange={(date) => setLeaveForm({ ...leaveForm, end_date: date })}
+                      placeholder="Select end date"
+                    />
+                  </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-reason">Reason *</Label>

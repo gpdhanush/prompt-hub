@@ -344,22 +344,45 @@ router.get('/top-performer', async (req, res) => {
   }
 });
 
-// Dashboard stats endpoint (keep for backward compatibility)
+// Dashboard stats endpoint
 router.get('/dashboard', async (req, res) => {
   try {
     const [userCount] = await db.query('SELECT COUNT(*) as count FROM users');
     const [employeeCount] = await db.query('SELECT COUNT(*) as count FROM employees');
-    const [projectCount] = await db.query('SELECT COUNT(*) as count FROM projects');
-    const [taskCount] = await db.query('SELECT COUNT(*) as count FROM tasks');
+    const [projectCount] = await db.query("SELECT COUNT(*) as count FROM projects WHERE status != 'Archived'");
+    const [taskCount] = await db.query("SELECT COUNT(*) as count FROM tasks WHERE status IN ('In Progress', 'Development', 'Testing')");
+    const [openBugsCount] = await db.query("SELECT COUNT(*) as count FROM bugs WHERE status IN ('Open', 'New')");
+    const [pendingReimbursements] = await db.query("SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total_amount FROM reimbursements WHERE status = 'Pending'");
+    const [taskMetrics] = await db.query(`
+      SELECT 
+        AVG(DATEDIFF(COALESCE(updated_at, NOW()), created_at)) as avgResolutionTime
+      FROM tasks
+      WHERE status IN ('Completed', 'Done', 'Closed')
+    `);
+    
+    // Safely handle avgResolutionTime - it can be null if no completed tasks exist
+    let avgResolutionTimeStr = '0 days';
+    if (taskMetrics && taskMetrics.length > 0 && taskMetrics[0].avgResolutionTime !== null) {
+      const avgDaysValue = parseFloat(taskMetrics[0].avgResolutionTime);
+      if (!isNaN(avgDaysValue) && avgDaysValue !== null && avgDaysValue !== undefined) {
+        avgResolutionTimeStr = `${avgDaysValue.toFixed(1)} days`;
+      }
+    }
+    
     res.json({
       data: {
         users: userCount[0].count,
         employees: employeeCount[0].count,
         projects: projectCount[0].count,
-        tasks: taskCount[0].count
+        tasksInProgress: taskCount[0].count,
+        openBugs: openBugsCount[0].count,
+        pendingReimbursements: pendingReimbursements[0].count,
+        pendingReimbursementsAmount: parseFloat(pendingReimbursements[0].total_amount) || 0,
+        avgResolutionTime: avgResolutionTimeStr
       }
     });
   } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
     res.status(500).json({ error: error.message });
   }
 });

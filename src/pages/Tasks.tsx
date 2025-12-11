@@ -49,6 +49,7 @@ import { StatusBadge, taskStageMap, taskPriorityMap } from "@/components/ui/stat
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { tasksApi, projectsApi, usersApi } from "@/lib/api";
+import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
 
 type Task = {
@@ -994,11 +995,11 @@ export default function Tasks() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-task-deadline">Deadline</Label>
-                <Input
+                <DatePicker
                   id="edit-task-deadline"
-                  type="date"
                   value={taskForm.deadline}
-                  onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })}
+                  onChange={(date) => setTaskForm({ ...taskForm, deadline: date })}
+                  placeholder="Select deadline"
                 />
               </div>
             </div>

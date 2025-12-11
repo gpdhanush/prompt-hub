@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
-import { useQuery } from "@tanstack/react-query";
-import { Settings as SettingsIcon, Users, Shield, Building, Bell, Database, Palette } from "lucide-react";
-import { rolesApi } from "@/lib/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Settings as SettingsIcon, Users, Shield, Building, Bell, Palette, DollarSign, Check, X } from "lucide-react";
+import { rolesApi, settingsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 const themeColors = [
   { name: "Blue", value: "217 91% 60%", class: "blue" },
@@ -29,21 +31,100 @@ const themeColors = [
   { name: "Indigo", value: "239 84% 67%", class: "indigo" },
 ];
 
+// Permission modules mapping
+const permissionModules = [
+  { module: 'Users', permissions: ['View', 'Create', 'Edit', 'Delete'] },
+  { module: 'Employees', permissions: ['View', 'Create', 'Edit', 'Delete'] },
+  { module: 'Projects', permissions: ['View', 'Create', 'Edit', 'Delete'] },
+  { module: 'Tasks', permissions: ['View', 'Create', 'Edit', 'Assign'] },
+  { module: 'Bugs', permissions: ['View', 'Create', 'Edit'] },
+  { module: 'Leaves', permissions: ['View', 'Create', 'Edit', 'Approve'] },
+  { module: 'Reimbursements', permissions: ['View', 'Create', 'Edit', 'Approve'] },
+  { module: 'Reports', permissions: ['View'] },
+  { module: 'Settings', permissions: ['Edit'] },
+];
+
 export default function Settings() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mfaEnabled, setMfaEnabled] = useState(true);
-  const [auditEnabled, setAuditEnabled] = useState(true);
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [selectedColor, setSelectedColor] = useState("217 91% 60%");
+  const [sessionTimeout, setSessionTimeout] = useState("30");
+  const [selectedRole, setSelectedRole] = useState<number | null>(null);
+  const [rolePermissions, setRolePermissions] = useState<Record<number, any[]>>({});
 
-  // Fetch roles from API
-  const { data: rolesData } = useQuery({
+  // Get current user info
+  const userStr = localStorage.getItem('user');
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const userRole = currentUser?.role || '';
+  const isSuperAdmin = userRole === 'Super Admin';
+
+  const queryClient = useQueryClient();
+
+  // Fetch settings from database
+  const { data: settingsData, isLoading: isLoadingSettings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => settingsApi.get(),
+  });
+
+  // Currency symbol from database
+  const [currencySymbol, setCurrencySymbol] = useState('$');
+
+  // Check if user can access roles (Super Admin, Admin, Team Lead only)
+  const canAccessRoles = ['Super Admin', 'Admin', 'Team Lead'].includes(userRole);
+
+  // Fetch roles from API - only if user has permission
+  const { data: rolesData, isLoading: isLoadingRoles, error: rolesError } = useQuery({
     queryKey: ['roles'],
     queryFn: () => rolesApi.getAll(),
+    enabled: canAccessRoles, // Only fetch if user has permission
+    retry: (failureCount, error: any) => {
+      // Don't retry on 403 errors
+      return error?.status !== 403;
+    },
   });
 
   const roles = rolesData?.data || [];
+
+  // Fetch permissions for selected role
+  const { data: permissionsData, isLoading: isLoadingPermissions } = useQuery({
+    queryKey: ['role-permissions', selectedRole],
+    queryFn: () => rolesApi.getPermissions(selectedRole!),
+    enabled: !!selectedRole && isSuperAdmin,
+  });
+
+  useEffect(() => {
+    if (permissionsData?.data && selectedRole) {
+      setRolePermissions(prev => ({
+        ...prev,
+        [selectedRole]: permissionsData.data
+      }));
+    }
+  }, [permissionsData, selectedRole]);
+
+  // Update currency symbol when settings load
+  useEffect(() => {
+    if (settingsData?.data?.currency_symbol) {
+      setCurrencySymbol(settingsData.data.currency_symbol);
+      // Also update localStorage for Dashboard
+      localStorage.setItem('currency_symbol', settingsData.data.currency_symbol);
+    }
+  }, [settingsData]);
+
+  // Update settings mutation
+  const updateSettingsMutation = useMutation({
+    mutationFn: (data: any) => settingsApi.update(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      toast({ title: "Success", description: "Settings updated successfully." });
+      // Dispatch event for Dashboard
+      window.dispatchEvent(new Event('currencySymbolChanged'));
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update settings.", variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -53,6 +134,9 @@ export default function Settings() {
     if (primaryColor) {
       setSelectedColor(primaryColor);
     }
+    // Load saved settings
+    const savedSessionTimeout = localStorage.getItem('session_timeout');
+    if (savedSessionTimeout) setSessionTimeout(savedSessionTimeout);
   }, []);
 
   const handleColorChange = (colorValue: string) => {
@@ -65,6 +149,22 @@ export default function Settings() {
     root.style.setProperty("--chart-1", colorValue);
     // Save to localStorage
     localStorage.setItem("theme-color", colorValue);
+    toast({ title: "Success", description: "Theme color updated successfully." });
+  };
+
+  const handleCurrencyChange = (symbol: string) => {
+    if (!isSuperAdmin) return;
+    setCurrencySymbol(symbol);
+    updateSettingsMutation.mutate({ currency_symbol: symbol });
+  };
+
+  const handleSaveSecurity = () => {
+    localStorage.setItem('session_timeout', sessionTimeout);
+    toast({ title: "Success", description: "Security settings saved successfully." });
+  };
+
+  const handleSaveOrganization = () => {
+    toast({ title: "Success", description: "Organization settings saved successfully." });
   };
 
   useEffect(() => {
@@ -73,6 +173,14 @@ export default function Settings() {
       handleColorChange(savedColor);
     }
   }, []);
+
+  if (isLoadingSettings || (canAccessRoles && isLoadingRoles)) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -84,61 +192,40 @@ export default function Settings() {
         <p className="text-muted-foreground">Manage system configuration and preferences</p>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
+      <Tabs defaultValue={isSuperAdmin ? "general" : "appearance"} className="space-y-6">
         <TabsList className="bg-muted/50">
-          <TabsTrigger value="general">General</TabsTrigger>
+          {isSuperAdmin && <TabsTrigger value="general">General</TabsTrigger>}
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>
+          {isSuperAdmin && <TabsTrigger value="system">System</TabsTrigger>}
+          {canAccessRoles && <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>}
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                Organization
-              </CardTitle>
-              <CardDescription>Basic organization settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label>Organization Name</Label>
-                <Input defaultValue="Naethra Technologies Pvt. Ltd" />
-              </div>
-              <div className="grid gap-2">
-                <Label>Admin Email</Label>
-                <Input defaultValue="admin@naethra.com" type="email" />
-              </div>
-              <Button>Save Changes</Button>
-            </CardContent>
-          </Card>
-
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Database className="h-5 w-5" />
-                Database Connection
-              </CardTitle>
-              <CardDescription>MySQL connection settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label>Connection String</Label>
-                <Input 
-                  defaultValue="mysql://user:****@host:3306/database" 
-                  type="password"
-                  className="font-mono"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline">Test Connection</Button>
-                <Button>Update</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {isSuperAdmin && (
+          <TabsContent value="general" className="space-y-6">
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building className="h-5 w-5" />
+                  Organization
+                </CardTitle>
+                <CardDescription>Basic organization settings</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                  <Label>Organization Name</Label>
+                  <Input defaultValue="Naethra Technologies Pvt. Ltd" />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Admin Email</Label>
+                  <Input defaultValue="admin@naethra.com" type="email" />
+                </div>
+                <Button onClick={handleSaveOrganization}>Save Changes</Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         <TabsContent value="appearance" className="space-y-6">
           <Card className="glass-card">
@@ -220,26 +307,161 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
+        {isSuperAdmin && (
+          <TabsContent value="system" className="space-y-6">
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Currency Settings
+                </CardTitle>
+                <CardDescription>Set the default currency symbol for the system</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="currency-symbol">Currency Symbol</Label>
+                  <Select
+                    value={currencySymbol}
+                    onValueChange={handleCurrencyChange}
+                    disabled={updateSettingsMutation.isPending}
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="$">Dollar ($)</SelectItem>
+                      <SelectItem value="₹">Rupees (₹)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    This symbol will be used throughout the system for all users.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <p className="text-sm font-medium mb-2">Preview:</p>
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-lg">
+                      {currencySymbol}1,234.56
+                    </p>
+                  </div>
+                </div>
+                {updateSettingsMutation.isPending && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
         <TabsContent value="roles" className="space-y-6">
           <Card className="glass-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Roles Management
+                Roles & Permissions
               </CardTitle>
-              <CardDescription>Configure roles and their permissions</CardDescription>
+              <CardDescription>
+                {isSuperAdmin 
+                  ? "View and manage role permissions. Click on a role to see its permissions."
+                  : "View role permissions"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {roles.map((role: any) => (
-                  <div key={role.id} className="flex items-center justify-between rounded-lg border border-border p-4">
-                    <div>
-                      <p className="font-medium">{role.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {role.description || "No description available"}
-                      </p>
+                  <div 
+                    key={role.id} 
+                    className={`rounded-lg border p-4 cursor-pointer transition-colors ${
+                      selectedRole === role.id 
+                        ? "border-primary bg-primary/5" 
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    onClick={() => setSelectedRole(selectedRole === role.id ? null : role.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{role.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {role.description || "No description available"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {selectedRole === role.id ? (
+                          <X className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Check className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
                     </div>
-                    <Button variant="outline" size="sm">Configure</Button>
+                    
+                    {selectedRole === role.id && (
+                      <div className="mt-4 pt-4 border-t border-border">
+                        <p className="text-sm font-medium mb-3">Permissions:</p>
+                        {isLoadingPermissions ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          </div>
+                        ) : (
+                          <>
+                            {(() => {
+                              const permissions = rolePermissions[role.id] || [];
+                              // Group permissions by module
+                              const groupedPermissions: Record<string, any[]> = {};
+                              permissions.forEach((perm: any) => {
+                                if (!groupedPermissions[perm.module]) {
+                                  groupedPermissions[perm.module] = [];
+                                }
+                                groupedPermissions[perm.module].push(perm);
+                              });
+                              
+                              return Object.keys(groupedPermissions).length > 0 ? (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                  {Object.entries(groupedPermissions).map(([module, perms]) => (
+                                    <div key={module} className="space-y-2">
+                                      <p className="text-xs font-medium text-muted-foreground">{module}</p>
+                                      <div className="space-y-1">
+                                        {perms.map((perm: any) => {
+                                          const permName = perm.code.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim() || perm.code;
+                                          return (
+                                            <div key={perm.id} className="flex items-center gap-2">
+                                              {perm.allowed ? (
+                                                <Check className="h-3 w-3 text-status-success" />
+                                              ) : (
+                                                <X className="h-3 w-3 text-muted-foreground" />
+                                              )}
+                                              <span className={`text-xs ${perm.allowed ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                                {permName}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-muted-foreground py-4">
+                                  No permissions data available. This role may have all permissions (Super Admin) or permissions are not configured.
+                                </div>
+                              );
+                            })()}
+                            {isSuperAdmin && (
+                              <div className="mt-4 pt-4 border-t border-border">
+                                <Button variant="outline" size="sm">
+                                  Edit Permissions
+                                </Button>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  Click to modify permissions for this role. Changes will affect all users with this role.
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -265,23 +487,47 @@ export default function Settings() {
                 <Switch checked={mfaEnabled} onCheckedChange={setMfaEnabled} />
               </div>
               <Separator />
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Audit Logging</Label>
-                  <p className="text-xs text-muted-foreground">Log all admin actions</p>
-                </div>
-                <Switch checked={auditEnabled} onCheckedChange={setAuditEnabled} />
-              </div>
-              <Separator />
               <div className="grid gap-2">
                 <Label>Session Timeout (minutes)</Label>
-                <Input type="number" defaultValue="30" className="w-32" />
+                <Input 
+                  type="number" 
+                  value={sessionTimeout}
+                  onChange={(e) => setSessionTimeout(e.target.value)}
+                  className="w-32" 
+                  min="5"
+                  max="1440"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Users will be logged out after this period of inactivity (5-1440 minutes)
+                </p>
               </div>
-              <div className="grid gap-2">
-                <Label>IP Allowlist</Label>
-                <Input placeholder="192.168.1.0/24, 10.0.0.0/8" className="font-mono" />
-                <p className="text-xs text-muted-foreground">Comma-separated CIDR blocks</p>
-              </div>
+              {isSuperAdmin && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label>Password Policy</Label>
+                    <div className="space-y-2 pl-4">
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" defaultChecked className="rounded" />
+                        <span className="text-sm">Minimum 8 characters</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" defaultChecked className="rounded" />
+                        <span className="text-sm">Require uppercase and lowercase letters</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" defaultChecked className="rounded" />
+                        <span className="text-sm">Require at least one number</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" defaultChecked className="rounded" />
+                        <span className="text-sm">Require at least one special character</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              <Button onClick={handleSaveSecurity}>Save Security Settings</Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -302,22 +548,6 @@ export default function Settings() {
                   <p className="text-xs text-muted-foreground">Receive updates via email</p>
                 </div>
                 <Switch checked={emailNotifs} onCheckedChange={setEmailNotifs} />
-              </div>
-              <Separator />
-              <div className="space-y-4">
-                <Label>Notify me about:</Label>
-                {[
-                  "New task assignments",
-                  "Bug reports",
-                  "Reimbursement approvals",
-                  "Leave requests",
-                  "Prompt usage",
-                ].map((item) => (
-                  <div key={item} className="flex items-center justify-between">
-                    <span className="text-sm">{item}</span>
-                    <Switch defaultChecked />
-                  </div>
-                ))}
               </div>
             </CardContent>
           </Card>

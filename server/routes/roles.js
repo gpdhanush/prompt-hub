@@ -163,4 +163,29 @@ router.delete('/:id', authorize('Super Admin'), async (req, res) => {
   }
 });
 
+// Get role permissions - Super Admin, Admin, and Team Lead can view
+router.get('/:id/permissions', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get all permissions with role-specific allowed status
+    const [permissions] = await db.query(`
+      SELECT 
+        p.id,
+        p.code,
+        p.description,
+        p.module,
+        COALESCE(rp.allowed, FALSE) as allowed
+      FROM permissions p
+      LEFT JOIN role_permissions rp ON p.id = rp.permission_id AND rp.role_id = ?
+      ORDER BY p.module, p.code
+    `, [id]);
+    
+    res.json({ data: permissions });
+  } catch (error) {
+    console.error('Error fetching role permissions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
