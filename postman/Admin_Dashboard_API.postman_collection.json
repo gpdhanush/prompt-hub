@@ -1,0 +1,1153 @@
+{
+	"info": {
+		"_postman_id": "admin-dashboard-api",
+		"name": "Admin Dashboard API",
+		"description": "Complete API collection for Internal Admin Dashboard System",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{auth_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"superadmin@example.com\",\n  \"password\": \"admin123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "login"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "logout"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "refresh"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "me"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/users?page=1&limit=10&search=&role_id=&status=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"],
+							"query": [
+								{"key": "page", "value": "1"},
+								{"key": "limit", "value": "10"},
+								{"key": "search", "value": ""},
+								{"key": "role_id", "value": ""},
+								{"key": "status", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"mobile\": \"+1234567890\",\n  \"password\": \"password123\",\n  \"role_id\": 4,\n  \"position_id\": 2,\n  \"status\": \"Active\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe Updated\",\n  \"status\": \"Active\",\n  \"role_id\": 3\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Employees",
+			"item": [
+				{
+					"name": "Get All Employees",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/employees?page=1&limit=10&department=&status=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "employees"],
+							"query": [
+								{"key": "page", "value": "1"},
+								{"key": "limit", "value": "10"},
+								{"key": "department", "value": ""},
+								{"key": "status", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Employee by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/employees/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "employees", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Employee",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": 4,\n  \"emp_code\": \"EMP005\",\n  \"department\": \"Engineering\",\n  \"team_lead_id\": 1,\n  \"hire_date\": \"2024-01-15\",\n  \"status\": \"Present\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/employees",
+							"host": ["{{base_url}}"],
+							"path": ["api", "employees"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Employee",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"department\": \"QA\",\n  \"status\": \"Present\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/employees/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "employees", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Projects",
+			"item": [
+				{
+					"name": "Get All Projects",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/projects?page=1&limit=10&status=&search=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "projects"],
+							"query": [
+								{"key": "page", "value": "1"},
+								{"key": "limit", "value": "10"},
+								{"key": "status", "value": ""},
+								{"key": "search", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Project by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/projects/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "projects", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_code\": \"PROJ004\",\n  \"name\": \"New Project\",\n  \"description\": \"Project description\",\n  \"project_admin_id\": 2,\n  \"team_lead_id\": 3,\n  \"start_date\": \"2024-01-01\",\n  \"end_date\": \"2024-12-31\",\n  \"status\": \"Planning\",\n  \"progress\": 0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/projects",
+							"host": ["{{base_url}}"],
+							"path": ["api", "projects"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Project",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"In Progress\",\n  \"progress\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/projects/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "projects", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Project Tasks",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/projects/:id/tasks",
+							"host": ["{{base_url}}"],
+							"path": ["api", "projects", ":id", "tasks"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add User to Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": 4,\n  \"role_in_project\": \"employee\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/projects/:id/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "projects", ":id", "users"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Tasks",
+			"item": [
+				{
+					"name": "Get All Tasks",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tasks?page=1&limit=10&project_id=&status=&stage=&assigned_to=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks"],
+							"query": [
+								{"key": "page", "value": "1"},
+								{"key": "limit", "value": "10"},
+								{"key": "project_id", "value": ""},
+								{"key": "status", "value": ""},
+								{"key": "stage", "value": ""},
+								{"key": "assigned_to", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Task by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId"],
+							"variable": [
+								{"key": "taskId", "value": "08342"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Task",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": 1,\n  \"title\": \"New Task\",\n  \"description\": \"Task description\",\n  \"assigned_to\": 4,\n  \"priority\": \"High\",\n  \"stage\": \"Analysis\",\n  \"deadline\": \"2024-12-31\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/projects/:id/tasks",
+							"host": ["{{base_url}}"],
+							"path": ["api", "projects", ":id", "tasks"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Task",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"stage\": \"Development\",\n  \"status\": \"In Progress\",\n  \"progress\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId"],
+							"variable": [
+								{"key": "taskId", "value": "08342"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Open Task",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"is_open\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId/open",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId", "open"],
+							"variable": [
+								{"key": "taskId", "value": "08342"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Task Comments",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId/comments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId", "comments"],
+							"variable": [
+								{"key": "taskId", "value": "08342"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add Task Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"comment\": \"This is a comment\",\n  \"parent_comment_id\": null\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId/comments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId", "comments"],
+							"variable": [
+								{"key": "taskId", "value": "08342"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Task Attachment",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId/attachments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId", "attachments"],
+							"variable": [
+								{"key": "taskId", "value": "08342"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Bugs",
+			"item": [
+				{
+					"name": "Get All Bugs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/bugs?page=1&limit=10&status=&severity=&task_id=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "bugs"],
+							"query": [
+								{"key": "page", "value": "1"},
+								{"key": "limit", "value": "10"},
+								{"key": "status", "value": ""},
+								{"key": "severity", "value": ""},
+								{"key": "task_id", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Bug by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/bugs/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "bugs", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Bug",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"task_id\": 1,\n  \"description\": \"Bug description\",\n  \"severity\": \"Major\",\n  \"steps_to_reproduce\": \"Step 1, Step 2\",\n  \"expected_behavior\": \"Expected\",\n  \"actual_behavior\": \"Actual\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/bugs",
+							"host": ["{{base_url}}"],
+							"path": ["api", "bugs"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Bug",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"Fixing\",\n  \"assigned_to\": 4\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/bugs/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "bugs", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Attendance",
+			"item": [
+				{
+					"name": "Get Attendance",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/attendance?employee_id=&start_date=&end_date=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "attendance"],
+							"query": [
+								{"key": "employee_id", "value": ""},
+								{"key": "start_date", "value": ""},
+								{"key": "end_date", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Check In",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"gps_lat\": 40.7128,\n  \"gps_lng\": -74.0060\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/attendance/check-in",
+							"host": ["{{base_url}}"],
+							"path": ["api", "attendance", "check-in"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Check Out",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/attendance/check-out",
+							"host": ["{{base_url}}"],
+							"path": ["api", "attendance", "check-out"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Leaves",
+			"item": [
+				{
+					"name": "Get All Leaves",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/leaves?employee_id=&status=&start_date=&end_date=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "leaves"],
+							"query": [
+								{"key": "employee_id", "value": ""},
+								{"key": "status", "value": ""},
+								{"key": "start_date", "value": ""},
+								{"key": "end_date", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Leave Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"leave_type\": \"Sick Leave\",\n  \"start_date\": \"2024-12-20\",\n  \"end_date\": \"2024-12-22\",\n  \"reason\": \"Medical appointment\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/leaves",
+							"host": ["{{base_url}}"],
+							"path": ["api", "leaves"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve Leave",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"Approved\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/leaves/:id/approve",
+							"host": ["{{base_url}}"],
+							"path": ["api", "leaves", ":id", "approve"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reject Leave",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"Rejected\",\n  \"rejection_reason\": \"Insufficient leave balance\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/leaves/:id/reject",
+							"host": ["{{base_url}}"],
+							"path": ["api", "leaves", ":id", "reject"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Reimbursements",
+			"item": [
+				{
+					"name": "Get All Reimbursements",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/reimbursements?employee_id=&status=&category=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "reimbursements"],
+							"query": [
+								{"key": "employee_id", "value": ""},
+								{"key": "status", "value": ""},
+								{"key": "category", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Reimbursement",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": 150.00,\n  \"category\": \"Travel\",\n  \"description\": \"Taxi fare\",\n  \"receipt_path\": \"/uploads/receipts/receipt123.pdf\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/reimbursements",
+							"host": ["{{base_url}}"],
+							"path": ["api", "reimbursements"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve Reimbursement",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"Approved\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/reimbursements/:id/approve",
+							"host": ["{{base_url}}"],
+							"path": ["api", "reimbursements", ":id", "approve"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reject Reimbursement",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"Rejected\",\n  \"rejection_reason\": \"Invalid receipt\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/reimbursements/:id/reject",
+							"host": ["{{base_url}}"],
+							"path": ["api", "reimbursements", ":id", "reject"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "AI Prompts",
+			"item": [
+				{
+					"name": "Get All Prompts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/prompts?page=1&limit=10&category=&search=&is_approved=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "prompts"],
+							"query": [
+								{"key": "page", "value": "1"},
+								{"key": "limit", "value": "10"},
+								{"key": "category", "value": ""},
+								{"key": "search", "value": ""},
+								{"key": "is_approved", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Prompt by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/prompts/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "prompts", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Prompt",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"New Prompt Template\",\n  \"description\": \"Prompt description\",\n  \"body\": \"Create a system for {{PROJECT_NAME}} using {{DB_CONNECTION}}\",\n  \"variables\": [\"PROJECT_NAME\", \"DB_CONNECTION\"],\n  \"category\": \"System Spec\",\n  \"tags\": [\"system\", \"template\"],\n  \"is_public\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/prompts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "prompts"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Prompt",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Updated Prompt Title\",\n  \"body\": \"Updated prompt body\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/prompts/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "prompts", ":id"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Preview Prompt",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"variables\": {\n    \"PROJECT_NAME\": \"AcmePM\",\n    \"DB_CONNECTION\": \"mysql://user:pass@host:3306/acme\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/prompts/:id/preview",
+							"host": ["{{base_url}}"],
+							"path": ["api", "prompts", ":id", "preview"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Export Prompt",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"format\": \"txt\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/prompts/:id/export",
+							"host": ["{{base_url}}"],
+							"path": ["api", "prompts", ":id", "export"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Approve Prompt",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"is_approved\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/prompts/:id/approve",
+							"host": ["{{base_url}}"],
+							"path": ["api", "prompts", ":id", "approve"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Audit Logs",
+			"item": [
+				{
+					"name": "Get Audit Logs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/audit-logs?page=1&limit=10&user_id=&module=&action=&start_date=&end_date=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "audit-logs"],
+							"query": [
+								{"key": "page", "value": "1"},
+								{"key": "limit", "value": "10"},
+								{"key": "user_id", "value": ""},
+								{"key": "module", "value": ""},
+								{"key": "action", "value": ""},
+								{"key": "start_date", "value": ""},
+								{"key": "end_date", "value": ""}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Leaderboard",
+			"item": [
+				{
+					"name": "Get Leaderboard",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/leaderboard?period=month&metric=tasks",
+							"host": ["{{base_url}}"],
+							"path": ["api", "leaderboard"],
+							"query": [
+								{"key": "period", "value": "month", "description": "month, week, year"},
+								{"key": "metric", "value": "tasks", "description": "tasks, bugs, productivity"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Notifications",
+			"item": [
+				{
+					"name": "Get Notifications",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/notifications?is_read=",
+							"host": ["{{base_url}}"],
+							"path": ["api", "notifications"],
+							"query": [
+								{"key": "is_read", "value": ""}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Mark Notification as Read",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/notifications/:id/read",
+							"host": ["{{base_url}}"],
+							"path": ["api", "notifications", ":id", "read"],
+							"variable": [
+								{"key": "id", "value": "1"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Settings",
+			"item": [
+				{
+					"name": "Get Settings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/settings",
+							"host": ["{{base_url}}"],
+							"path": ["api", "settings"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Settings",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mfa_enabled\": true,\n  \"audit_enabled\": true,\n  \"session_timeout\": 30\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/settings",
+							"host": ["{{base_url}}"],
+							"path": ["api", "settings"]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
+
