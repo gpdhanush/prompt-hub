@@ -31,6 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { getCurrentUser, clearAuth } from "@/lib/auth";
 
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -61,8 +62,7 @@ export function AdminSidebar() {
   const queryClient = useQueryClient();
   
   // Get current user info to filter menu items
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   
   // Only Admin, Super Admin, and Team Lead can access Users and Employees pages
@@ -74,10 +74,9 @@ export function AdminSidebar() {
 
   const isActive = (href: string) => location.pathname === href;
 
-  const handleLogout = () => {
-    // Clear authentication data
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user');
+  const handleLogout = async () => {
+    // Clear authentication data from secure storage
+    await clearAuth();
     
     // Clear all React Query cache
     queryClient.clear();

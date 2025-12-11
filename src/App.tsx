@@ -33,6 +33,7 @@ import RolesPositions from "./pages/RolesPositions";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
+import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
 
 const queryClient = new QueryClient();
 
@@ -44,7 +45,7 @@ function ProtectedRoute({
   children: React.ReactNode; 
   allowedRoles: string[] 
 }) {
-  const userStr = localStorage.getItem('user');
+  const userStr = getItemSync('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const userRole = currentUser?.role || '';
 
@@ -65,13 +66,21 @@ function ProtectedRoute({
   return <>{children}</>;
 }
 
-const App = () => (
-  <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+const App = () => {
+  // Initialize secure storage on app startup
+  useEffect(() => {
+    initializeSecureStorage().catch(error => {
+      console.error('Failed to initialize secure storage:', error);
+    });
+  }, []);
+
+  return (
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
@@ -144,10 +153,11 @@ const App = () => (
             
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </ThemeProvider>
-);
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  );
+};
 
 export default App;

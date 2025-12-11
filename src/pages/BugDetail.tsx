@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi } from "@/lib/api";
 import { BugComments } from "@/components/bug/BugComments";
+import { getCurrentUser, getAuthToken } from "@/lib/auth";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,8 +28,7 @@ export default function BugDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Get current user info for role-based permissions
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
 
   // Permissions
@@ -103,7 +103,7 @@ export default function BugDetail() {
 
   const handleDownloadAttachment = (attachment: any) => {
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     // Use the path from attachment to download
     const url = `${API_BASE_URL}/bugs/${id}/attachments/${attachment.id}`;
     

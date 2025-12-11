@@ -119,6 +119,7 @@ router.get('/:id', async (req, res) => {
         u.status as user_status,
         r.name as role,
         tl.name as team_lead_name,
+        tl.id as team_lead_user_id,
         e.department,
         e.emp_code,
         e.status,
@@ -272,6 +273,11 @@ router.put('/:id', async (req, res) => {
       annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url
     } = req.body;
     
+    console.log('=== UPDATE EMPLOYEE REQUEST ===');
+    console.log('Employee ID:', id);
+    console.log('teamLeadId received:', teamLeadId, 'Type:', typeof teamLeadId);
+    console.log('Request body keys:', Object.keys(req.body));
+    
     // Get employee to find user_id
     const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
     if (employees.length === 0) {
@@ -347,6 +353,59 @@ router.put('/:id', async (req, res) => {
       if (date_of_joining !== undefined) { empUpdates.push('date_of_joining = ?'); empParams.push(formatDateForDB(date_of_joining)); }
       if (is_team_lead !== undefined) { empUpdates.push('is_team_lead = ?'); empParams.push(is_team_lead); }
       if (employee_status !== undefined) { empUpdates.push('employee_status = ?'); empParams.push(employee_status); }
+      
+      // Always handle teamLeadId if it's in the request body (including null to clear it)
+      // Check if teamLeadId property exists in request body (even if value is null)
+      if ('teamLeadId' in req.body) {
+        console.log('Processing teamLeadId:', teamLeadId, 'Type:', typeof teamLeadId);
+        if (teamLeadId === null || teamLeadId === '' || teamLeadId === 'none' || teamLeadId === undefined) {
+          console.log('Setting team_lead_id to NULL (clearing team lead)');
+          empUpdates.push('team_lead_id = ?');
+          empParams.push(null);
+        } else {
+          // Convert user_id to employee_id
+          console.log('Looking up employee for team lead user_id:', teamLeadId);
+          let [teamLeadEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [teamLeadId]);
+          let teamLeadEmployeeId = teamLeadEmployee.length > 0 ? teamLeadEmployee[0].id : null;
+          
+          // If Team Lead doesn't have an employee record, create one
+          if (!teamLeadEmployeeId) {
+            console.log('Team Lead user_id not found in employees table, creating employee record...');
+            // Get user info to verify they exist
+            const [teamLeadUser] = await db.query('SELECT id, name FROM users WHERE id = ?', [teamLeadId]);
+            if (teamLeadUser.length > 0) {
+              // Generate employee code for Team Lead
+              const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
+              const empCode = `EMP-TL-${String(empCount[0].count + 1).padStart(4, '0')}`;
+              
+              // Create employee record for Team Lead
+              const [newEmpResult] = await db.query(`
+                INSERT INTO employees (user_id, emp_code, is_team_lead, employee_status)
+                VALUES (?, ?, true, 'Active')
+              `, [teamLeadId, empCode]);
+              
+              teamLeadEmployeeId = newEmpResult.insertId;
+              console.log('Created employee record for Team Lead with employee_id:', teamLeadEmployeeId);
+            } else {
+              console.log('ERROR: Team Lead user_id not found in users table');
+            }
+          }
+          
+          console.log('Final team lead employee_id:', teamLeadEmployeeId);
+          if (teamLeadEmployeeId) {
+            empUpdates.push('team_lead_id = ?');
+            empParams.push(teamLeadEmployeeId);
+            console.log('Will update team_lead_id to:', teamLeadEmployeeId);
+          } else {
+            // If we still don't have an employee_id, set to null
+            console.log('WARNING: Could not get/create employee record for Team Lead, setting to NULL');
+            empUpdates.push('team_lead_id = ?');
+            empParams.push(null);
+          }
+        }
+      } else {
+        console.log('WARNING: teamLeadId not found in request body - field may not be sent from frontend');
+      }
       if (bank_name !== undefined) { empUpdates.push('bank_name = ?'); empParams.push(bank_name || null); }
       if (bank_account_number !== undefined) { empUpdates.push('bank_account_number = ?'); empParams.push(bank_account_number || null); }
       if (ifsc_code !== undefined) { empUpdates.push('ifsc_code = ?'); empParams.push(ifsc_code || null); }
@@ -361,21 +420,6 @@ router.put('/:id', async (req, res) => {
       if (sick_leave_count !== undefined) { empUpdates.push('sick_leave_count = ?'); empParams.push(sick_leave_count); }
       if (casual_leave_count !== undefined) { empUpdates.push('casual_leave_count = ?'); empParams.push(casual_leave_count); }
       if (profile_photo_url !== undefined) { empUpdates.push('profile_photo_url = ?'); empParams.push(profile_photo_url || null); }
-      
-      // Handle teamLeadId - convert user_id to employee_id if provided
-      if (teamLeadId !== undefined) {
-        if (teamLeadId === null || teamLeadId === '') {
-          empUpdates.push('team_lead_id = ?');
-          empParams.push(null);
-        } else {
-          const [teamLeadEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [teamLeadId]);
-          const teamLeadEmployeeId = teamLeadEmployee.length > 0 ? teamLeadEmployee[0].id : null;
-          if (teamLeadEmployeeId) {
-            empUpdates.push('team_lead_id = ?');
-            empParams.push(teamLeadEmployeeId);
-          }
-        }
-      }
     } else if (isOwnProfile) {
       // Users can update limited fields on their own profile
       if (mobile !== undefined) { 
@@ -389,7 +433,12 @@ router.put('/:id', async (req, res) => {
     
     if (empUpdates.length > 0) {
       empParams.push(id);
+      console.log('Executing UPDATE query with fields:', empUpdates);
+      console.log('Update params:', empParams);
       await db.query(`UPDATE employees SET ${empUpdates.join(', ')} WHERE id = ?`, empParams);
+      console.log('Employee update successful');
+    } else {
+      console.log('No employee fields to update');
     }
     
     const [updatedEmployee] = await db.query(`
@@ -400,7 +449,8 @@ router.put('/:id', async (req, res) => {
         u.mobile,
         u.status as user_status,
         r.name as role,
-        tl.name as team_lead_name
+        tl.name as team_lead_name,
+        tl.id as team_lead_user_id
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
       LEFT JOIN roles r ON u.role_id = r.id

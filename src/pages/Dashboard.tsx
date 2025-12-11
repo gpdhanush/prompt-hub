@@ -22,13 +22,13 @@ import {
 } from "@/components/ui/table";
 import { reportsApi, settingsApi } from "@/lib/api";
 import { useState, useEffect } from "react";
+import { getCurrentUser } from "@/lib/auth";
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
   
-  // Get current user from localStorage
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  // Get current user from secure storage
+  const currentUser = getCurrentUser();
   const userName = currentUser?.name || 'User';
   const userRole = currentUser?.role || '';
   const isSuperAdmin = userRole === 'Super Admin';

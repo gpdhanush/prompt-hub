@@ -13,6 +13,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { employeesApi, usersApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { getCurrentUser } from "@/lib/auth";
 
 export default function EmployeeEdit() {
   const navigate = useNavigate();
@@ -20,8 +21,7 @@ export default function EmployeeEdit() {
   const queryClient = useQueryClient();
 
   // Get current user info to check permissions
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const canManage = ['Admin', 'Super Admin', 'Team Lead', 'Manager'].includes(currentUser?.role);
 
   const [formData, setFormData] = useState({
@@ -149,7 +149,7 @@ export default function EmployeeEdit() {
         role: emp.role ? roleNameToValue(emp.role) : "",
         empCode: emp.emp_code || "",
         department: emp.department || "",
-        teamLeadId: emp.team_lead_id ? emp.team_lead_id.toString() : "",
+        teamLeadId: emp.team_lead_user_id ? emp.team_lead_user_id.toString() : "",
         date_of_birth: formatDateFromDB(emp.date_of_birth),
         gender: emp.gender || "",
         date_of_joining: formatDateFromDB(emp.date_of_joining),
@@ -175,13 +175,24 @@ export default function EmployeeEdit() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
+      // Always include teamLeadId - convert empty string to null
+      // Explicitly handle all cases to ensure it's always sent
+      let teamLeadIdValue: string | null = null;
+      if (data.teamLeadId && data.teamLeadId !== "" && data.teamLeadId !== "none") {
+        teamLeadIdValue = data.teamLeadId;
+      }
+      
+      console.log('Frontend - Preparing update data');
+      console.log('teamLeadId from form:', data.teamLeadId);
+      console.log('teamLeadIdValue to send:', teamLeadIdValue);
+      
       const updateData: any = {
         name: data.name,
         email: data.email,
         mobile: data.mobile,
         department: data.department,
         empCode: data.empCode,
-        teamLeadId: data.teamLeadId && data.teamLeadId !== "" ? data.teamLeadId : null,
+        teamLeadId: teamLeadIdValue, // Explicitly include, even if null
         date_of_birth: formatDateForDB(data.date_of_birth),
         gender: data.gender || null,
         date_of_joining: formatDateForDB(data.date_of_joining),
@@ -208,6 +219,7 @@ export default function EmployeeEdit() {
         updateData.password = data.password;
       }
 
+      console.log('Frontend - Sending update request with data:', JSON.stringify(updateData, null, 2));
       return employeesApi.update(Number(id), updateData);
     },
     onSuccess: () => {

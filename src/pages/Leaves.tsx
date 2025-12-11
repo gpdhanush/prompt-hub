@@ -50,6 +50,7 @@ import { Separator } from "@/components/ui/separator";
 import { leavesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { DatePicker } from "@/components/ui/date-picker";
+import { getCurrentUser } from "@/lib/auth";
 
 export default function Leaves() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,8 +65,7 @@ export default function Leaves() {
   const limit = 10;
 
   // Get current user info
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   const userId = currentUser?.id;
   const canApproveLeaves = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Lead';

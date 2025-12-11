@@ -55,6 +55,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { usersApi, rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
 
 type User = {
   id: number;
@@ -71,8 +72,7 @@ export default function Users() {
   const queryClient = useQueryClient();
   
   // Get current user info
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const canManageUsers = currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin';
   
   const [searchQuery, setSearchQuery] = useState("");

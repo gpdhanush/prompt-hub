@@ -1,13 +1,11 @@
 import { Outlet, Navigate } from "react-router-dom";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminHeader } from "./AdminHeader";
+import { isAuthenticated } from "@/lib/auth";
 
 export function AdminLayout() {
   // Check if user is authenticated
-  const token = localStorage.getItem('auth_token');
-  const userStr = localStorage.getItem('user');
-  
-  if (!token || !userStr) {
+  if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
   

@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { projectsApi, usersApi } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,8 +30,7 @@ export default function ProjectDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Get current user info for role-based permissions
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
 
   // Permissions

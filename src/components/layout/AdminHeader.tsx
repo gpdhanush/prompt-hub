@@ -25,6 +25,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useQueryClient } from "@tanstack/react-query";
+import { getCurrentUser, clearAuth } from "@/lib/auth";
 
 export function AdminHeader() {
   const { theme, setTheme } = useTheme();
@@ -33,9 +34,8 @@ export function AdminHeader() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   
-  // Get current user from localStorage
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  // Get current user from secure storage
+  const currentUser = getCurrentUser();
   const userName = currentUser?.name || 'User';
   const userInitials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
 
@@ -43,10 +43,9 @@ export function AdminHeader() {
     setMounted(true);
   }, []);
 
-  const handleLogout = () => {
-    // Clear authentication data
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user');
+  const handleLogout = async () => {
+    // Clear authentication data from secure storage
+    await clearAuth();
     
     // Clear all React Query cache
     queryClient.clear();

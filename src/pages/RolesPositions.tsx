@@ -49,6 +49,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getCurrentUser } from "@/lib/auth";
 
 type Role = {
   id: number;
@@ -103,8 +104,7 @@ export default function RolesPositions() {
   const [isUpdatingPosition, setIsUpdatingPosition] = useState(false);
 
   // Get current user info
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   
   // Only Super Admin can access this page

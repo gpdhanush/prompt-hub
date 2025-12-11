@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { bugsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { getCurrentUser } from "@/lib/auth";
 
 interface Comment {
   id: number;
@@ -36,8 +37,7 @@ export function BugComments({ bugId }: BugCommentsProps) {
   const replyTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
   // Get current user info
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
 
   // Fetch comments
   const { data: commentsData, isLoading } = useQuery({

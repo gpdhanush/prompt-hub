@@ -291,15 +291,50 @@ router.post('/', canManageUsers, async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [name, email, mobile || null, passwordHash, roleId, positionId, status]);
     
+    const newUserId = result.insertId;
+    
+    // If Team Lead role, create employee record for them (Team Leads need employee records too)
+    if (dbRoleName === 'Team Lead') {
+      // Check if employee record already exists
+      const [existingEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [newUserId]);
+      
+      if (existingEmployee.length === 0) {
+        // Generate employee code for Team Lead
+        const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
+        const empCode = `EMP-TL-${String(empCount[0].count + 1).padStart(4, '0')}`;
+        
+        // Create employee record for Team Lead (no team_lead_id since they are the lead)
+        await db.query(`
+          INSERT INTO employees (user_id, emp_code, is_team_lead, employee_status)
+          VALUES (?, ?, true, 'Active')
+        `, [newUserId, empCode]);
+        console.log(`Created employee record for Team Lead user_id: ${newUserId}, emp_code: ${empCode}`);
+      }
+    }
     // If Developer, Designer, or Tester role and team_lead_id provided, create/update employee record
-    if ((dbRoleName === 'Developer' || dbRoleName === 'Designer' || dbRoleName === 'Tester') && team_lead_id) {
-      const newUserId = result.insertId;
+    else if ((dbRoleName === 'Developer' || dbRoleName === 'Designer' || dbRoleName === 'Tester') && team_lead_id) {
       // Check if employee record already exists
       const [existingEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [newUserId]);
       
       // First, get the team lead's employee ID (convert user_id to employee_id)
-      const [teamLeadEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [team_lead_id]);
-      const teamLeadEmployeeId = teamLeadEmployee.length > 0 ? teamLeadEmployee[0].id : null;
+      // If Team Lead doesn't have employee record, create one
+      let [teamLeadEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [team_lead_id]);
+      let teamLeadEmployeeId = teamLeadEmployee.length > 0 ? teamLeadEmployee[0].id : null;
+      
+      // If Team Lead doesn't have employee record, create one
+      if (!teamLeadEmployeeId) {
+        console.log(`Team Lead user_id ${team_lead_id} doesn't have employee record, creating one...`);
+        const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
+        const empCode = `EMP-TL-${String(empCount[0].count + 1).padStart(4, '0')}`;
+        
+        const [newTeamLeadEmp] = await db.query(`
+          INSERT INTO employees (user_id, emp_code, is_team_lead, employee_status)
+          VALUES (?, ?, true, 'Active')
+        `, [team_lead_id, empCode]);
+        
+        teamLeadEmployeeId = newTeamLeadEmp.insertId;
+        console.log(`Created employee record for Team Lead with employee_id: ${teamLeadEmployeeId}`);
+      }
       
       if (existingEmployee.length > 0) {
         // Update existing employee record

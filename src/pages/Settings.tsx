@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { getCurrentUser } from "@/lib/auth";
 
 const themeColors = [
   { name: "Blue", value: "217 91% 60%", class: "blue" },
@@ -55,8 +56,7 @@ export default function Settings() {
   const [rolePermissions, setRolePermissions] = useState<Record<number, any[]>>({});
 
   // Get current user info
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   const isSuperAdmin = userRole === 'Super Admin';
 

@@ -33,6 +33,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { projectsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { getCurrentUser } from "@/lib/auth";
 
 type Project = {
   id: number;
@@ -63,8 +64,7 @@ export default function Projects() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   
   // Get current user info for role-based permissions
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   
   // Permissions: Super Admin and Team Lead have full CRUD access

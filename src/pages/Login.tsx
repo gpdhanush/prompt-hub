@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { authApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
+import { secureStorageWithCache } from "@/lib/secureStorage";
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -24,12 +25,12 @@ export default function Login() {
     try {
       const response = await authApi.login(email, password);
       
-      // Store token and user info
-      localStorage.setItem('auth_token', response.token);
-      localStorage.setItem('user', JSON.stringify(response.user));
+      // Store token and user info securely (encrypted)
+      await secureStorageWithCache.setItem('auth_token', response.token);
+      await secureStorageWithCache.setItem('user', JSON.stringify(response.user));
       
       if (rememberMe) {
-        localStorage.setItem('remember_me', 'true');
+        await secureStorageWithCache.setItem('remember_me', 'true');
       }
       
       toast({

@@ -52,6 +52,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { tasksApi, projectsApi, usersApi } from "@/lib/api";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
+import { getCurrentUser } from "@/lib/auth";
 
 type Task = {
   id: number;
@@ -108,8 +109,7 @@ export default function Tasks() {
   });
   
   // Get current user info for role-based permissions
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   const currentUserId = currentUser?.id;
   

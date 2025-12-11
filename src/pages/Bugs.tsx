@@ -64,6 +64,7 @@ import { StatusBadge, bugSeverityMap, bugStatusMap } from "@/components/ui/statu
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi, tasksApi, usersApi } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
 
 export default function Bugs() {
   const navigate = useNavigate();
@@ -92,8 +93,7 @@ export default function Bugs() {
   const [attachments, setAttachments] = useState<File[]>([]);
   
   // Get current user info for role-based permissions
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   const currentUserId = currentUser?.id;
   

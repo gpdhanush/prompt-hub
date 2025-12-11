@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi, projectsApi, tasksApi, usersApi } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
 
 export default function BugEdit() {
   const navigate = useNavigate();
@@ -24,8 +25,7 @@ export default function BugEdit() {
   const queryClient = useQueryClient();
 
   // Get current user
-  const userStr = localStorage.getItem('user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUser = getCurrentUser();
 
   const [formData, setFormData] = useState({
     title: "",

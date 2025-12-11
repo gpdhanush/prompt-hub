@@ -1,3 +1,5 @@
+import { secureStorageWithCache, getItemSync } from './secureStorage';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 class ApiError extends Error {
@@ -21,9 +23,18 @@ async function request<T>(
     ...options,
   };
 
-  // Add auth token if available
-  const token = localStorage.getItem('auth_token');
-  const userStr = localStorage.getItem('user');
+  // Add auth token if available (from secure storage)
+  // Try sync first for performance, fallback to async if needed
+  let token = getItemSync('auth_token');
+  let userStr = getItemSync('user');
+  
+  // If not in cache, try async retrieval
+  if (!token) {
+    token = await secureStorageWithCache.getItem('auth_token');
+  }
+  if (!userStr) {
+    userStr = await secureStorageWithCache.getItem('user');
+  }
   
   if (token) {
     config.headers = {
@@ -42,7 +53,7 @@ async function request<T>(
           };
         }
       } catch (e) {
-        console.error('Error parsing user from localStorage:', e);
+        console.error('Error parsing user from secure storage:', e);
       }
     }
   }
@@ -149,10 +160,18 @@ export const projectsApi = {
       method: 'DELETE',
     }),
   // Files
-  uploadFile: (id: number, formData: FormData) => {
+  uploadFile: async (id: number, formData: FormData) => {
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-    const token = localStorage.getItem('auth_token');
-    const userStr = localStorage.getItem('user');
+    let token = getItemSync('auth_token');
+    let userStr = getItemSync('user');
+    
+    // If not in cache, try async retrieval
+    if (!token) {
+      token = await secureStorageWithCache.getItem('auth_token');
+    }
+    if (!userStr) {
+      userStr = await secureStorageWithCache.getItem('user');
+    }
     
     const headers: HeadersInit = {};
     if (token) {
@@ -164,7 +183,7 @@ export const projectsApi = {
             headers['user-id'] = user.id.toString();
           }
         } catch (e) {
-          console.error('Error parsing user from localStorage:', e);
+          console.error('Error parsing user from secure storage:', e);
         }
       }
     }
@@ -291,10 +310,18 @@ export const bugsApi = {
   },
   getById: (id: number) =>
     request<{ data: any }>(`/bugs/${id}`),
-  create: (formData: FormData) => {
+  create: async (formData: FormData) => {
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-    const token = localStorage.getItem('auth_token');
-    const userStr = localStorage.getItem('user');
+    let token = getItemSync('auth_token');
+    let userStr = getItemSync('user');
+    
+    // If not in cache, try async retrieval
+    if (!token) {
+      token = await secureStorageWithCache.getItem('auth_token');
+    }
+    if (!userStr) {
+      userStr = await secureStorageWithCache.getItem('user');
+    }
     
     const headers: HeadersInit = {};
     
@@ -307,7 +334,7 @@ export const bugsApi = {
             headers['user-id'] = user.id.toString();
           }
         } catch (e) {
-          console.error('Error parsing user from localStorage:', e);
+          console.error('Error parsing user from secure storage:', e);
         }
       }
     }
