@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Settings as SettingsIcon, Users, Shield, Building, Bell, Palette, DollarSign, Check, X } from "lucide-react";
+import { Settings as SettingsIcon, Users, Shield, Building, Bell, Palette, DollarSign, Check, X, Save } from "lucide-react";
 import { rolesApi, settingsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -54,6 +55,8 @@ export default function Settings() {
   const [sessionTimeout, setSessionTimeout] = useState("30");
   const [selectedRole, setSelectedRole] = useState<number | null>(null);
   const [rolePermissions, setRolePermissions] = useState<Record<number, any[]>>({});
+  const [editingPermissions, setEditingPermissions] = useState<Record<number, boolean>>({});
+  const [localPermissions, setLocalPermissions] = useState<Record<number, Record<number, boolean>>>({});
 
   // Get current user info
   const currentUser = getCurrentUser();
@@ -71,8 +74,8 @@ export default function Settings() {
   // Currency symbol from database
   const [currencySymbol, setCurrencySymbol] = useState('$');
 
-  // Check if user can access roles (Super Admin, Admin, Team Lead only)
-  const canAccessRoles = ['Super Admin', 'Admin', 'Team Lead'].includes(userRole);
+  // Check if user can access roles (Super Admin, Admin, Team Leader only)
+  const canAccessRoles = ['Super Admin', 'Admin', 'Team Leader', 'Team Lead'].includes(userRole);
 
   // Fetch roles from API - only if user has permission
   const { data: rolesData, isLoading: isLoadingRoles, error: rolesError } = useQuery({
@@ -100,8 +103,84 @@ export default function Settings() {
         ...prev,
         [selectedRole]: permissionsData.data
       }));
+      // Initialize local permissions state for editing
+      const permissionsMap: Record<number, boolean> = {};
+      permissionsData.data.forEach((perm: any) => {
+        permissionsMap[perm.id] = perm.allowed;
+      });
+      setLocalPermissions(prev => ({
+        ...prev,
+        [selectedRole]: permissionsMap
+      }));
     }
   }, [permissionsData, selectedRole]);
+
+  // Update permissions mutation
+  const updatePermissionsMutation = useMutation({
+    mutationFn: ({ roleId, permissions }: { roleId: number; permissions: Array<{ permission_id: number; allowed: boolean }> }) =>
+      rolesApi.updatePermissions(roleId, permissions),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['role-permissions', variables.roleId] });
+      setRolePermissions(prev => ({
+        ...prev,
+        [variables.roleId]: data.data
+      }));
+      setEditingPermissions(prev => ({
+        ...prev,
+        [variables.roleId]: false
+      }));
+      toast({ title: "Success", description: "Permissions updated successfully." });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update permissions.", 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const handlePermissionToggle = (roleId: number, permissionId: number, checked: boolean) => {
+    setLocalPermissions(prev => ({
+      ...prev,
+      [roleId]: {
+        ...prev[roleId],
+        [permissionId]: checked
+      }
+    }));
+  };
+
+  const handleStartEdit = (roleId: number) => {
+    setEditingPermissions(prev => ({
+      ...prev,
+      [roleId]: true
+    }));
+  };
+
+  const handleCancelEdit = (roleId: number) => {
+    // Reset to original permissions
+    const originalPermissions = rolePermissions[roleId] || [];
+    const permissionsMap: Record<number, boolean> = {};
+    originalPermissions.forEach((perm: any) => {
+      permissionsMap[perm.id] = perm.allowed;
+    });
+    setLocalPermissions(prev => ({
+      ...prev,
+      [roleId]: permissionsMap
+    }));
+    setEditingPermissions(prev => ({
+      ...prev,
+      [roleId]: false
+    }));
+  };
+
+  const handleSavePermissions = (roleId: number) => {
+    const permissions = Object.entries(localPermissions[roleId] || {}).map(([permissionId, allowed]) => ({
+      permission_id: parseInt(permissionId),
+      allowed: allowed as boolean
+    }));
+    updatePermissionsMutation.mutate({ roleId, permissions });
+  };
 
   // Update currency symbol when settings load
   useEffect(() => {
@@ -372,8 +451,48 @@ export default function Settings() {
                     </div>
                     
                     {selectedRole === role.id && (
-                      <div className="mt-4 pt-4 border-t border-border">
-                        <p className="text-sm font-medium mb-3">Permissions:</p>
+                      <div className="mt-4 pt-4 border-t border-border" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-sm font-medium">Permissions:</p>
+                          {isSuperAdmin && role.name !== 'Super Admin' && !editingPermissions[role.id] && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartEdit(role.id);
+                              }}
+                            >
+                              Edit Permissions
+                            </Button>
+                          )}
+                          {isSuperAdmin && role.name !== 'Super Admin' && editingPermissions[role.id] && (
+                            <div className="flex gap-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCancelEdit(role.id);
+                                }}
+                                disabled={updatePermissionsMutation.isPending}
+                              >
+                                Cancel
+                              </Button>
+                              <Button 
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSavePermissions(role.id);
+                                }}
+                                disabled={updatePermissionsMutation.isPending}
+                              >
+                                <Save className="h-3 w-3 mr-1" />
+                                {updatePermissionsMutation.isPending ? "Saving..." : "Save"}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                         {isLoadingPermissions ? (
                           <div className="flex items-center justify-center py-4">
                             <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -382,6 +501,9 @@ export default function Settings() {
                           <>
                             {(() => {
                               const permissions = rolePermissions[role.id] || [];
+                              const isEditing = editingPermissions[role.id] && role.name !== 'Super Admin';
+                              const localPerms = localPermissions[role.id] || {};
+                              
                               // Group permissions by module
                               const groupedPermissions: Record<string, any[]> = {};
                               permissions.forEach((perm: any) => {
@@ -392,23 +514,39 @@ export default function Settings() {
                               });
                               
                               return Object.keys(groupedPermissions).length > 0 ? (
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="space-y-4">
                                   {Object.entries(groupedPermissions).map(([module, perms]) => (
-                                    <div key={module} className="space-y-2">
-                                      <p className="text-xs font-medium text-muted-foreground">{module}</p>
-                                      <div className="space-y-1">
+                                    <div key={module} className="space-y-2 p-3 bg-muted/30 rounded-lg">
+                                      <p className="text-sm font-semibold text-foreground mb-2">{module}</p>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                         {perms.map((perm: any) => {
                                           const permName = perm.code.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim() || perm.code;
+                                          const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
+                                          
                                           return (
-                                            <div key={perm.id} className="flex items-center gap-2">
-                                              {perm.allowed ? (
-                                                <Check className="h-3 w-3 text-status-success" />
+                                            <div key={perm.id} className="flex items-center space-x-2">
+                                              {isEditing ? (
+                                                <Checkbox
+                                                  id={`perm-${role.id}-${perm.id}`}
+                                                  checked={isChecked}
+                                                  onCheckedChange={(checked) => 
+                                                    handlePermissionToggle(role.id, perm.id, checked as boolean)
+                                                  }
+                                                  disabled={updatePermissionsMutation.isPending}
+                                                />
                                               ) : (
-                                                <X className="h-3 w-3 text-muted-foreground" />
+                                                isChecked ? (
+                                                  <Check className="h-4 w-4 text-status-success" />
+                                                ) : (
+                                                  <X className="h-4 w-4 text-muted-foreground" />
+                                                )
                                               )}
-                                              <span className={`text-xs ${perm.allowed ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                              <Label 
+                                                htmlFor={`perm-${role.id}-${perm.id}`}
+                                                className={`text-sm cursor-pointer ${isChecked ? 'text-foreground' : 'text-muted-foreground'}`}
+                                              >
                                                 {permName}
-                                              </span>
+                                              </Label>
                                             </div>
                                           );
                                         })}
@@ -418,17 +556,16 @@ export default function Settings() {
                                 </div>
                               ) : (
                                 <div className="text-sm text-muted-foreground py-4">
-                                  No permissions data available. This role may have all permissions (Super Admin) or permissions are not configured.
+                                  {role.name === 'Super Admin' 
+                                    ? "Super Admin has all permissions by default."
+                                    : "No permissions data available. Permissions are not configured."}
                                 </div>
                               );
                             })()}
-                            {isSuperAdmin && (
-                              <div className="mt-4 pt-4 border-t border-border">
-                                <Button variant="outline" size="sm">
-                                  Edit Permissions
-                                </Button>
-                                <p className="text-xs text-muted-foreground mt-2">
-                                  Click to modify permissions for this role. Changes will affect all users with this role.
+                            {role.name === 'Super Admin' && (
+                              <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900">
+                                <p className="text-xs text-amber-800 dark:text-amber-200">
+                                  <strong>Note:</strong> Super Admin role has all permissions by default and cannot be modified.
                                 </p>
                               </div>
                             )}

@@ -21,17 +21,25 @@ import {
   CheckCircle,
   XCircle,
   Edit,
+  Calendar,
+  Briefcase,
+  Shield,
+  Home,
+  Wallet,
+  CalendarDays,
+  FileCheck,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
+import { getProfilePhotoUrl } from "@/lib/imageUtils";
 import {
   Dialog,
   DialogContent,
@@ -39,22 +47,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export default function EmployeeProfile() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState("personal");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Fetch employee data from API
   const { data, isLoading, error } = useQuery({
@@ -65,138 +62,18 @@ export default function EmployeeProfile() {
 
   const employee = data?.data;
 
-  const [formData, setFormData] = useState({
-    email: "",
-    mobile: "",
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-    date_of_birth: "",
-    gender: "",
-    date_of_joining: "",
-    address: "",
-    bank_name: "",
-    bank_account_number: "",
-    ifsc_code: "",
-    routing_number: "",
-    pf_esi_applicable: false,
-    pf_uan_number: "",
-    government_id_number: "",
-    emergency_contact_name: "",
-    emergency_contact_number: "",
-    profile_photo_url: "",
-  });
-
-  // Update form data when employee data loads
-  useEffect(() => {
-    if (employee) {
-      setFormData({
-        email: employee.email || "",
-        mobile: employee.mobile || "",
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-        date_of_birth: employee.date_of_birth || "",
-        gender: employee.gender || "",
-        date_of_joining: employee.date_of_joining || "",
-        address: employee.address || "",
-        bank_name: employee.bank_name || "",
-        bank_account_number: employee.bank_account_number || "",
-        ifsc_code: employee.ifsc_code || "",
-        routing_number: employee.routing_number || "",
-        pf_esi_applicable: employee.pf_esi_applicable || false,
-        pf_uan_number: employee.pf_uan_number || "",
-        government_id_number: employee.government_id_number || "",
-        emergency_contact_name: employee.emergency_contact_name || "",
-        emergency_contact_number: employee.emergency_contact_number || "",
-        profile_photo_url: employee.profile_photo_url || "",
+  // Format date helper
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return "Not provided";
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
       });
+    } catch {
+      return dateString;
     }
-  }, [employee]);
-
-  const handleInputChange = (field: string, value: string | boolean) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handlePasswordChange = () => {
-    if (formData.newPassword !== formData.confirmPassword) {
-      toast({
-        title: "Error",
-        description: "New passwords do not match",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (formData.newPassword.length < 8) {
-      toast({
-        title: "Error",
-        description: "Password must be at least 8 characters",
-        variant: "destructive",
-      });
-      return;
-    }
-    // API call here
-    toast({
-      title: "Success",
-      description: "Password changed successfully",
-    });
-    setFormData((prev) => ({
-      ...prev,
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    }));
-  };
-
-  const handleEmailMobileUpdate = () => {
-    // API call here
-    toast({
-      title: "Success",
-      description: "Email and mobile updated successfully",
-    });
-  };
-
-  const handleAddressUpdate = () => {
-    // API call here
-    toast({
-      title: "Success",
-      description: "Address updated successfully",
-    });
-  };
-
-  const handleBankUpdate = () => {
-    // API call here
-    toast({
-      title: "Success",
-      description: "Bank details updated successfully",
-    });
-  };
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "Error",
-          description: "File size must be less than 5MB",
-          variant: "destructive",
-        });
-        return;
-      }
-      // API call here
-      toast({
-        title: "Success",
-        description: "Photo uploaded successfully",
-      });
-    }
-  };
-
-  const handleDocumentUpload = (type: string) => {
-    // API call here
-    toast({
-      title: "Success",
-      description: `${type} document uploaded successfully`,
-    });
   };
 
   if (isLoading) {
@@ -219,91 +96,63 @@ export default function EmployeeProfile() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="container mx-auto p-6 space-y-6 max-w-7xl">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Employee Profile</h1>
-          <p className="text-muted-foreground">View and manage employee information</p>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="icon" onClick={() => navigate("/employees")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Employee Profile
+            </h1>
+            <p className="text-muted-foreground mt-1">View and manage employee information</p>
+          </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate(`/employees/${employee.id}/edit`)}>
+          <Button onClick={() => navigate(`/employees/${employee.id}/edit`)} className="shadow-md">
             <Edit className="mr-2 h-4 w-4" />
             Edit Profile
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/employees")}>
-            Back to Employees
           </Button>
         </div>
       </div>
 
-      {/* Profile Header */}
-      <Card className="glass-card">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-6">
-            <div className="relative">
-              <Avatar className="h-24 w-24">
-                <AvatarImage src={employee.profile_photo_url || employee.photo || undefined} />
-                <AvatarFallback className="text-2xl">
+      {/* Profile Header Card with Gradient */}
+      <Card className="border-0 shadow-lg bg-gradient-to-br from-primary/5 via-background to-primary/5 overflow-hidden">
+        <CardContent className="pt-8 pb-8">
+          <div className="flex items-start gap-6">
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full blur-xl"></div>
+              <Avatar className="h-32 w-32 relative border-4 border-background shadow-xl">
+                <AvatarImage 
+                  src={getProfilePhotoUrl(employee.profile_photo_url || employee.photo || null)} 
+                />
+                <AvatarFallback className="text-3xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground">
                   {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("") : "E"}
                 </AvatarFallback>
               </Avatar>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button
-                    size="icon"
-                    className="absolute bottom-0 right-0 h-8 w-8 rounded-full"
-                  >
-                    <Camera className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Upload Photo</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-                      <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={handlePhotoUpload}
-                        className="hidden"
-                        id="photo-upload"
-                      />
-                      <Label htmlFor="photo-upload" className="cursor-pointer">
-                        <Button variant="outline" type="button" className="w-full">
-                          Select Photo
-                        </Button>
-                      </Label>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Max size: 5MB. Formats: JPG, PNG
-                      </p>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
             </div>
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold">{employee.name || "N/A"}</h2>
-              <p className="text-muted-foreground">{employee.emp_code || `EMP-${employee.id}`}</p>
-              <div className="flex items-center gap-4 mt-2">
+            <div className="flex-1 space-y-3">
+              <div>
+                <h2 className="text-3xl font-bold mb-1">{employee.name || "N/A"}</h2>
+                <p className="text-muted-foreground text-lg">{employee.emp_code || `EMP-${employee.id}`}</p>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
                 <StatusBadge variant={(employee.employee_status || employee.status) === "Active" ? "success" : (employee.employee_status || employee.status) === "On Leave" ? "info" : "warning"}>
                   {employee.employee_status || employee.status || "Active"}
                 </StatusBadge>
                 {employee.role && (
-                  <span className="text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                    <Briefcase className="h-3.5 w-3.5" />
                     {employee.role}
-                  </span>
-                )}
-                {employee.department && (
-                  <span className="text-sm text-muted-foreground">
-                    {employee.department}
-                  </span>
+                  </div>
                 )}
                 {employee.team_lead_name && (
-                  <span className="text-sm text-muted-foreground">
-                    Team Lead: {employee.team_lead_name}
-                  </span>
+                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-muted text-foreground text-sm">
+                    <User className="h-3.5 w-3.5" />
+                    Reports to: {employee.team_lead_name}
+                  </div>
                 )}
                 {employee.is_team_lead && (
                   <StatusBadge variant="info" className="text-xs">
@@ -317,371 +166,305 @@ export default function EmployeeProfile() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="personal">Personal Info</TabsTrigger>
-          <TabsTrigger value="employment">Employment</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="address">Address</TabsTrigger>
-          <TabsTrigger value="bank">Bank Details</TabsTrigger>
-          <TabsTrigger value="leaves">Leaves</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
+        <TabsList className="bg-muted/50 w-full justify-start overflow-x-auto">
+          <TabsTrigger value="personal" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Personal Info
+          </TabsTrigger>
+          <TabsTrigger value="employment" className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4" />
+            Employment
+          </TabsTrigger>
+          <TabsTrigger value="address" className="flex items-center gap-2">
+            <Home className="h-4 w-4" />
+            Address
+          </TabsTrigger>
+          <TabsTrigger value="bank" className="flex items-center gap-2">
+            <Wallet className="h-4 w-4" />
+            Bank Details
+          </TabsTrigger>
+          <TabsTrigger value="leaves" className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4" />
+            Leaves
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="flex items-center gap-2">
+            <FileCheck className="h-4 w-4" />
+            Documents
+          </TabsTrigger>
         </TabsList>
 
         {/* Personal Information */}
         <TabsContent value="personal" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Contact Information</CardTitle>
-              <CardDescription>Update your email and mobile number</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    className="pl-10"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                  />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Contact Information */}
+            <Card className="shadow-lg border-0 bg-gradient-to-br from-primary/5 via-background to-primary/5">
+              <CardHeader className="border-b bg-gradient-to-r from-primary/10 to-transparent">
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5 text-primary" />
+                  Contact Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <Mail className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Email</p>
+                      <p className="text-base font-semibold break-words">{employee.email || "Not provided"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <Phone className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Mobile Number</p>
+                      <p className="text-base font-semibold">{employee.mobile || "Not provided"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <Calendar className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Date of Birth</p>
+                      <p className="text-base font-semibold">{formatDate(employee.date_of_birth)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <User className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Gender</p>
+                      <p className="text-base font-semibold">{employee.gender || "Not provided"}</p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="mobile">Mobile Number</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="mobile"
-                    type="tel"
-                    className="pl-10"
-                    value={formData.mobile}
-                    onChange={(e) => handleInputChange("mobile", e.target.value)}
-                  />
+              </CardContent>
+            </Card>
+
+            {/* Emergency Contact */}
+            <Card className="shadow-lg border-0 bg-gradient-to-br from-orange-500/5 via-background to-orange-500/5">
+              <CardHeader className="border-b bg-gradient-to-r from-orange-500/10 to-transparent">
+                <CardTitle className="flex items-center gap-2">
+                  <Phone className="h-5 w-5 text-orange-500" />
+                  Emergency Contact
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <User className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Contact Name</p>
+                    <p className="text-base font-semibold">{employee.emergency_contact_name || "Not provided"}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="date_of_birth">Date of Birth</Label>
-                  <Input
-                    id="date_of_birth"
-                    type="date"
-                    value={formData.date_of_birth}
-                    onChange={(e) => handleInputChange("date_of_birth", e.target.value)}
-                  />
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <User className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Relation</p>
+                    <p className="text-base font-semibold">{employee.emergency_contact_relation || "Not provided"}</p>
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="gender">Gender</Label>
-                  <Select value={formData.gender} onValueChange={(value) => handleInputChange("gender", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Male">Male</SelectItem>
-                      <SelectItem value="Female">Female</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <Phone className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Contact Number</p>
+                    <p className="text-base font-semibold">{employee.emergency_contact_number || "Not provided"}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="government_id_number">Government ID Number</Label>
-                <Input
-                  id="government_id_number"
-                  value={formData.government_id_number}
-                  onChange={(e) => handleInputChange("government_id_number", e.target.value)}
-                  placeholder="Aadhaar/PAN/Other ID"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
-                <Input
-                  id="emergency_contact_name"
-                  value={formData.emergency_contact_name}
-                  onChange={(e) => handleInputChange("emergency_contact_name", e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="emergency_contact_number">Emergency Contact Number</Label>
-                <Input
-                  id="emergency_contact_number"
-                  type="tel"
-                  value={formData.emergency_contact_number}
-                  onChange={(e) => handleInputChange("emergency_contact_number", e.target.value)}
-                />
-              </div>
-              <Button onClick={handleEmailMobileUpdate}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
-              </Button>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Employment Information */}
         <TabsContent value="employment" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Employment Details</CardTitle>
-              <CardDescription>Employment and joining information</CardDescription>
+          <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-500/5 via-background to-blue-500/5">
+            <CardHeader className="border-b bg-gradient-to-r from-blue-500/10 to-transparent">
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5 text-blue-500" />
+                Employment Details
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="date_of_joining">Date of Joining</Label>
-                  <Input
-                    id="date_of_joining"
-                    type="date"
-                    value={formData.date_of_joining}
-                    onChange={(e) => handleInputChange("date_of_joining", e.target.value)}
-                  />
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <Calendar className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Date of Joining</p>
+                    <p className="text-base font-semibold">{formatDate(employee.date_of_joining)}</p>
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="hire_date">Hire Date</Label>
-                  <Input
-                    id="hire_date"
-                    type="date"
-                    value={employee.hire_date || ""}
-                    disabled
-                    className="bg-muted"
-                  />
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <CheckCircle className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Employee Status</p>
+                    <StatusBadge variant={(employee.employee_status || employee.status) === "Active" ? "success" : "warning"}>
+                      {employee.employee_status || employee.status || "Active"}
+                    </StatusBadge>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="is_team_lead"
-                  checked={employee.is_team_lead || false}
-                  disabled
-                  className="rounded"
-                />
-                <Label htmlFor="is_team_lead">Team Lead</Label>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="employee_status">Employee Status</Label>
-                <Select 
-                  value={employee.employee_status || employee.status || "Active"} 
-                  disabled
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <Briefcase className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Role</p>
+                    <p className="text-base font-semibold">{employee.role || "Not assigned"}</p>
+                  </div>
+                </div>
+                {employee.team_lead_name && (
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors md:col-span-3">
+                    <User className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Reports To</p>
+                      <p className="text-base font-semibold">{employee.team_lead_name}</p>
+                    </div>
+                  </div>
+                )}
+                {employee.is_team_lead && (
+                  <div className="flex items-center gap-3 p-4 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 md:col-span-3">
+                    <Shield className="h-5 w-5 text-primary" />
+                    <StatusBadge variant="info">Team Lead</StatusBadge>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Security */}
-        <TabsContent value="security" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>Update your account password</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="current-password">Current Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="current-password"
-                    type={showCurrentPassword ? "text" : "password"}
-                    className="pl-10 pr-10"
-                    value={formData.currentPassword}
-                    onChange={(e) => handleInputChange("currentPassword", e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  >
-                    {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="new-password">New Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="new-password"
-                    type={showNewPassword ? "text" : "password"}
-                    className="pl-10 pr-10"
-                    value={formData.newPassword}
-                    onChange={(e) => handleInputChange("newPassword", e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                  >
-                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="confirm-password">Confirm New Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
-                    className="pl-10 pr-10"
-                    value={formData.confirmPassword}
-                    onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-              <Button onClick={handlePasswordChange}>
-                <Save className="mr-2 h-4 w-4" />
-                Change Password
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         {/* Address */}
         <TabsContent value="address" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Address Details</CardTitle>
-              <CardDescription>Update your residential address</CardDescription>
+          <Card className="shadow-lg border-0 bg-gradient-to-br from-green-500/5 via-background to-green-500/5">
+            <CardHeader className="border-b bg-gradient-to-r from-green-500/10 to-transparent">
+              <CardTitle className="flex items-center gap-2">
+                <Home className="h-5 w-5 text-green-500" />
+                Address & Emergency Details
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="address">Address</Label>
-                <Textarea
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => handleInputChange("address", e.target.value)}
-                  placeholder="Enter your full address"
-                  rows={4}
-                />
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Address Line 1</p>
+                      <p className="text-base font-semibold">{employee.address1 || "Not provided"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Address Line 2</p>
+                      <p className="text-base font-semibold">{employee.address2 || "Not provided"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Landmark</p>
+                      <p className="text-base font-semibold">{employee.landmark || "Not provided"}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">State</p>
+                      <p className="text-base font-semibold">{employee.state || "Not provided"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">District</p>
+                      <p className="text-base font-semibold">{employee.district || "Not provided"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Pincode</p>
+                      <p className="text-base font-semibold">{employee.pincode || "Not provided"}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <Button onClick={handleAddressUpdate}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Address
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Bank Details */}
         <TabsContent value="bank" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Bank Details</CardTitle>
-              <CardDescription>Update your bank account information</CardDescription>
+          <Card className="shadow-lg border-0 bg-gradient-to-br from-purple-500/5 via-background to-purple-500/5">
+            <CardHeader className="border-b bg-gradient-to-r from-purple-500/10 to-transparent">
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-purple-500" />
+                Bank Details
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="bank_name">Bank Name</Label>
-                <Input
-                  id="bank_name"
-                  value={formData.bank_name}
-                  onChange={(e) => handleInputChange("bank_name", e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="bank_account_number">Account Number</Label>
-                <Input
-                  id="bank_account_number"
-                  value={formData.bank_account_number}
-                  onChange={(e) => handleInputChange("bank_account_number", e.target.value)}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="ifsc_code">IFSC Code</Label>
-                  <Input
-                    id="ifsc_code"
-                    value={formData.ifsc_code}
-                    onChange={(e) => handleInputChange("ifsc_code", e.target.value)}
-                  />
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <Building className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Bank Name</p>
+                    <p className="text-base font-semibold">{employee.bank_name || "Not provided"}</p>
+                  </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="routing_number">Routing Number</Label>
-                  <Input
-                    id="routing_number"
-                    value={formData.routing_number}
-                    onChange={(e) => handleInputChange("routing_number", e.target.value)}
-                  />
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <CreditCard className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Account Number</p>
+                    <p className="text-base font-semibold font-mono">{employee.bank_account_number ? "••••" + employee.bank_account_number.slice(-4) : "Not provided"}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                  <FileText className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">IFSC Code</p>
+                    <p className="text-base font-semibold font-mono">{employee.ifsc_code || "Not provided"}</p>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="pf_esi_applicable"
-                  checked={formData.pf_esi_applicable}
-                  onChange={(e) => handleInputChange("pf_esi_applicable", e.target.checked)}
-                  className="rounded"
-                />
-                <Label htmlFor="pf_esi_applicable">PF/ESI Applicable</Label>
-              </div>
-              {formData.pf_esi_applicable && (
-                <div className="grid gap-2">
-                  <Label htmlFor="pf_uan_number">PF UAN Number</Label>
-                  <Input
-                    id="pf_uan_number"
-                    value={formData.pf_uan_number}
-                    onChange={(e) => handleInputChange("pf_uan_number", e.target.value)}
-                    placeholder="Universal Account Number"
-                  />
-                </div>
-              )}
-              <Button onClick={handleBankUpdate}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Bank Details
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Leaves */}
         <TabsContent value="leaves" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Leave Balance</CardTitle>
+          <Card className="shadow-md border-0">
+            <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent">
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-primary" />
+                Leave Balance
+              </CardTitle>
               <CardDescription>Current leave balances</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="rounded-lg border border-border p-4">
-                  <div className="text-2xl font-bold text-status-info">
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-3 gap-6">
+                <div className="rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-6 hover:border-primary/40 transition-all hover:shadow-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <CalendarDays className="h-8 w-8 text-primary/60" />
+                  </div>
+                  <div className="text-4xl font-bold text-primary mb-1">
                     {employee.annual_leave_count || 0}
                   </div>
-                  <p className="text-sm text-muted-foreground">Annual Leaves</p>
+                  <p className="text-sm font-medium text-muted-foreground">Annual Leaves</p>
                 </div>
-                <div className="rounded-lg border border-border p-4">
-                  <div className="text-2xl font-bold text-status-warning">
+                <div className="rounded-xl border-2 border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-orange-500/10 p-6 hover:border-orange-500/40 transition-all hover:shadow-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <CalendarDays className="h-8 w-8 text-orange-500/60" />
+                  </div>
+                  <div className="text-4xl font-bold text-orange-500 mb-1">
                     {employee.sick_leave_count || 0}
                   </div>
-                  <p className="text-sm text-muted-foreground">Sick Leaves</p>
+                  <p className="text-sm font-medium text-muted-foreground">Sick Leaves</p>
                 </div>
-                <div className="rounded-lg border border-border p-4">
-                  <div className="text-2xl font-bold text-status-success">
+                <div className="rounded-xl border-2 border-green-500/20 bg-gradient-to-br from-green-500/5 to-green-500/10 p-6 hover:border-green-500/40 transition-all hover:shadow-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <CalendarDays className="h-8 w-8 text-green-500/60" />
+                  </div>
+                  <div className="text-4xl font-bold text-green-500 mb-1">
                     {employee.casual_leave_count || 0}
                   </div>
-                  <p className="text-sm text-muted-foreground">Casual Leaves</p>
+                  <p className="text-sm font-medium text-muted-foreground">Casual Leaves</p>
                 </div>
               </div>
             </CardContent>
@@ -690,12 +473,15 @@ export default function EmployeeProfile() {
 
         {/* Documents */}
         <TabsContent value="documents" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle>Uploaded Documents</CardTitle>
+          <Card className="shadow-md border-0">
+            <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent">
+              <CardTitle className="flex items-center gap-2">
+                <FileCheck className="h-5 w-5 text-primary" />
+                Uploaded Documents
+              </CardTitle>
               <CardDescription>View and manage your uploaded documents</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="space-y-4">
                 {["Aadhaar", "PAN", "Bank Passbook"].map((docType) => {
                   // TODO: Fetch documents from API when document storage is implemented
@@ -703,26 +489,26 @@ export default function EmployeeProfile() {
                   return (
                     <div
                       key={docType}
-                      className="flex items-center justify-between rounded-lg border border-border p-4"
+                      className="flex items-center justify-between rounded-xl border-2 border-border p-5 hover:border-primary/40 hover:shadow-md transition-all bg-card"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                          <FileText className="h-6 w-6 text-muted-foreground" />
+                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+                          <FileText className="h-7 w-7 text-primary" />
                         </div>
                         <div>
-                          <p className="font-medium">{docType}</p>
+                          <p className="font-semibold text-lg">{docType}</p>
                           {existingDoc ? (
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-sm text-muted-foreground">
                                 {existingDoc.fileName}
                               </span>
                               {existingDoc.verified ? (
-                                <StatusBadge variant="success" className="text-[10px]">
+                                <StatusBadge variant="success" className="text-xs">
                                   <CheckCircle className="mr-1 h-3 w-3" />
                                   Verified
                                 </StatusBadge>
                               ) : (
-                                <StatusBadge variant="warning" className="text-[10px]">
+                                <StatusBadge variant="warning" className="text-xs">
                                   <XCircle className="mr-1 h-3 w-3" />
                                   Pending
                                 </StatusBadge>
@@ -736,11 +522,11 @@ export default function EmployeeProfile() {
                       <div className="flex gap-2">
                         {existingDoc && (
                           <>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" className="shadow-sm">
                               <Download className="mr-2 h-4 w-4" />
                               Download
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" className="shadow-sm hover:bg-destructive hover:text-destructive-foreground">
                               <Trash2 className="mr-2 h-4 w-4" />
                               Remove
                             </Button>
@@ -748,7 +534,7 @@ export default function EmployeeProfile() {
                         )}
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button size="sm">
+                            <Button size="sm" className="shadow-sm">
                               <Upload className="mr-2 h-4 w-4" />
                               {existingDoc ? "Replace" : "Upload"}
                             </Button>
@@ -758,17 +544,17 @@ export default function EmployeeProfile() {
                               <DialogTitle>Upload {docType}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 py-4">
-                              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+                              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
                                 <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                                 <Input
                                   type="file"
                                   accept=".pdf,.jpg,.jpeg,.png"
-                                  onChange={() => handleDocumentUpload(docType)}
                                   className="hidden"
                                   id={`upload-${docType}`}
+                                  disabled
                                 />
-                                <Label htmlFor={`upload-${docType}`} className="cursor-pointer">
-                                  <Button variant="outline" type="button" className="w-full">
+                                <Label htmlFor={`upload-${docType}`} className="cursor-not-allowed opacity-50">
+                                  <Button variant="outline" type="button" className="w-full" disabled>
                                     Select File
                                   </Button>
                                 </Label>

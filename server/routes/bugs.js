@@ -234,8 +234,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create bug - Tester, Admin, Team Lead, Developer, Designer, and Super Admin
-router.post('/', authorize('Tester', 'Admin', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), upload.array('attachments', 10), async (req, res) => {
+// Create bug - Tester, Admin, Team Leader, Developer, Designer, and Super Admin
+router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), upload.array('attachments', 10), async (req, res) => {
   try {
     console.log('=== CREATE BUG REQUEST ===');
     console.log('Request body:', req.body);
@@ -437,8 +437,8 @@ router.post('/', authorize('Tester', 'Admin', 'Team Lead', 'Developer', 'Designe
   }
 });
 
-// Update bug - Tester, Admin, Team Lead, Developer, Designer, and Super Admin
-router.put('/:id', authorize('Tester', 'Admin', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
+// Update bug - Tester, Admin, Team Leader, Developer, Designer, and Super Admin
+router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
   try {
     const userRole = req.user?.role || '';
     const { 
@@ -687,7 +687,7 @@ router.get('/:id/comments', async (req, res) => {
 });
 
 // Create a comment (or reply) for a bug
-router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin', 'Team Lead', 'Super Admin'), async (req, res) => {
+router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin', 'Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
     const { comment_text, parent_id } = req.body;
@@ -740,8 +740,8 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
   }
 });
 
-// Delete bug - only Team Lead and Super Admin
-router.delete('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+// Delete bug - only Team Leader and Super Admin
+router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     // Delete associated attachments first
     const [attachments] = await db.query('SELECT path FROM attachments WHERE bug_id = ?', [req.params.id]);

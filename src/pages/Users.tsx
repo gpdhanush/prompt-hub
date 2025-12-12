@@ -73,6 +73,7 @@ export default function Users() {
   
   // Get current user info
   const currentUser = getCurrentUser();
+  const isSuperAdmin = currentUser?.role === 'Super Admin';
   const canManageUsers = currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin';
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -244,7 +245,11 @@ export default function Users() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userForm.role, positions.length, userForm.position]);
 
-  const users = data?.data || [];
+  // Filter out Super Admin users if current user is not Super Admin
+  const allUsers = data?.data || [];
+  const users = isSuperAdmin 
+    ? allUsers 
+    : allUsers.filter((user: User) => user.role !== 'Super Admin');
   const pagination = data?.pagination || { total: 0, totalPages: 0 };
   const totalPages = pagination.totalPages;
 

@@ -65,12 +65,12 @@ export function AdminSidebar() {
   const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   
-  // Only Admin, Super Admin, and Team Lead can access Users and Employees pages
+  // Only Admin, Super Admin, and Team Leader can access Users and Employees pages
   // Developer, Designer, Tester, and Viewer roles cannot access these pages
-  const canAccessUserManagement = userRole === 'Admin' || userRole === 'Super Admin' || userRole === 'Team Lead';
+  const canAccessUserManagement = userRole === 'Admin' || userRole === 'Super Admin' || userRole === 'Team Leader' || userRole === 'Team Lead';
   
-  // Only Super Admin, Admin, and Team Lead can access Reports
-  const canAccessReports = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Lead';
+  // Only Super Admin, Admin, and Team Leader can access Reports
+  const canAccessReports = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Leader' || userRole === 'Team Lead';
 
   const isActive = (href: string) => location.pathname === href;
 

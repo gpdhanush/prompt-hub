@@ -12,18 +12,26 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
+      labels={{
+        labelMonthDropdown: () => '',
+        labelYearDropdown: () => '',
+      }}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
-        caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
+        caption: "flex justify-center pt-1 relative items-center gap-2 min-h-[2.75rem] mb-2",
+        caption_label: "text-sm font-medium hidden",
+        caption_dropdowns: "flex items-center gap-2 justify-center flex-wrap",
+        dropdown: "h-8 px-3 text-sm rounded-md border-0 bg-transparent hover:bg-accent focus:outline-none focus:ring-0 min-w-[100px]",
+        dropdown_month: "h-8 px-3 text-sm rounded-md border border-input bg-background hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-w-[120px] flex items-center justify-center",
+        dropdown_year: "h-8 px-3 text-sm rounded-md border border-input bg-background hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 min-w-[120px] flex items-center justify-center",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
+          "h-8 w-8 bg-background border border-input hover:bg-accent hover:text-accent-foreground p-0",
         ),
-        nav_button_previous: "absolute left-1",
-        nav_button_next: "absolute right-1",
+        nav_button_previous: "absolute left-0 z-20",
+        nav_button_next: "absolute right-0 z-20",
         table: "w-full border-collapse space-y-1",
         head_row: "flex",
         head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",

@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
     const userId = req.user?.id;
     const userRole = req.user?.role || '';
     
-    // Super Admin, Admin, and Team Lead can see all leaves
+    // Super Admin, Admin, and Team Leader can see all leaves
     // Other users can only see their own leaves
     let query = `
       SELECT 
@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
     `;
     const params = [];
     
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Lead') {
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
       // Get employee_id for current user
       const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
       if (employeeData.length === 0) {
@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
     `;
     const countParams = [];
     
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Lead') {
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
       const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
       if (employeeData.length === 0) {
         return res.json({ data: [], pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, totalPages: 0 } });
@@ -111,7 +111,7 @@ router.get('/:id', async (req, res) => {
     const leave = leaves[0];
     
     // Check if user can access this leave
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Lead') {
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
       const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
       if (employeeData.length === 0 || employeeData[0].id !== leave.employee_id) {
         return res.status(403).json({ error: 'Access denied' });
@@ -183,7 +183,7 @@ router.put('/:id', async (req, res) => {
     const leave = leaves[0];
     
     // Check permissions
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Lead') {
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
       // Regular users can only update their own leaves
       const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
       if (employeeData.length === 0 || employeeData[0].id !== leave.employee_id) {
@@ -215,7 +215,7 @@ router.put('/:id', async (req, res) => {
       updates.push('reason = ?');
       params.push(reason);
     }
-    if (status !== undefined && (userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Lead')) {
+    if (status !== undefined && (userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Leader' || userRole === 'Team Lead')) {
       updates.push('status = ?');
       params.push(status);
       
@@ -235,7 +235,7 @@ router.put('/:id', async (req, res) => {
         updates.push('rejection_reason = NULL');
       }
     }
-    if (approved_by !== undefined && (userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Lead')) {
+    if (approved_by !== undefined && (userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Leader' || userRole === 'Team Lead')) {
       updates.push('approved_by = ?');
       params.push(approved_by);
     }
@@ -294,7 +294,7 @@ router.delete('/:id', async (req, res) => {
     const leave = leaves[0];
     
     // Check permissions
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Lead') {
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
       // Regular users can only delete their own leaves
       const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
       if (employeeData.length === 0 || employeeData[0].id !== leave.employee_id) {

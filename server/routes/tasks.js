@@ -102,8 +102,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create task - Team Lead, Employee, and Super Admin
-router.post('/', authorize('Team Lead', 'Developer', 'Designer', 'Tester', 'Super Admin'), async (req, res) => {
+// Create task - Team Leader, Employee, and Super Admin
+router.post('/', authorize('Team Leader', 'Team Lead', 'Developer', 'Designer', 'Tester', 'Super Admin'), async (req, res) => {
   try {
     const { project_id, title, description, status, priority, stage, assigned_to, developer_id, designer_id, tester_id, deadline } = req.body;
     const created_by = req.user.id; // Get from authenticated user
@@ -166,8 +166,8 @@ router.post('/', authorize('Team Lead', 'Developer', 'Designer', 'Tester', 'Supe
   }
 });
 
-// Update task - Team Lead, Employee, and Super Admin
-router.put('/:id', authorize('Team Lead', 'Developer', 'Designer', 'Tester', 'Super Admin'), async (req, res) => {
+// Update task - Team Leader, Employee, and Super Admin
+router.put('/:id', authorize('Team Leader', 'Team Lead', 'Developer', 'Designer', 'Tester', 'Super Admin'), async (req, res) => {
   try {
     const { title, description, status, priority, stage, assigned_to, developer_id, designer_id, tester_id, deadline } = req.body;
     const updated_by = req.user.id;
@@ -227,8 +227,8 @@ router.put('/:id', authorize('Team Lead', 'Developer', 'Designer', 'Tester', 'Su
   }
 });
 
-// Delete task - only Team Lead and Super Admin
-router.delete('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+// Delete task - only Team Leader and Super Admin
+router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     await db.query('DELETE FROM tasks WHERE id = ?', [req.params.id]);
     res.json({ message: 'Task deleted successfully' });

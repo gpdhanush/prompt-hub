@@ -7,8 +7,8 @@ const router = express.Router();
 // Apply authentication to all routes
 router.use(authenticate);
 
-// Get all roles - Admin, Team Lead, and Super Admin can view (needed for user/employee creation)
-router.get('/', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res) => {
+// Get all roles - Admin, Team Leader, and Super Admin can view (needed for user/employee creation)
+router.get('/', authorize('Super Admin', 'Admin', 'Team Leader', 'Team Lead'), async (req, res) => {
   try {
     const [roles] = await db.query(`
       SELECT 
@@ -24,8 +24,8 @@ router.get('/', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res)
   }
 });
 
-// Get role by ID - Admin, Team Lead, and Super Admin can view
-router.get('/:id', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res) => {
+// Get role by ID - Admin, Team Leader, and Super Admin can view
+router.get('/:id', authorize('Super Admin', 'Admin', 'Team Leader', 'Team Lead'), async (req, res) => {
   try {
     const [roles] = await db.query(`
       SELECT 
@@ -163,8 +163,8 @@ router.delete('/:id', authorize('Super Admin'), async (req, res) => {
   }
 });
 
-// Get role permissions - Super Admin, Admin, and Team Lead can view
-router.get('/:id/permissions', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res) => {
+// Get role permissions - Super Admin, Admin, and Team Leader can view
+router.get('/:id/permissions', authorize('Super Admin', 'Admin', 'Team Leader', 'Team Lead'), async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -184,6 +184,77 @@ router.get('/:id/permissions', authorize('Super Admin', 'Admin', 'Team Lead'), a
     res.json({ data: permissions });
   } catch (error) {
     console.error('Error fetching role permissions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update role permissions - Super Admin only
+router.put('/:id/permissions', authorize('Super Admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissions } = req.body; // Array of { permission_id, allowed }
+    
+    if (!Array.isArray(permissions)) {
+      return res.status(400).json({ error: 'Permissions must be an array' });
+    }
+    
+    // Check if role exists
+    const [existing] = await db.query('SELECT id, name FROM roles WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Role not found' });
+    }
+    
+    // Prevent modifying Super Admin permissions
+    if (existing[0].name === 'Super Admin') {
+      return res.status(400).json({ error: 'Cannot modify Super Admin permissions' });
+    }
+    
+    // Start transaction
+    await db.query('START TRANSACTION');
+    
+    try {
+      // Delete all existing permissions for this role
+      await db.query('DELETE FROM role_permissions WHERE role_id = ?', [id]);
+      
+      // Insert new permissions
+      if (permissions.length > 0) {
+        const values = permissions
+          .filter((p) => p.allowed === true) // Only insert allowed permissions
+          .map((p) => [id, p.permission_id, true]); // Include role_id, permission_id, and allowed
+        
+        if (values.length > 0) {
+          const placeholders = values.map(() => '(?, ?, ?)').join(', '); // Three placeholders for three columns
+          const flatValues = values.flat();
+          
+          await db.query(`
+            INSERT INTO role_permissions (role_id, permission_id, allowed)
+            VALUES ${placeholders}
+          `, flatValues);
+        }
+      }
+      
+      await db.query('COMMIT');
+      
+      // Return updated permissions
+      const [updatedPermissions] = await db.query(`
+        SELECT 
+          p.id,
+          p.code,
+          p.description,
+          p.module,
+          COALESCE(rp.allowed, FALSE) as allowed
+        FROM permissions p
+        LEFT JOIN role_permissions rp ON p.id = rp.permission_id AND rp.role_id = ?
+        ORDER BY p.module, p.code
+      `, [id]);
+      
+      res.json({ data: updatedPermissions });
+    } catch (error) {
+      await db.query('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error updating role permissions:', error);
     res.status(500).json({ error: error.message });
   }
 });

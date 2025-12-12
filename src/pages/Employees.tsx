@@ -34,6 +34,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getProfilePhotoUrl } from "@/lib/imageUtils";
 import {
   Select,
   SelectContent,
@@ -50,6 +51,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { toast } from "@/hooks/use-toast";
+import { getCurrentUser } from "@/lib/auth";
 
 type Employee = {
   id: number;
@@ -86,6 +88,10 @@ type Employee = {
 export default function Employees() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  
+  // Get current user info to filter Super Admin data
+  const currentUser = getCurrentUser();
+  const isSuperAdmin = currentUser?.role === 'Super Admin';
   
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -141,7 +147,12 @@ export default function Employees() {
     queryFn: () => employeesApi.getAll({ page: currentPage, limit: pageLimit, search: searchQuery }),
   });
 
-  const employees = data?.data || [];
+  // Filter out Super Admin employees if current user is not Super Admin
+  const allEmployees = data?.data || [];
+  const employees = isSuperAdmin 
+    ? allEmployees 
+    : allEmployees.filter((emp: Employee) => emp.role !== 'Super Admin');
+  
   const pagination = data?.pagination || { total: 0, totalPages: 0 };
   const totalPages = pagination.totalPages;
 
@@ -327,6 +338,7 @@ export default function Employees() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8">
+                            <AvatarImage src={getProfilePhotoUrl(emp.profile_photo_url || null)} />
                             <AvatarFallback className="text-xs">
                               {emp.name.split(" ").map((n) => n[0]).join("")}
                             </AvatarFallback>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,12 +11,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Separator } from "@/components/ui/separator";
-import { employeesApi, usersApi } from "@/lib/api";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ImageUploadCrop } from "@/components/ui/image-upload-crop";
+import { employeesApi, usersApi, rolesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { getCurrentUser } from "@/lib/auth";
 
 export default function EmployeeCreate() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  
+  // Get current user info to filter Super Admin data
+  const currentUser = getCurrentUser();
+  const isSuperAdmin = currentUser?.role === 'Super Admin';
+  const isTeamLeader = currentUser?.role === 'Team Leader' || currentUser?.role === 'Team Lead';
 
   const [formData, setFormData] = useState({
     // Basic user info
@@ -24,30 +32,30 @@ export default function EmployeeCreate() {
     email: "",
     password: "",
     mobile: "",
-    role: "developer",
+    date_of_birth: "",
+    gender: "",
     
     // Employee basic info
     empCode: "",
-    department: "",
+    role: "",
     teamLeadId: "",
-    date_of_birth: "",
-    gender: "",
     date_of_joining: "",
-    is_team_lead: false,
     employee_status: "Active",
     
     // Salary & Finance (optional)
     bank_name: "",
     bank_account_number: "",
     ifsc_code: "",
-    routing_number: "",
-    pf_esi_applicable: false,
-    pf_uan_number: "",
     
-    // Identity & Documentation
-    government_id_number: "",
-    address: "",
+    // Address & Emergency Details
+    address1: "",
+    address2: "",
+    landmark: "",
+    state: "",
+    district: "",
+    pincode: "",
     emergency_contact_name: "",
+    emergency_contact_relation: "",
     emergency_contact_number: "",
     
     // Leave counts
@@ -65,10 +73,67 @@ export default function EmployeeCreate() {
     queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
   });
 
+  // Fetch all roles
+  const { data: rolesData } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => rolesApi.getAll(),
+  });
+
   const allUsers = usersData?.data || [];
-  const teamLeads = allUsers.filter((user: any) => 
-    user.role === 'Team Lead' || user.role === 'Super Admin' || user.role === 'Admin'
-  );
+  const allRoles = rolesData?.data || [];
+  
+  // Filter out Super Admin users if current user is not Super Admin
+  const filteredUsers = isSuperAdmin 
+    ? allUsers 
+    : allUsers.filter((user: any) => user.role !== 'Super Admin');
+  
+  // Filter roles based on current user's role
+  // Team Leaders cannot create Super Admin or Admin roles (they are higher roles)
+  const availableRoles = isTeamLeader
+    ? allRoles.filter((role: any) => role.name !== 'Super Admin' && role.name !== 'Admin')
+    : allRoles;
+  
+  // Get available reporting managers based on selected role and current user
+  // Super Admin creating TL: Show Super Admin users
+  // TL creating employee: Show all TL names
+  const getAvailableReportingManagers = () => {
+    const selectedRole = formData.role;
+    
+    if (selectedRole === 'Team Lead' || selectedRole === 'Team Leader') {
+      // When creating a Team Leader role
+      if (isSuperAdmin) {
+        // Super Admin creating TL: Show Super Admin users
+        return allUsers.filter((user: any) => 
+          user.role === 'Super Admin'
+        );
+      } else {
+        // Other users creating TL: Show Admin or Super Admin (if visible)
+        return filteredUsers.filter((user: any) => 
+          user.role === 'Super Admin' || user.role === 'Admin'
+        );
+      }
+    } else {
+      // For other roles (Developer, Designer, Tester, etc.)
+      if (isSuperAdmin) {
+        // Super Admin: Show all Team Leaders
+        return filteredUsers.filter((user: any) => 
+          user.role === 'Team Leader' || user.role === 'Team Lead'
+        );
+      } else if (isTeamLeader) {
+        // Team Leader creating employee: Show all TL names
+        return filteredUsers.filter((user: any) => 
+          user.role === 'Team Leader' || user.role === 'Team Lead'
+        );
+      } else {
+        // Other roles (Admin, etc.): Show Team Leaders, Admin, or Super Admin
+        return filteredUsers.filter((user: any) => 
+          user.role === 'Team Leader' || user.role === 'Team Lead' || user.role === 'Super Admin' || user.role === 'Admin'
+        );
+      }
+    }
+  };
+  
+  const availableReportingManagers = getAvailableReportingManagers();
 
   // Generate employee ID if not provided
   const generateEmpCode = () => {
@@ -80,13 +145,23 @@ export default function EmployeeCreate() {
 
   // Helper function to map role value to role name
   const roleValueToName = (value: string): string => {
+    // If value is already a role name (from API), return as is
+    if (allRoles.some((role: any) => role.name === value)) {
+      return value;
+    }
+    // Otherwise, try to map from old format
     const mapping: Record<string, string> = {
       'developer': 'Developer',
       'designer': 'Designer',
       'tester': 'Tester',
       'team-lead': 'Team Lead',
+      'team-leader': 'Team Lead',
+      'super-admin': 'Super Admin',
+      'admin': 'Admin',
+      'employee': 'Employee',
+      'viewer': 'Viewer',
     };
-    return mapping[value] || value;
+    return mapping[value.toLowerCase()] || value;
   };
 
   // Helper function to format date to YYYY-MM-DD
@@ -110,31 +185,31 @@ export default function EmployeeCreate() {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      // Backend expects: name, email, mobile, password, role, position, department, empCode, teamLeadId
+      // Backend expects: name, email, mobile, password, role, position, empCode, teamLeadId
       // and all the new employee fields
       const employeeData = {
         name: data.name,
         email: data.email,
         password: data.password,
         mobile: data.mobile,
-        role: roleValueToName(data.role), // Convert to role name
-        department: data.department,
+        role: data.role, // Role is already in correct format from API
         empCode: data.empCode,
         teamLeadId: data.teamLeadId && data.teamLeadId !== "" ? data.teamLeadId : null,
         date_of_birth: formatDateForDB(data.date_of_birth),
         gender: data.gender || null,
         date_of_joining: formatDateForDB(data.date_of_joining),
-        is_team_lead: data.is_team_lead || false,
         employee_status: data.employee_status || 'Active',
         bank_name: data.bank_name || null,
         bank_account_number: data.bank_account_number || null,
         ifsc_code: data.ifsc_code || null,
-        routing_number: data.routing_number || null,
-        pf_esi_applicable: data.pf_esi_applicable || false,
-        pf_uan_number: data.pf_uan_number || null,
-        government_id_number: data.government_id_number || null,
-        address: data.address || null,
+        address1: data.address1 || null,
+        address2: data.address2 || null,
+        landmark: data.landmark || null,
+        state: data.state || null,
+        district: data.district || null,
+        pincode: data.pincode || null,
         emergency_contact_name: data.emergency_contact_name || null,
+        emergency_contact_relation: data.emergency_contact_relation || null,
         emergency_contact_number: data.emergency_contact_number || null,
         annual_leave_count: data.annual_leave_count || 0,
         sick_leave_count: data.sick_leave_count || 0,
@@ -200,7 +275,7 @@ export default function EmployeeCreate() {
             <CardDescription>Login credentials and basic details</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="name">Name *</Label>
                 <Input
@@ -222,10 +297,47 @@ export default function EmployeeCreate() {
                   required
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="password">Password *</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="password">Password *</Label>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button type="button" variant="ghost" size="icon" className="h-4 w-4">
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Password Requirements</DialogTitle>
+                        <DialogDescription>
+                          Your password must meet the following requirements:
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-2 py-4">
+                        <div className="flex items-start gap-2">
+                          <span className="text-sm">•</span>
+                          <span className="text-sm">At least 8 characters long</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-sm">•</span>
+                          <span className="text-sm">Contains at least one uppercase letter (A-Z)</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-sm">•</span>
+                          <span className="text-sm">Contains at least one lowercase letter (a-z)</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-sm">•</span>
+                          <span className="text-sm">Contains at least one number (0-9)</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-sm">•</span>
+                          <span className="text-sm">Contains at least one special character (!@#$%^&*)</span>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
                 <Input
                   id="password"
                   type="password"
@@ -235,6 +347,8 @@ export default function EmployeeCreate() {
                   required
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="mobile">Mobile</Label>
                 <Input
@@ -244,56 +358,6 @@ export default function EmployeeCreate() {
                   placeholder="Enter mobile number"
                 />
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="role">Role *</Label>
-              <Select
-                value={formData.role}
-                onValueChange={(value) => setFormData({ ...formData, role: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="developer">Developer</SelectItem>
-                  <SelectItem value="designer">Designer</SelectItem>
-                  <SelectItem value="tester">Tester</SelectItem>
-                  <SelectItem value="team-lead">Team Lead</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Employee Basic Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Employee Basic Information</CardTitle>
-            <CardDescription>Employee-specific details</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="empCode">Employee ID *</Label>
-                <Input
-                  id="empCode"
-                  value={formData.empCode}
-                  onChange={(e) => setFormData({ ...formData, empCode: e.target.value })}
-                  placeholder="EMP-0001"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="department">Department</Label>
-                <Input
-                  id="department"
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  placeholder="Enter department"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Date of Birth</Label>
                 <DatePicker
@@ -318,42 +382,142 @@ export default function EmployeeCreate() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+          </CardContent>
+        </Card>
+
+        {/* Employee Basic Information */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Employee Basic Information</CardTitle>
+            <CardDescription>Employee-specific details</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="empCode">Employee ID *</Label>
+                <Input
+                  id="empCode"
+                  value={formData.empCode}
+                  onChange={(e) => setFormData({ ...formData, empCode: e.target.value })}
+                  placeholder="EMP-0001"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="role">User Role *</Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value) => setFormData({ ...formData, role: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableRoles.length > 0 ? (
+                      availableRoles.map((role: any) => (
+                        <SelectItem key={role.id} value={role.name}>
+                          {role.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      // Fallback if roles not loaded (filtered based on user role)
+                      <>
+                        {!isTeamLeader && <SelectItem value="Super Admin">Super Admin</SelectItem>}
+                        {!isTeamLeader && <SelectItem value="Admin">Admin</SelectItem>}
+                        <SelectItem value="Team Lead">Team Lead</SelectItem>
+                        <SelectItem value="Developer">Developer</SelectItem>
+                        <SelectItem value="Designer">Designer</SelectItem>
+                        <SelectItem value="Tester">Tester</SelectItem>
+                        <SelectItem value="Employee">Employee</SelectItem>
+                        <SelectItem value="Viewer">Viewer</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="reportsTo">Reports To *</Label>
+                <Select
+                  value={formData.teamLeadId || "none"}
+                  onValueChange={(value) => setFormData({ ...formData, teamLeadId: value === "none" ? "" : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select reporting manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (No Reporting Manager)</SelectItem>
+                    {availableReportingManagers.map((lead: any) => (
+                      <SelectItem key={lead.id} value={lead.id.toString()}>
+                        {lead.name} ({lead.email}) - {lead.role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formData.role === 'Team Lead' || formData.role === 'Team Leader' ? (
+                    <>
+                      {isSuperAdmin ? (
+                        <>
+                          <strong>For Team Leader:</strong> Select a Super Admin as the reporting manager.
+                          {availableReportingManagers.length === 0 && (
+                            <span className="block mt-1 text-amber-600">
+                              ⚠ No Super Admins found. Create one first or select "None" for now.
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <strong>For Team Leader:</strong> Select an Admin or Super Admin as your reporting manager.
+                          {availableReportingManagers.length === 0 && (
+                            <span className="block mt-1 text-amber-600">
+                              ⚠ No Admins or Super Admins found. Create one first or select "None" for now.
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {isSuperAdmin ? (
+                        <>
+                          Select a Team Leader this employee reports to.
+                          {availableReportingManagers.length === 0 && (
+                            <span className="block mt-1 text-amber-600">
+                              ⚠ No Team Leaders found. Create one first or select "None" for now.
+                            </span>
+                          )}
+                        </>
+                      ) : isTeamLeader ? (
+                        <>
+                          Select a Team Leader this employee reports to.
+                          {availableReportingManagers.length === 0 && (
+                            <span className="block mt-1 text-amber-600">
+                              ⚠ No Team Leaders found. Create one first or select "None" for now.
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          Select the team lead, admin, or manager this employee reports to.
+                          {availableReportingManagers.length === 0 && (
+                            <span className="block mt-1 text-amber-600">
+                              ⚠ No team leads or managers found. Create one first or select "None" for now.
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label>Date of Joining</Label>
                 <DatePicker
                   value={formData.date_of_joining}
                   onChange={(date) => setFormData({ ...formData, date_of_joining: date })}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label>Team Lead</Label>
-                <Select
-                  value={formData.teamLeadId || "none"}
-                  onValueChange={(value) => setFormData({ ...formData, teamLeadId: value === "none" ? "" : value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select team lead" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {teamLeads.map((lead: any) => (
-                      <SelectItem key={lead.id} value={lead.id.toString()}>
-                        {lead.name} ({lead.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="is_team_lead"
-                  checked={formData.is_team_lead}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_team_lead: checked })}
-                />
-                <Label htmlFor="is_team_lead">Is Team Lead?</Label>
               </div>
               <div className="grid gap-2">
                 <Label>Employee Status *</Label>
@@ -378,10 +542,10 @@ export default function EmployeeCreate() {
         <Card>
           <CardHeader>
             <CardTitle>Salary & Finance Information</CardTitle>
-            <CardDescription>Optional but recommended</CardDescription>
+            <CardDescription>Bank account details required for salary processing and reimbursements</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="bank_name">Bank Name</Label>
                 <Input
@@ -400,8 +564,6 @@ export default function EmployeeCreate() {
                   placeholder="Enter account number"
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="ifsc_code">IFSC Code</Label>
                 <Input
@@ -411,65 +573,76 @@ export default function EmployeeCreate() {
                   placeholder="Enter IFSC code"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="routing_number">Routing Number</Label>
-                <Input
-                  id="routing_number"
-                  value={formData.routing_number}
-                  onChange={(e) => setFormData({ ...formData, routing_number: e.target.value })}
-                  placeholder="Enter routing number"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="pf_esi_applicable"
-                  checked={formData.pf_esi_applicable}
-                  onCheckedChange={(checked) => setFormData({ ...formData, pf_esi_applicable: checked })}
-                />
-                <Label htmlFor="pf_esi_applicable">PF/ESI Applicable?</Label>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="pf_uan_number">PF/UAN Number</Label>
-                <Input
-                  id="pf_uan_number"
-                  value={formData.pf_uan_number}
-                  onChange={(e) => setFormData({ ...formData, pf_uan_number: e.target.value })}
-                  placeholder="Enter PF/UAN number"
-                />
-              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Identity & Documentation */}
+        {/* Address & Emergency Details */}
         <Card>
           <CardHeader>
-            <CardTitle>Identity & Documentation</CardTitle>
-            <CardDescription>Government ID and contact information</CardDescription>
+            <CardTitle>Address & Emergency Details</CardTitle>
+            <CardDescription>Address and emergency contact information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="government_id_number">Government ID No. (PAN / SSN last 4 digits)</Label>
-              <Input
-                id="government_id_number"
-                value={formData.government_id_number}
-                onChange={(e) => setFormData({ ...formData, government_id_number: e.target.value })}
-                placeholder="Enter government ID number"
-              />
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="address1">Address Line 1</Label>
+                <Input
+                  id="address1"
+                  value={formData.address1}
+                  onChange={(e) => setFormData({ ...formData, address1: e.target.value })}
+                  placeholder="Enter address line 1"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="address2">Address Line 2</Label>
+                <Input
+                  id="address2"
+                  value={formData.address2}
+                  onChange={(e) => setFormData({ ...formData, address2: e.target.value })}
+                  placeholder="Enter address line 2"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="landmark">Landmark</Label>
+                <Input
+                  id="landmark"
+                  value={formData.landmark}
+                  onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
+                  placeholder="Enter landmark"
+                />
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="address">Address</Label>
-              <Textarea
-                id="address"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="Enter full address"
-                rows={3}
-              />
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="state">State</Label>
+                <Input
+                  id="state"
+                  value={formData.state}
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  placeholder="Enter state"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="district">District</Label>
+                <Input
+                  id="district"
+                  value={formData.district}
+                  onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                  placeholder="Enter district"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="pincode">Pincode</Label>
+                <Input
+                  id="pincode"
+                  value={formData.pincode}
+                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                  placeholder="Enter pincode"
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
                 <Input
@@ -478,6 +651,25 @@ export default function EmployeeCreate() {
                   onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
                   placeholder="Enter emergency contact name"
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="emergency_contact_relation">Emergency Contact Relation</Label>
+                <Select
+                  value={formData.emergency_contact_relation}
+                  onValueChange={(value) => setFormData({ ...formData, emergency_contact_relation: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select relation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Spouse">Spouse</SelectItem>
+                    <SelectItem value="Parent">Parent</SelectItem>
+                    <SelectItem value="Sibling">Sibling</SelectItem>
+                    <SelectItem value="Child">Child</SelectItem>
+                    <SelectItem value="Friend">Friend</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="emergency_contact_number">Emergency Contact Number</Label>
@@ -534,22 +726,18 @@ export default function EmployeeCreate() {
           </CardContent>
         </Card>
 
-        {/* Profile & System Metadata */}
+        {/* Profile Photo */}
         <Card>
           <CardHeader>
-            <CardTitle>Profile & System Metadata</CardTitle>
-            <CardDescription>Profile photo and system information</CardDescription>
+            <CardTitle>Profile Photo</CardTitle>
+            <CardDescription>Upload and crop your profile photo</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="profile_photo_url">Profile Photo URL</Label>
-              <Input
-                id="profile_photo_url"
-                value={formData.profile_photo_url}
-                onChange={(e) => setFormData({ ...formData, profile_photo_url: e.target.value })}
-                placeholder="Enter profile photo URL"
-              />
-            </div>
+            <ImageUploadCrop
+              value={formData.profile_photo_url}
+              onChange={(url) => setFormData({ ...formData, profile_photo_url: url })}
+              aspect={1}
+            />
           </CardContent>
         </Card>
 

@@ -215,8 +215,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create project - only Team Lead and Super Admin
-router.post('/', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+// Create project - only Team Leader and Super Admin
+router.post('/', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const {
       name, description, status, start_date, end_date, team_lead_id, member_ids, member_roles,
@@ -279,7 +279,7 @@ router.post('/', authorize('Team Lead', 'Super Admin'), async (req, res) => {
     
     const projectCode = `PRJ-${String(nextNumber).padStart(3, '0')}`;
     const created_by = req.user.id;
-    const final_team_lead_id = team_lead_id || (req.user.role === 'Team Lead' ? req.user.id : null);
+    const final_team_lead_id = team_lead_id || (req.user.role === 'Team Leader' || req.user.role === 'Team Lead' ? req.user.id : null);
     
     const [result] = await db.query(`
       INSERT INTO projects (
@@ -347,8 +347,8 @@ router.post('/', authorize('Team Lead', 'Super Admin'), async (req, res) => {
   }
 });
 
-// Update project - only Team Lead and Super Admin
-router.put('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+// Update project - only Team Leader and Super Admin
+router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -502,8 +502,8 @@ router.put('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
   }
 });
 
-// Delete project - only Team Lead and Super Admin
-router.delete('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+// Delete project - only Team Leader and Super Admin
+router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     await db.query('DELETE FROM projects WHERE id = ?', [req.params.id]);
     res.json({ message: 'Project deleted successfully' });
@@ -517,7 +517,7 @@ router.delete('/:id', authorize('Team Lead', 'Super Admin'), async (req, res) =>
 // ============================================
 
 // Upload project file
-router.post('/:id/files', authorize('Team Lead', 'Super Admin', 'Developer', 'Designer', 'Tester'), upload.single('file'), async (req, res) => {
+router.post('/:id/files', authorize('Team Leader', 'Team Lead', 'Super Admin', 'Developer', 'Designer', 'Tester'), upload.single('file'), async (req, res) => {
   try {
     const { id } = req.params;
     const { file_type, file_category, description } = req.body;
@@ -562,7 +562,7 @@ router.get('/:id/files', async (req, res) => {
 });
 
 // Delete project file
-router.delete('/:id/files/:fileId', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+router.delete('/:id/files/:fileId', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { fileId } = req.params;
     const [file] = await db.query('SELECT * FROM project_files WHERE id = ?', [fileId]);
@@ -627,7 +627,7 @@ router.get('/:id/change-requests', async (req, res) => {
 });
 
 // Update change request status
-router.put('/:id/change-requests/:requestId', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+router.put('/:id/change-requests/:requestId', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { requestId } = req.params;
     const { status, rejected_reason } = req.body;
@@ -711,7 +711,7 @@ router.get('/:id/call-notes', async (req, res) => {
 // ============================================
 
 // Create credential
-router.post('/:id/credentials', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+router.post('/:id/credentials', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
     const { credential_type, service_name, username, password, url, api_key, notes } = req.body;
@@ -748,7 +748,7 @@ router.get('/:id/credentials', async (req, res) => {
 });
 
 // Update credential
-router.put('/:id/credentials/:credId', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+router.put('/:id/credentials/:credId', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { credId } = req.params;
     const { service_name, username, password, url, api_key, notes, is_active } = req.body;
@@ -950,7 +950,7 @@ router.get('/:id/comments', async (req, res) => {
 });
 
 // Update technologies used
-router.put('/:id/technologies', authorize('Team Lead', 'Super Admin'), async (req, res) => {
+router.put('/:id/technologies', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
     const { technologies_used } = req.body;

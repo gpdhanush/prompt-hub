@@ -414,7 +414,13 @@ async function decrypt(encryptedData: string): Promise<string> {
     // Convert back to string
     const decoder = new TextDecoder();
     return decoder.decode(decryptedData);
-  } catch (error) {
+  } catch (error: any) {
+    // Provide more specific error messages
+    if (error.name === 'OperationError' || error.message?.includes('decrypt')) {
+      // This might be due to key mismatch (backend restart, domain change, etc.)
+      // Don't throw immediately - let caller handle retry
+      throw new Error('Decryption failed - key may have changed. This can happen after backend restart.');
+    }
     console.error('Decryption error:', error);
     throw new Error('Failed to decrypt data. Data may be corrupted or from a different origin.');
   }
@@ -450,15 +456,39 @@ export const secureStorage = {
         return null;
       }
       return await decrypt(encrypted);
-    } catch (error) {
-      console.error(`Failed to retrieve ${key}:`, error);
-      // If decryption fails, clear the corrupted data
-      try {
-        const obfuscatedKey = await getObfuscatedKeyName(key);
-        localStorage.removeItem(obfuscatedKey);
-      } catch (e) {
-        // Ignore errors when removing
+    } catch (error: any) {
+      // Don't clear data on decryption errors - might be temporary (backend restart, etc.)
+      // Only log the error, don't remove the data
+      console.warn(`Failed to decrypt ${key}, attempting recovery:`, error.message);
+      
+      // Try recovery: if key derivation changed (backend restart), regenerate key
+      if (error.message?.includes('key may have changed') || 
+          error.message?.includes('Failed to decrypt') || 
+          error.message?.includes('corrupted')) {
+        try {
+          // Force re-derivation of encryption key by clearing wrapped key
+          const obfuscatedMasterKey = await getObfuscatedKeyName(MASTER_KEY_STORAGE);
+          const hadWrappedKey = localStorage.getItem(obfuscatedMasterKey) !== null;
+          
+          if (hadWrappedKey) {
+            // Clear wrapped key to force regeneration
+            localStorage.removeItem(obfuscatedMasterKey);
+            
+            // Retry decryption with newly derived key
+            const obfuscatedKey = await getObfuscatedKeyName(key);
+            const encrypted = localStorage.getItem(obfuscatedKey);
+            if (encrypted) {
+              return await decrypt(encrypted);
+            }
+          }
+        } catch (retryError) {
+          console.error(`Recovery attempt failed for ${key}:`, retryError);
+        }
       }
+      
+      // If all recovery attempts fail, return null but don't clear data
+      // The data is still there, just can't decrypt it right now
+      // This prevents logout on temporary backend issues
       return null;
     }
   },
@@ -547,30 +577,57 @@ export function getItemSync(key: string): string | null {
   return decryptedCache.get(key) || null;
 }
 
+// Track initialization state to prevent multiple simultaneous initializations
+let initializationPromise: Promise<void> | null = null;
+let isInitialized = false;
+
 /**
  * Initialize secure storage by pre-loading encrypted data into cache
  * Call this on app startup for better performance
+ * This function is idempotent - safe to call multiple times
  */
 export async function initializeSecureStorage(): Promise<void> {
-  try {
-    // Initialize key mapping cache first
-    await initializeKeyMappingCache();
-    
-    // Pre-load known keys into cache
-    const knownKeys = ['auth_token', 'user', 'remember_me'];
-    for (const key of knownKeys) {
-      try {
-        const value = await secureStorage.getItem(key);
-        if (value) {
-          decryptedCache.set(key, value);
-        }
-      } catch (e) {
-        // Continue if key doesn't exist or fails to decrypt
-      }
-    }
-  } catch (error) {
-    console.error('Failed to initialize secure storage:', error);
+  // If already initialized, return immediately
+  if (isInitialized) {
+    return;
   }
+  
+  // If initialization is in progress, wait for it
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+  
+  // Start initialization
+  initializationPromise = (async () => {
+    try {
+      // Initialize key mapping cache first
+      await initializeKeyMappingCache();
+      
+      // Pre-load known keys into cache
+      const knownKeys = ['auth_token', 'user', 'remember_me'];
+      for (const key of knownKeys) {
+        try {
+          const value = await secureStorage.getItem(key);
+          if (value) {
+            decryptedCache.set(key, value);
+          }
+        } catch (e) {
+          // Continue if key doesn't exist or fails to decrypt
+          console.warn(`Failed to load ${key} during initialization:`, e);
+        }
+      }
+      
+      isInitialized = true;
+      console.log('Secure storage initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize secure storage:', error);
+      // Reset promise on error so it can be retried
+      initializationPromise = null;
+      throw error;
+    }
+  })();
+  
+  return initializationPromise;
 }
 
 /**
@@ -597,11 +654,18 @@ export const secureStorageWithCache = {
     }
     
     // If not in cache, decrypt from storage
-    const value = await secureStorage.getItem(key);
-    if (value) {
-      decryptedCache.set(key, value);
+    try {
+      const value = await secureStorage.getItem(key);
+      if (value) {
+        decryptedCache.set(key, value);
+      }
+      return value;
+    } catch (error: any) {
+      // If decryption fails, try to recover from cache or return null
+      // Don't throw - let the app continue working
+      console.warn(`Failed to get ${key} from secure storage:`, error.message);
+      return decryptedCache.get(key) || null;
     }
-    return value;
   },
 
   /**

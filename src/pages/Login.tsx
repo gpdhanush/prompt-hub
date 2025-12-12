@@ -9,6 +9,11 @@ import { authApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
 import { secureStorageWithCache } from "@/lib/secureStorage";
+import { useLoading } from "@/contexts/LoadingContext";
+
+// Development: Test loader without API call (set to false to enable real login)
+const TEST_LOADER_ONLY = false;
+const TEST_LOADING_DELAY_MS = 3000; // 3 seconds delay for testing
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -16,6 +21,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { startLoading, stopLoading } = useLoading();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -23,6 +29,16 @@ export default function Login() {
     setIsLoading(true);
 
     try {
+      if (TEST_LOADER_ONLY) {
+        // Test mode: Just show loader for 3 seconds, no API call
+        startLoading();
+        await new Promise(resolve => setTimeout(resolve, TEST_LOADING_DELAY_MS));
+        stopLoading();
+        setIsLoading(false);
+        return;
+      }
+      
+      // Production mode: Real login API call
       const response = await authApi.login(email, password);
       
       // Store token and user info securely (encrypted)

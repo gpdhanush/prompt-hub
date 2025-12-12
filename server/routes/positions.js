@@ -7,8 +7,8 @@ const router = express.Router();
 // Apply authentication to all routes
 router.use(authenticate);
 
-// Get all positions - Admin, Team Lead, and Super Admin can view (needed for user/employee creation)
-router.get('/', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res) => {
+// Get all positions - Admin, Team Leader, and Super Admin can view (needed for user/employee creation)
+router.get('/', authorize('Super Admin', 'Admin', 'Team Leader', 'Team Lead'), async (req, res) => {
   try {
     const [positions] = await db.query('SELECT * FROM positions ORDER BY name ASC');
     res.json({ data: positions });
@@ -17,8 +17,8 @@ router.get('/', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res)
   }
 });
 
-// Get position by ID - Admin, Team Lead, and Super Admin can view
-router.get('/:id', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res) => {
+// Get position by ID - Admin, Team Leader, and Super Admin can view
+router.get('/:id', authorize('Super Admin', 'Admin', 'Team Leader', 'Team Lead'), async (req, res) => {
   try {
     const [positions] = await db.query('SELECT * FROM positions WHERE id = ?', [req.params.id]);
     if (positions.length === 0) return res.status(404).json({ error: 'Position not found' });

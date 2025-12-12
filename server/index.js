@@ -1,7 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { db } from './config/database.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import usersRoutes from './routes/users.js';
 import employeesRoutes from './routes/employees.js';
 import projectsRoutes from './routes/projects.js';
@@ -29,6 +34,20 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files from uploads directory
+// Files are stored in server/uploads/profile-photos (based on employees.js multer config)
+import fs from 'fs';
+const uploadsPath = path.join(__dirname, 'uploads');
+console.log('📁 Static files directory:', uploadsPath);
+
+// Ensure directory exists
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+  console.log('✅ Created uploads directory:', uploadsPath);
+}
+
+app.use('/uploads', express.static(uploadsPath));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -72,9 +91,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
+// 404 handler - only catch API routes, not static files
 app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+  // Don't send 404 for static file requests that might have failed
+  // Express static middleware handles 404s for files that don't exist
+  if (req.path.startsWith('/uploads/')) {
+    return res.status(404).json({ error: 'File not found', path: req.path });
+  }
+  res.status(404).json({ error: 'Route not found', path: req.path });
 });
 
 const server = app.listen(PORT, async () => {

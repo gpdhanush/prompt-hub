@@ -65,6 +65,7 @@ export function DatePicker({
       <PopoverTrigger asChild>
         <div className="relative w-full">
           <Button
+            type="button"
             id={id}
             variant="outline"
             disabled={disabled}
@@ -90,7 +91,7 @@ export function DatePicker({
           )}
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent className="w-auto p-0 min-w-[280px]" align="start">
         <div className="p-3 border-b flex justify-between items-center">
           <span className="text-sm font-medium">Select Date</span>
           {date && (
@@ -105,13 +106,18 @@ export function DatePicker({
             </Button>
           )}
         </div>
-        <Calendar
-          mode="single"
-          selected={date}
-          onSelect={handleSelect}
-          initialFocus
-          className="rounded-md border-0"
-        />
+        <div className="p-3">
+          <Calendar
+            mode="single"
+            selected={date}
+            onSelect={handleSelect}
+            initialFocus
+            className="rounded-md border-0"
+            captionLayout="dropdown"
+            fromYear={1900}
+            toYear={new Date().getFullYear() + 10}
+          />
+        </div>
       </PopoverContent>
     </Popover>
   );

@@ -18,9 +18,10 @@ router.get('/assignable', async (req, res) => {
         r.name as role
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
-      WHERE r.name IN ('Developer', 'Designer', 'Tester', 'Team Lead')
+      WHERE r.name IN ('Developer', 'Designer', 'Tester', 'Team Leader', 'Team Lead')
       ORDER BY 
         CASE r.name
+          WHEN 'Team Leader' THEN 1
           WHEN 'Team Lead' THEN 1
           WHEN 'Developer' THEN 2
           WHEN 'Designer' THEN 3
@@ -177,8 +178,10 @@ router.post('/', canManageUsers, async (req, res) => {
     // Map frontend role values to database role names
     const roleMapping = {
       'admin': 'Admin',
-      'team-lead': 'Team Lead',
-      'team lead': 'Team Lead', // Handle space variant
+      'team-lead': 'Team Leader',
+      'team-leader': 'Team Leader',
+      'team lead': 'Team Leader', // Handle space variant
+      'Team Lead': 'Team Leader', // Map to database role name
       'developer': 'Developer',
       'designer': 'Designer',
       'tester': 'Tester',
@@ -205,8 +208,8 @@ router.post('/', canManageUsers, async (req, res) => {
       });
     }
     
-    // Team Lead and Manager cannot create Admin roles
-    if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+    // Team Leader and Manager cannot create Admin roles
+    if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
         dbRoleName === 'Admin') {
       return res.status(403).json({ 
         error: `${currentUserRole} cannot create Admin users. Only Super Admin can create Admin users.` 
@@ -276,12 +279,12 @@ router.post('/', canManageUsers, async (req, res) => {
         SELECT u.id, r.name as role 
         FROM users u
         LEFT JOIN roles r ON u.role_id = r.id
-        WHERE u.id = ? AND r.name = 'Team Lead'
+        WHERE u.id = ? AND (r.name = 'Team Leader' OR r.name = 'Team Lead')
       `, [team_lead_id]);
       
       if (teamLeadCheck.length === 0) {
         return res.status(400).json({ 
-          error: `Invalid Team Lead ID: ${team_lead_id}. Must be a user with Team Lead role.` 
+          error: `Invalid Team Leader ID: ${team_lead_id}. Must be a user with Team Leader role.` 
         });
       }
     }
@@ -293,8 +296,8 @@ router.post('/', canManageUsers, async (req, res) => {
     
     const newUserId = result.insertId;
     
-    // If Team Lead role, create employee record for them (Team Leads need employee records too)
-    if (dbRoleName === 'Team Lead') {
+    // If Team Leader role, create employee record for them (Team Leaders need employee records too)
+    if (dbRoleName === 'Team Leader' || dbRoleName === 'Team Lead') {
       // Check if employee record already exists
       const [existingEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [newUserId]);
       
@@ -385,18 +388,19 @@ router.put('/:id', canManageUsers, async (req, res) => {
       // Normalize role value (trim and lowercase)
       const normalizedRole = String(role).trim().toLowerCase();
       
-      // Map frontend role values to database role names
-      const roleMapping = {
-        'admin': 'Admin',
-        'team-lead': 'Team Lead',
-        'team lead': 'Team Lead', // Handle space variant
-        'developer': 'Developer',
-        'designer': 'Designer',
-        'tester': 'Tester',
-        'viewer': 'Viewer',
-        'super-admin': 'Super Admin',
-        'super admin': 'Super Admin' // Handle space variant
-      };
+    // Map frontend role values to database role names
+    const roleMapping = {
+      'admin': 'Admin',
+      'team-lead': 'Team Leader',
+      'team-leader': 'Team Leader',
+      'team lead': 'Team Leader', // Handle space variant
+      'developer': 'Developer',
+      'designer': 'Designer',
+      'tester': 'Tester',
+      'viewer': 'Viewer',
+      'super-admin': 'Super Admin',
+      'super admin': 'Super Admin' // Handle space variant
+    };
       
       const dbRoleName = roleMapping[normalizedRole] || role;
       
@@ -407,17 +411,17 @@ router.put('/:id', canManageUsers, async (req, res) => {
         });
       }
       
-      // Team Lead and Manager can only update users to Developer, Designer, and Tester roles
+      // Team Leader and Manager can only update users to Developer, Designer, and Tester roles
       const currentUserRole = req.user.role;
-      if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+      if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
           !['Developer', 'Designer', 'Tester'].includes(dbRoleName)) {
         return res.status(403).json({ 
           error: `${currentUserRole} can only assign Developer, Designer, or Tester roles` 
         });
       }
       
-      // Team Lead and Manager cannot update users to Admin role
-      if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+      // Team Leader and Manager cannot update users to Admin role
+      if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
           dbRoleName === 'Admin') {
         return res.status(403).json({ 
           error: `${currentUserRole} cannot assign Admin role. Only Super Admin can assign Admin role.` 
@@ -535,9 +539,9 @@ router.delete('/:id', canManageUsers, async (req, res) => {
       });
     }
     
-    // Team Lead and Manager can only delete Developer, Designer, and Tester users
+    // Team Leader and Manager can only delete Developer, Designer, and Tester users
     const currentUserRole = req.user.role;
-    if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+    if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
         !['Developer', 'Designer', 'Tester'].includes(userToDelete.role)) {
       return res.status(403).json({ 
         error: `${currentUserRole} can only delete employees with Developer, Designer, or Tester roles` 

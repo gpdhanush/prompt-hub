@@ -9,10 +9,26 @@ class ApiError extends Error {
   }
 }
 
+// Global loading state management
+let loadingCallbacks: Set<(loading: boolean) => void> = new Set();
+
+export function registerLoadingCallback(callback: (loading: boolean) => void) {
+  loadingCallbacks.add(callback);
+  return () => {
+    loadingCallbacks.delete(callback);
+  };
+}
+
+function setGlobalLoading(loading: boolean) {
+  loadingCallbacks.forEach(callback => callback(loading));
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  // Start loading
+  setGlobalLoading(true);
   const url = `${API_BASE_URL}${endpoint}`;
   
   const config: RequestInit = {
@@ -63,15 +79,35 @@ async function request<T>(
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: response.statusText }));
+      
+      // Handle 401 errors gracefully - don't auto-logout on temporary backend issues
+      if (response.status === 401) {
+        // Only logout if it's a clear authentication error, not a temporary backend issue
+        const errorMessage = error.error || error.message || '';
+        
+        // Check if it's a real auth error or just backend restart/issue
+        if (errorMessage.includes('Invalid token') || 
+            errorMessage.includes('expired') || 
+            errorMessage.includes('Authentication required')) {
+          // This is a real auth error - might need to handle differently
+          // But don't auto-logout - let the user continue working
+          console.warn('Authentication error detected, but not logging out automatically:', errorMessage);
+        }
+      }
+      
       throw new ApiError(response.status, error.error || 'Request failed');
     }
 
-    return await response.json();
+    const data = await response.json();
+    return data;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
     }
     throw new ApiError(500, 'Network error');
+  } finally {
+    // Stop loading
+    setGlobalLoading(false);
   }
 }
 
@@ -162,43 +198,50 @@ export const projectsApi = {
   // Files
   uploadFile: async (id: number, formData: FormData) => {
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-    let token = getItemSync('auth_token');
-    let userStr = getItemSync('user');
+    setGlobalLoading(true);
     
-    // If not in cache, try async retrieval
-    if (!token) {
-      token = await secureStorageWithCache.getItem('auth_token');
-    }
-    if (!userStr) {
-      userStr = await secureStorageWithCache.getItem('user');
-    }
-    
-    const headers: HeadersInit = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-      if (userStr) {
-        try {
-          const user = JSON.parse(userStr);
-          if (user.id) {
-            headers['user-id'] = user.id.toString();
+    try {
+      let token = getItemSync('auth_token');
+      let userStr = getItemSync('user');
+      
+      // If not in cache, try async retrieval
+      if (!token) {
+        token = await secureStorageWithCache.getItem('auth_token');
+      }
+      if (!userStr) {
+        userStr = await secureStorageWithCache.getItem('user');
+      }
+      
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            if (user.id) {
+              headers['user-id'] = user.id.toString();
+            }
+          } catch (e) {
+            console.error('Error parsing user from secure storage:', e);
           }
-        } catch (e) {
-          console.error('Error parsing user from secure storage:', e);
         }
       }
-    }
-    
-    return fetch(`${API_BASE_URL}/projects/${id}/files`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    }).then(async (response) => {
+      
+      const response = await fetch(`${API_BASE_URL}/projects/${id}/files`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
         throw new ApiError(response.status, errorData.error || 'Request failed');
       }
-      return response.json();
-    });
+      
+      return await response.json();
+    } finally {
+      setGlobalLoading(false);
+    }
   },
   getFiles: (id: number) =>
     request<{ data: any[] }>(`/projects/${id}/files`),
@@ -312,38 +355,42 @@ export const bugsApi = {
     request<{ data: any }>(`/bugs/${id}`),
   create: async (formData: FormData) => {
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-    let token = getItemSync('auth_token');
-    let userStr = getItemSync('user');
+    setGlobalLoading(true);
     
-    // If not in cache, try async retrieval
-    if (!token) {
-      token = await secureStorageWithCache.getItem('auth_token');
-    }
-    if (!userStr) {
-      userStr = await secureStorageWithCache.getItem('user');
-    }
-    
-    const headers: HeadersInit = {};
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-      if (userStr) {
-        try {
-          const user = JSON.parse(userStr);
-          if (user.id) {
-            headers['user-id'] = user.id.toString();
+    try {
+      let token = getItemSync('auth_token');
+      let userStr = getItemSync('user');
+      
+      // If not in cache, try async retrieval
+      if (!token) {
+        token = await secureStorageWithCache.getItem('auth_token');
+      }
+      if (!userStr) {
+        userStr = await secureStorageWithCache.getItem('user');
+      }
+      
+      const headers: HeadersInit = {};
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            if (user.id) {
+              headers['user-id'] = user.id.toString();
+            }
+          } catch (e) {
+            console.error('Error parsing user from secure storage:', e);
           }
-        } catch (e) {
-          console.error('Error parsing user from secure storage:', e);
         }
       }
-    }
-    
-    return fetch(`${API_BASE_URL}/bugs`, {
-      method: 'POST',
-      headers,
-      body: formData,
-    }).then(async (response) => {
+      
+      const response = await fetch(`${API_BASE_URL}/bugs`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      
       if (!response.ok) {
         let errorData;
         try {
@@ -354,8 +401,11 @@ export const bugsApi = {
         console.error('Bug creation error:', errorData);
         throw new ApiError(response.status, errorData.error || errorData.message || 'Request failed');
       }
-      return response.json();
-    });
+      
+      return await response.json();
+    } finally {
+      setGlobalLoading(false);
+    }
   },
   update: (id: number, data: any) =>
     request<{ data: any }>(`/bugs/${id}`, {
@@ -504,6 +554,11 @@ export const rolesApi = {
     request<{ data: any }>(`/roles/${id}`),
   getPermissions: (id: number) =>
     request<{ data: any[] }>(`/roles/${id}/permissions`),
+  updatePermissions: (id: number, permissions: Array<{ permission_id: number; allowed: boolean }>) =>
+    request<{ data: any[] }>(`/roles/${id}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ permissions }),
+    }),
   create: (data: any) =>
     request<{ data: any }>('/roles', {
       method: 'POST',

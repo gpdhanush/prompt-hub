@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AdminLayout } from "./components/layout/AdminLayout";
+import { LoadingProvider, useLoading } from "./contexts/LoadingContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
@@ -34,6 +35,7 @@ import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
+import { registerLoadingCallback } from "@/lib/api";
 
 const queryClient = new QueryClient();
 
@@ -66,7 +68,10 @@ function ProtectedRoute({
   return <>{children}</>;
 }
 
-const App = () => {
+// Inner app component that uses loading context
+const AppContent = () => {
+  const { setLoading } = useLoading();
+
   // Initialize secure storage on app startup
   useEffect(() => {
     initializeSecureStorage().catch(error => {
@@ -74,13 +79,14 @@ const App = () => {
     });
   }, []);
 
+  // Register loading callback for API calls
+  useEffect(() => {
+    const unregister = registerLoadingCallback(setLoading);
+    return unregister;
+  }, [setLoading]);
+
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
+    <BrowserRouter>
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
@@ -91,7 +97,7 @@ const App = () => {
               <Route 
                 path="/users" 
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Lead']}>
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Leader', 'Team Lead']}>
                     <Users />
                   </ProtectedRoute>
                 } 
@@ -99,7 +105,7 @@ const App = () => {
               <Route 
                 path="/employees" 
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Lead']}>
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Leader', 'Team Lead']}>
                     <Employees />
                   </ProtectedRoute>
                 } 
@@ -107,7 +113,7 @@ const App = () => {
               <Route 
                 path="/employees/new" 
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Lead']}>
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Leader', 'Team Lead']}>
                     <EmployeeCreate />
                   </ProtectedRoute>
                 } 
@@ -134,7 +140,7 @@ const App = () => {
               <Route 
                 path="/reports" 
                 element={
-                  <ProtectedRoute allowedRoles={['Super Admin', 'Admin', 'Team Lead']}>
+                  <ProtectedRoute allowedRoles={['Super Admin', 'Admin', 'Team Leader', 'Team Lead']}>
                     <Reports />
                   </ProtectedRoute>
                 } 
@@ -153,8 +159,21 @@ const App = () => {
             
             <Route path="*" element={<NotFound />} />
           </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+    </BrowserRouter>
+  );
+};
+
+const App = () => {
+  return (
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+      <QueryClientProvider client={queryClient}>
+        <LoadingProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <AppContent />
+          </TooltipProvider>
+        </LoadingProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

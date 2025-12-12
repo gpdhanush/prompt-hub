@@ -7,8 +7,8 @@ const router = express.Router();
 // Apply authentication to all routes
 router.use(authenticate);
 
-// Get positions for a specific role (accessible to Admin, Team Lead, and Super Admin for user creation)
-router.get('/role/:roleId', authorize('Super Admin', 'Admin', 'Team Lead'), async (req, res) => {
+// Get positions for a specific role (accessible to Admin, Team Leader, and Super Admin for user creation)
+router.get('/role/:roleId', authorize('Super Admin', 'Admin', 'Team Leader', 'Team Lead'), async (req, res) => {
   try {
     const { roleId } = req.params;
     
