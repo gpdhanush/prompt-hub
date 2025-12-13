@@ -109,6 +109,7 @@ router.post('/test', async (req, res) => {
       title: title || 'Test Notification',
       body: body || 'This is a test push notification',
       type: 'test',
+      link: '/notifications', // Add link for web push
     };
 
     const result = await sendNotificationToUser(userId, notification);
@@ -121,6 +122,56 @@ router.post('/test', async (req, res) => {
   } catch (error) {
     logger.error('Error sending test notification:', error);
     res.status(500).json({ error: error.message || 'Failed to send test notification' });
+  }
+});
+
+/**
+ * Diagnostic endpoint - Check FCM setup
+ * GET /api/fcm/diagnostic
+ */
+router.get('/diagnostic', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Check Firebase initialization
+    const { initializeFirebase } = await import('../utils/fcmService.js');
+    let firebaseStatus = 'unknown';
+    try {
+      await initializeFirebase();
+      firebaseStatus = 'initialized';
+    } catch (error) {
+      firebaseStatus = `error: ${error.message}`;
+    }
+    
+    // Get user's FCM tokens
+    const tokens = await getUserFCMTokens(userId);
+    
+    // Check service account
+    const hasServiceAccount = !!process.env.FIREBASE_SERVICE_ACCOUNT;
+    
+    res.json({
+      firebase: {
+        status: firebaseStatus,
+        hasServiceAccount,
+      },
+      tokens: {
+        count: tokens.length,
+        active: tokens.filter(t => t.is_active).length,
+        tokens: tokens.map(t => ({
+          id: t.id,
+          deviceType: t.device_type,
+          browser: t.browser,
+          isActive: t.is_active,
+          createdAt: t.created_at,
+        })),
+      },
+      user: {
+        id: userId,
+      },
+    });
+  } catch (error) {
+    logger.error('Error in FCM diagnostic:', error);
+    res.status(500).json({ error: error.message || 'Failed to run diagnostic' });
   }
 });
 

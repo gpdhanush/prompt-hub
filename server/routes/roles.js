@@ -2,6 +2,7 @@ import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 

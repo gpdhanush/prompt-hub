@@ -38,6 +38,8 @@ import RolesPermissions from "./pages/RolesPermissions";
 import Permissions from "./pages/Permissions";
 import ProfileSetup from "./pages/ProfileSetup";
 import NotFound from "./pages/NotFound";
+import MFASetup from "./pages/MFASetup";
+import MFAVerify from "./pages/MFAVerify";
 import { useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
@@ -122,6 +124,8 @@ const AppContent = () => {
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/mfa/setup" element={<MFASetup />} />
+            <Route path="/mfa/verify" element={<MFAVerify />} />
             
             {/* Protected Admin Routes */}
             <Route element={<AdminLayout />}>

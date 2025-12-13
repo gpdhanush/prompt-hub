@@ -417,13 +417,26 @@ async function decrypt(encryptedData: string): Promise<string> {
     const decoder = new TextDecoder();
     return decoder.decode(decryptedData);
   } catch (error: any) {
-    // Provide more specific error messages
-    if (error.name === 'OperationError' || error.message?.includes('decrypt')) {
-      // This might be due to key mismatch (backend restart, domain change, etc.)
-      // Don't throw immediately - let caller handle retry
+    // Check for Web Crypto API decryption errors (key mismatch, corrupted data, etc.)
+    const isDecryptionError = error.name === 'OperationError' || 
+                              error.message?.includes('decrypt') ||
+                              error.message?.includes('unable to authenticate') ||
+                              error.message?.includes('Unsupported state');
+    
+    if (isDecryptionError) {
+      // This is likely due to key mismatch (backend restart without ENCRYPTION_KEY)
+      // Don't log as error - this is expected when encryption key changes
+      // The caller will handle this gracefully
       throw new Error('Decryption failed - key may have changed. This can happen after backend restart.');
     }
-    logger.error('Decryption error:', error);
+    
+    // For other errors, log at debug level (might be corrupted data or other issues)
+    logger.debug('Decryption error:', {
+      errorName: error.name,
+      errorMessage: error.message,
+      encryptedLength: encryptedData?.length,
+    });
+    
     throw new Error('Failed to decrypt data. Data may be corrupted or from a different origin.');
   }
 }
@@ -461,12 +474,19 @@ export const secureStorage = {
     } catch (error: any) {
       // Don't clear data on decryption errors - might be temporary (backend restart, etc.)
       // Only log the error, don't remove the data
-      logger.warn(`Failed to decrypt ${key}, attempting recovery:`, error.message);
+      const isKeyChangeError = error.message?.includes('key may have changed') || 
+                               error.message?.includes('Failed to decrypt') || 
+                               error.message?.includes('corrupted');
+      
+      if (isKeyChangeError) {
+        // This is expected when encryption key changes (backend restart without ENCRYPTION_KEY)
+        logger.debug(`Cannot decrypt ${key} - encryption key may have changed. This is normal after backend restart.`);
+      } else {
+        logger.warn(`Failed to decrypt ${key}, attempting recovery:`, error.message);
+      }
       
       // Try recovery: if key derivation changed (backend restart), regenerate key
-      if (error.message?.includes('key may have changed') || 
-          error.message?.includes('Failed to decrypt') || 
-          error.message?.includes('corrupted')) {
+      if (isKeyChangeError) {
         try {
           // Force re-derivation of encryption key by clearing wrapped key
           const obfuscatedMasterKey = await getObfuscatedKeyName(MASTER_KEY_STORAGE);
@@ -480,17 +500,24 @@ export const secureStorage = {
             const obfuscatedKey = await getObfuscatedKeyName(key);
             const encrypted = localStorage.getItem(obfuscatedKey);
             if (encrypted) {
-              return await decrypt(encrypted);
+              try {
+                return await decrypt(encrypted);
+              } catch (retryError) {
+                // If retry also fails, the data is truly incompatible with new key
+                logger.debug(`Recovery failed for ${key} - data encrypted with different key. User will need to login again.`);
+              }
             }
           }
         } catch (retryError) {
-          logger.error(`Recovery attempt failed for ${key}:`, retryError);
+          // Silently handle recovery failures - this is expected when key changes
+          logger.debug(`Recovery attempt failed for ${key} - this is normal when encryption key changes`);
         }
       }
       
       // If all recovery attempts fail, return null but don't clear data
       // The data is still there, just can't decrypt it right now
       // This prevents logout on temporary backend issues
+      // User will need to login again if key truly changed
       return null;
     }
   },
@@ -613,9 +640,14 @@ export async function initializeSecureStorage(): Promise<void> {
           if (value) {
             decryptedCache.set(key, value);
           }
-        } catch (e) {
+        } catch (e: any) {
           // Continue if key doesn't exist or fails to decrypt
-          logger.warn(`Failed to load ${key} during initialization:`, e);
+          // This is expected when encryption key changes (backend restart)
+          if (e.message?.includes('key may have changed')) {
+            logger.debug(`Cannot decrypt ${key} during initialization - encryption key changed. User will need to login.`);
+          } else {
+            logger.debug(`Failed to load ${key} during initialization (may not exist):`, e.message);
+          }
         }
       }
       
@@ -704,4 +736,32 @@ export async function rotateEncryptionKey(): Promise<void> {
   keyMappingCache = null;
   // Force key derivation to generate a new key
   await deriveKey();
+}
+
+/**
+ * Clears all encrypted data that cannot be decrypted (e.g., after encryption key change)
+ * This is useful when the backend encryption key has changed and old data is no longer accessible
+ * WARNING: This will clear all encrypted data including auth tokens - user will need to login again
+ */
+export async function clearInvalidEncryptedData(): Promise<void> {
+  logger.info('Clearing invalid encrypted data (encryption key may have changed)');
+  
+  // Clear all secure storage
+  await secureStorage.clear();
+  
+  // Clear the wrapped key
+  const obfuscatedMasterKey = await getObfuscatedKeyName(MASTER_KEY_STORAGE);
+  localStorage.removeItem(obfuscatedMasterKey);
+  
+  // Clear cache
+  decryptedCache.clear();
+  
+  // Clear key mapping cache
+  keyMappingCache = null;
+  
+  // Reset initialization state
+  isInitialized = false;
+  initializationPromise = null;
+  
+  logger.info('Invalid encrypted data cleared. User will need to login again.');
 }

@@ -4,13 +4,12 @@
  * In production, logs are suppressed to prevent exposing sensitive information
  */
 
-import { SERVER_CONFIG } from '../config/config.js';
-
 /**
  * Check if logging is enabled (only in development)
+ * Uses process.env directly to avoid circular dependency with config.js
  */
 function shouldLog() {
-  return SERVER_CONFIG.NODE_ENV === 'development';
+  return process.env.NODE_ENV === 'development';
 }
 
 /**

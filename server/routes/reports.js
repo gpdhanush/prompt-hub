@@ -345,6 +345,142 @@ router.get('/top-performer', async (req, res) => {
   }
 });
 
+// Get leave report
+router.get('/leaves', async (req, res) => {
+  try {
+    const { month, year, search, status, page = 1, limit = 10 } = req.query;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+    const offset = (pageNum - 1) * limitNum;
+    
+    // Build date filter for month/year
+    let dateFilter = '';
+    const params = [];
+    
+    if (month && year) {
+      dateFilter = 'AND YEAR(l.start_date) = ? AND MONTH(l.start_date) = ?';
+      params.push(parseInt(year), parseInt(month));
+    } else if (year) {
+      dateFilter = 'AND YEAR(l.start_date) = ?';
+      params.push(parseInt(year));
+    }
+    
+    // Build status filter
+    if (status && status !== 'all') {
+      dateFilter += (dateFilter ? ' AND ' : 'AND ') + 'l.status = ?';
+      params.push(status);
+    }
+    
+    // Build search filter (by employee name)
+    let searchFilter = '';
+    if (search) {
+      searchFilter = 'AND (u.name LIKE ? OR u.email LIKE ? OR e.emp_code LIKE ?)';
+      const searchTerm = `%${search}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+    
+    // Role-based access control
+    let accessFilter = '';
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
+      const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
+      if (employeeData.length === 0) {
+        return res.json({ 
+          data: [], 
+          pagination: { page: pageNum, limit: limitNum, total: 0, totalPages: 0 },
+          summary: {
+            total_leaves: 0,
+            approved: 0,
+            pending: 0,
+            rejected: 0,
+            cancelled: 0,
+            total_days: 0
+          }
+        });
+      }
+      accessFilter = 'AND l.employee_id = ?';
+      params.push(employeeData[0].id);
+    }
+    
+    // Base query for counting and data
+    const baseQuery = `
+      FROM leaves l
+      INNER JOIN employees e ON l.employee_id = e.id
+      INNER JOIN users u ON e.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN users approver ON l.approved_by = approver.id
+      WHERE 1=1 ${dateFilter} ${searchFilter} ${accessFilter}
+    `;
+    
+    // Count total records
+    const countQuery = `SELECT COUNT(*) as total ${baseQuery}`;
+    const [countResult] = await db.query(countQuery, params);
+    const total = countResult[0]?.total || 0;
+    const totalPages = Math.ceil(total / limitNum);
+    
+    // Get paginated data
+    const dataQuery = `
+      SELECT 
+        l.id,
+        l.leave_type,
+        l.start_date,
+        l.end_date,
+        l.duration,
+        l.reason,
+        l.status,
+        l.applied_at,
+        l.approved_at,
+        u.name as employee_name,
+        u.email as employee_email,
+        e.emp_code,
+        approver.name as approved_by_name,
+        r.name as employee_role
+      ${baseQuery}
+      ORDER BY l.start_date DESC, l.created_at DESC
+      LIMIT ? OFFSET ?
+    `;
+    
+    const [leaves] = await db.query(dataQuery, [...params, limitNum, offset]);
+    
+    // Get summary statistics (all records, not just current page)
+    const summaryQuery = `
+      SELECT 
+        COUNT(*) as total_leaves,
+        SUM(CASE WHEN l.status = 'Approved' THEN 1 ELSE 0 END) as approved,
+        SUM(CASE WHEN l.status = 'Pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN l.status = 'Rejected' THEN 1 ELSE 0 END) as rejected,
+        SUM(CASE WHEN l.status = 'Cancelled' THEN 1 ELSE 0 END) as cancelled,
+        SUM(l.duration) as total_days
+      ${baseQuery}
+    `;
+    
+    const [summary] = await db.query(summaryQuery, params);
+    
+    res.json({
+      data: leaves,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: total,
+        totalPages: totalPages
+      },
+      summary: summary[0] || {
+        total_leaves: 0,
+        approved: 0,
+        pending: 0,
+        rejected: 0,
+        cancelled: 0,
+        total_days: 0
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching leave report:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Dashboard stats endpoint
 router.get('/dashboard', async (req, res) => {
   try {

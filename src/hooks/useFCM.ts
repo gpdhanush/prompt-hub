@@ -24,7 +24,12 @@ export function useFCM() {
     const initializeFCM = async () => {
       try {
         // Initialize Firebase
-        initializeFirebase();
+        const firebaseApp = initializeFirebase();
+        if (!firebaseApp) {
+          logger.warn('⚠️  Firebase not initialized. Check your .env configuration.');
+          setIsLoading(false);
+          return;
+        }
 
         // Check notification permission
         if ('Notification' in window) {

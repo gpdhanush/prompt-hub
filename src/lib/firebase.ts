@@ -19,6 +19,29 @@ const firebaseConfig = {
 // VAPID key for web push (get from Firebase Console > Project Settings > Cloud Messaging > Web Push certificates)
 const vapidKey = FIREBASE_CONFIG.VAPID_KEY;
 
+// Validate Firebase configuration
+function validateFirebaseConfig(): boolean {
+  const requiredFields = [
+    { key: 'API_KEY', value: FIREBASE_CONFIG.API_KEY },
+    { key: 'AUTH_DOMAIN', value: FIREBASE_CONFIG.AUTH_DOMAIN },
+    { key: 'PROJECT_ID', value: FIREBASE_CONFIG.PROJECT_ID },
+    { key: 'STORAGE_BUCKET', value: FIREBASE_CONFIG.STORAGE_BUCKET },
+    { key: 'MESSAGING_SENDER_ID', value: FIREBASE_CONFIG.MESSAGING_SENDER_ID },
+    { key: 'APP_ID', value: FIREBASE_CONFIG.APP_ID },
+  ];
+
+  const missing = requiredFields.filter(field => !field.value || field.value === '');
+  
+  if (missing.length > 0) {
+    const missingKeys = missing.map(f => `VITE_FIREBASE_${f.key}`).join(', ');
+    logger.error(`❌ Missing required Firebase configuration: ${missingKeys}`);
+    logger.error('Please set these values in your .env file');
+    return false;
+  }
+
+  return true;
+}
+
 // Warn if VAPID key is not set
 if (!vapidKey && ENV_CONFIG.IS_DEV) {
   logger.warn('⚠️  VAPID key not set! Push notifications will not work. Set VITE_FIREBASE_VAPID_KEY in .env file');
@@ -29,18 +52,30 @@ let messaging: Messaging | null = null;
 let analytics: Analytics | null = null;
 
 // Initialize Firebase
-export function initializeFirebase(): FirebaseApp {
+export function initializeFirebase(): FirebaseApp | null {
+  // Validate configuration before initializing
+  if (!validateFirebaseConfig()) {
+    logger.error('❌ Cannot initialize Firebase: Missing required configuration values');
+    return null;
+  }
+
   if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
+    try {
+      app = initializeApp(firebaseConfig);
     
-    // Initialize Analytics (only in browser environment)
-    if (typeof window !== 'undefined' && FIREBASE_CONFIG.MEASUREMENT_ID) {
-      try {
-        analytics = getAnalytics(app);
-        logger.info('✅ Firebase Analytics initialized');
-      } catch (error) {
-        logger.error('Failed to initialize Firebase Analytics:', error);
+      // Initialize Analytics (only in browser environment)
+      if (typeof window !== 'undefined' && FIREBASE_CONFIG.MEASUREMENT_ID) {
+        try {
+          analytics = getAnalytics(app);
+          logger.info('✅ Firebase Analytics initialized');
+        } catch (error) {
+          logger.error('Failed to initialize Firebase Analytics:', error);
+        }
       }
+    } catch (error: any) {
+      logger.error('❌ Failed to initialize Firebase:', error.message || error);
+      logError(error instanceof Error ? error : new Error(String(error)), { source: 'initializeFirebase' });
+      return null;
     }
   } else {
     app = getApps()[0];
@@ -128,6 +163,10 @@ export function logError(error: Error | string, context?: Record<string, any>): 
 export async function getFirebaseMessaging(): Promise<Messaging | null> {
   if (!app) {
     app = initializeFirebase();
+    if (!app) {
+      logger.error('❌ Cannot get Firebase Messaging: Firebase app not initialized');
+      return null;
+    }
   }
 
   // Check if messaging is supported
@@ -138,7 +177,13 @@ export async function getFirebaseMessaging(): Promise<Messaging | null> {
   }
 
   if (!messaging) {
-    messaging = getMessaging(app);
+    try {
+      messaging = getMessaging(app);
+    } catch (error: any) {
+      logger.error('❌ Failed to get Firebase Messaging:', error.message || error);
+      logError(error instanceof Error ? error : new Error(String(error)), { source: 'getFirebaseMessaging' });
+      return null;
+    }
   }
 
   return messaging;

@@ -18,8 +18,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Key, Copy, AlertCircle, Clock, Lock, CheckCircle2, XCircle, Timer } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
+import { mfaApi, authApi } from "@/lib/api";
+import { useNavigate } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 const themeColors = [
   { name: "Blue", value: "217 91% 60%", class: "blue" },
@@ -48,10 +52,11 @@ const permissionModules = [
 export default function Settings() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [mfaEnabled, setMfaEnabled] = useState(true);
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [selectedColor, setSelectedColor] = useState("217 91% 60%");
-  const [sessionTimeout, setSessionTimeout] = useState("30");
+  const [sessionTimeout, setSessionTimeout] = useState(30);
+  const [isSavingTimeout, setIsSavingTimeout] = useState(false);
+  const navigate = useNavigate();
 
   // Get current user info
   const currentUser = getCurrentUser();
@@ -60,11 +65,63 @@ export default function Settings() {
 
   const queryClient = useQueryClient();
 
+  // Fetch MFA status
+  const { data: mfaStatus, isLoading: isLoadingMfa, refetch: refetchMfa } = useQuery({
+    queryKey: ['mfa-status'],
+    queryFn: () => mfaApi.getStatus(),
+  });
+
+  const mfaEnabled = mfaStatus?.mfaEnabled || false;
+  const mfaRequired = mfaStatus?.mfaRequired || false;
+  const enforcedByAdmin = mfaStatus?.enforcedByAdmin || false;
+
+  // Disable MFA mutation
+  const disableMfaMutation = useMutation({
+    mutationFn: (password?: string) => mfaApi.disable(password),
+    onSuccess: () => {
+      refetchMfa();
+      toast({ title: "Success", description: "MFA has been disabled successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to disable MFA.", variant: "destructive" });
+    },
+  });
+
+  // Regenerate backup codes mutation
+  const regenerateBackupCodesMutation = useMutation({
+    mutationFn: () => mfaApi.regenerateBackupCodes(),
+    onSuccess: (data) => {
+      toast({ 
+        title: "Backup Codes Regenerated", 
+        description: "Your backup codes have been regenerated. Please save them in a safe place.",
+      });
+      // Show backup codes in a dialog or alert
+      const codesText = data.backupCodes.join('\n');
+      alert(`Your new backup codes:\n\n${codesText}\n\nPlease save these codes in a safe place.`);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to regenerate backup codes.", variant: "destructive" });
+    },
+  });
+
   // Fetch settings from database
   const { data: settingsData, isLoading: isLoadingSettings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => settingsApi.get(),
   });
+
+  // Fetch user profile to get session timeout
+  const { data: userProfile, refetch: refetchUserProfile } = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: () => authApi.getMe(),
+  });
+
+  // Update session timeout when user profile loads
+  useEffect(() => {
+    if (userProfile?.data?.session_timeout) {
+      setSessionTimeout(userProfile.data.session_timeout);
+    }
+  }, [userProfile]);
 
   // Currency symbol from database
   const [currencySymbol, setCurrencySymbol] = useState('$');
@@ -100,9 +157,6 @@ export default function Settings() {
     if (primaryColor) {
       setSelectedColor(primaryColor);
     }
-    // Load saved settings
-    const savedSessionTimeout = localStorage.getItem('session_timeout');
-    if (savedSessionTimeout) setSessionTimeout(savedSessionTimeout);
   }, []);
 
   const handleColorChange = (colorValue: string) => {
@@ -124,9 +178,33 @@ export default function Settings() {
     updateSettingsMutation.mutate({ currency_symbol: symbol });
   };
 
-  const handleSaveSecurity = () => {
-    localStorage.setItem('session_timeout', sessionTimeout);
-    toast({ title: "Success", description: "Security settings saved successfully." });
+  // Save session timeout mutation
+  const saveSessionTimeoutMutation = useMutation({
+    mutationFn: (timeout: number) => authApi.updateProfile({ session_timeout: timeout }),
+    onSuccess: () => {
+      refetchUserProfile();
+      queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+      toast({ title: "Success", description: "Session timeout updated successfully." });
+      setIsSavingTimeout(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update session timeout.", variant: "destructive" });
+      setIsSavingTimeout(false);
+    },
+  });
+
+  const handleSaveSessionTimeout = () => {
+    const timeout = parseInt(String(sessionTimeout));
+    if (isNaN(timeout) || timeout < 1 || timeout > 1440) {
+      toast({ 
+        title: "Invalid Timeout", 
+        description: "Session timeout must be between 1 and 1440 minutes.",
+        variant: "destructive" 
+      });
+      return;
+    }
+    setIsSavingTimeout(true);
+    saveSessionTimeoutMutation.mutate(timeout);
   };
 
   const handleSaveOrganization = () => {
@@ -296,40 +374,233 @@ export default function Settings() {
         )}
 
         <TabsContent value="security" className="space-y-6">
-          <Card className="glass-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Security Settings
-              </CardTitle>
-              <CardDescription>Configure security options</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>MFA for Super Admin</Label>
-                  <p className="text-xs text-muted-foreground">Require multi-factor authentication</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* MFA Section */}
+            <Card className="glass-card border-2">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Shield className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle>Multi-Factor Authentication</CardTitle>
+                      <CardDescription>Add an extra layer of security to your account</CardDescription>
+                    </div>
+                  </div>
+                  {!isLoadingMfa && (
+                    <Badge variant={mfaEnabled ? "default" : "secondary"} className="text-sm px-3 py-1">
+                      {mfaEnabled ? (
+                        <>
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Enabled
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Disabled
+                        </>
+                      )}
+                    </Badge>
+                  )}
                 </div>
-                <Switch checked={mfaEnabled} onCheckedChange={setMfaEnabled} />
-              </div>
-              <Separator />
-              <div className="grid gap-2">
-                <Label>Session Timeout (minutes)</Label>
-                <Input 
-                  type="number" 
-                  value={sessionTimeout}
-                  onChange={(e) => setSessionTimeout(e.target.value)}
-                  className="w-32" 
-                  min="5"
-                  max="1440"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Users will be logged out after this period of inactivity (5-1440 minutes)
-                </p>
-              </div>
-              <Button onClick={handleSaveSecurity}>Save Security Settings</Button>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {isLoadingMfa ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <>
+                    {mfaRequired && (
+                      <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                        <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <AlertDescription className="text-amber-800 dark:text-amber-200">
+                          MFA is required for your role ({userRole}) and cannot be disabled.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {mfaEnabled ? (
+                      <div className="space-y-3">
+                        <div className="p-4 rounded-lg bg-muted/50 border">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">Status</span>
+                            <Badge variant="default" className="bg-status-success">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Active
+                            </Badge>
+                          </div>
+                          {mfaStatus?.mfaVerifiedAt && (
+                            <p className="text-xs text-muted-foreground">
+                              Last verified: {new Date(mfaStatus.mfaVerifiedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => navigate("/mfa/setup")}
+                            className="w-full"
+                          >
+                            <Shield className="mr-2 h-4 w-4" />
+                            Reconfigure MFA
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => regenerateBackupCodesMutation.mutate()}
+                            disabled={regenerateBackupCodesMutation.isPending}
+                            className="w-full"
+                          >
+                            <Key className="mr-2 h-4 w-4" />
+                            {regenerateBackupCodesMutation.isPending ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Regenerating...
+                              </>
+                            ) : (
+                              "Backup Codes"
+                            )}
+                          </Button>
+                        </div>
+                        
+                        {!mfaRequired && (
+                          <Button
+                            variant="destructive"
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  "Are you sure you want to disable MFA? This will make your account less secure."
+                                )
+                              ) {
+                                disableMfaMutation.mutate(undefined);
+                              }
+                            }}
+                            disabled={disableMfaMutation.isPending}
+                            className="w-full"
+                          >
+                            {disableMfaMutation.isPending ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Disabling...
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Disable MFA
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="p-6 rounded-xl bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 border-2 border-primary/20 dark:from-primary/10 dark:via-primary/20 dark:to-primary/10 dark:border-primary/30 shadow-sm">
+                          <div className="flex flex-col items-center text-center space-y-4">
+                            <div className="p-3 rounded-full bg-primary/20 dark:bg-primary/30">
+                              <Shield className="h-6 w-6 text-primary" />
+                            </div>
+                            <div className="space-y-2">
+                              <h3 className="font-semibold text-base">Enable Multi-Factor Authentication</h3>
+                              <p className="text-sm text-muted-foreground max-w-sm">
+                                Protect your account with two-factor authentication. You'll need an authenticator app like Google Authenticator or Authy.
+                              </p>
+                            </div>
+                            <Button
+                              onClick={() => navigate("/mfa/setup")}
+                              className="w-full mt-2"
+                              size="lg"
+                            >
+                              <Shield className="mr-2 h-4 w-4" />
+                              Set Up MFA
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Session Timeout Section */}
+            <Card className="glass-card border-2">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Timer className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle>Session Timeout</CardTitle>
+                    <CardDescription>Configure automatic logout after inactivity</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 rounded-lg bg-muted/50 border">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-base font-semibold">Inactivity Timeout</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically log out after this period of inactivity
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <div className="relative">
+                        <Input 
+                          type="number" 
+                          value={sessionTimeout}
+                          onChange={(e) => setSessionTimeout(parseInt(e.target.value) || 30)}
+                          className="w-32 text-center font-semibold text-lg pr-12" 
+                          min="1"
+                          max="1440"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                          min
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <span className="text-center">
+                        {sessionTimeout < 60 
+                          ? `${sessionTimeout} minute${sessionTimeout !== 1 ? 's' : ''}`
+                          : `${Math.floor(sessionTimeout / 60)} hour${Math.floor(sessionTimeout / 60) !== 1 ? 's' : ''} ${sessionTimeout % 60 > 0 ? `${sessionTimeout % 60} minute${sessionTimeout % 60 !== 1 ? 's' : ''}` : ''}`
+                        } of inactivity
+                      </span>
+                    </div>
+
+                    <div className="pt-2">
+                      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                        <Lock className="h-3 w-3" />
+                        <span>Range: 1 - 1440 minutes (1 day)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={handleSaveSessionTimeout}
+                  disabled={isSavingTimeout || saveSessionTimeoutMutation.isPending}
+                  className="w-full"
+                >
+                  {isSavingTimeout || saveSessionTimeoutMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Save Session Timeout
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-6">

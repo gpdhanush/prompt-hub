@@ -220,6 +220,12 @@ export async function sendMulticastNotification(fcmTokens, notification, data = 
  */
 export async function sendNotificationToUser(userId, notification, data = {}) {
   try {
+    // Check if Firebase is initialized
+    if (!firebaseInitialized) {
+      logger.warn('⚠️  Firebase not initialized. Cannot send push notification.');
+      return { success: false, message: 'Firebase not initialized' };
+    }
+
     // Get all active FCM tokens for the user
     const [tokens] = await db.query(
       'SELECT token FROM fcm_tokens WHERE user_id = ? AND is_active = TRUE',
@@ -231,15 +237,26 @@ export async function sendNotificationToUser(userId, notification, data = {}) {
       return { success: false, message: 'No active tokens found' };
     }
 
+    logger.debug(`📤 Sending notification to user ${userId} with ${tokens.length} token(s)`);
     const fcmTokens = tokens.map(t => t.token);
     
+    let result;
     if (fcmTokens.length === 1) {
-      return await sendPushNotification(fcmTokens[0], notification, data);
+      result = await sendPushNotification(fcmTokens[0], notification, data);
     } else {
-      return await sendMulticastNotification(fcmTokens, notification, data);
+      result = await sendMulticastNotification(fcmTokens, notification, data);
     }
+    
+    logger.info(`✅ Notification sent to user ${userId}:`, result);
+    return result;
   } catch (error) {
     logger.error('❌ Error sending notification to user:', error);
+    logger.error('Error details:', {
+      userId,
+      notificationType: notification.type,
+      errorCode: error.code,
+      errorMessage: error.message,
+    });
     throw error;
   }
 }

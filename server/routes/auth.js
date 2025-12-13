@@ -1,5 +1,6 @@
 import express from 'express';
 import { db } from '../config/database.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -40,6 +41,41 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
+    // Check MFA requirements
+    const [mfaSettings] = await db.query(`
+      SELECT mfa_required, enforced_by_admin
+      FROM mfa_role_settings
+      WHERE role_id = ?
+    `, [user.role_id]);
+    
+    const mfaRequired = mfaSettings.length > 0 && mfaSettings[0].mfa_required === 1;
+    const mfaEnabled = user.mfa_enabled === 1;
+    
+    // If MFA is required but not enabled, force setup
+    if (mfaRequired && !mfaEnabled) {
+      return res.status(403).json({
+        error: 'MFA is required for your role. Please set up MFA first.',
+        requiresMfaSetup: true,
+        userId: user.id,
+      });
+    }
+    
+    // If MFA is enabled, require verification
+    if (mfaEnabled) {
+      // Generate temporary session token for MFA verification
+      const sessionToken = `mfa-session-${user.id}-${Date.now()}`;
+      
+      // Store session token temporarily (in production, use Redis or similar)
+      // For now, we'll return it and verify it in the MFA route
+      
+      return res.json({
+        requiresMfa: true,
+        userId: user.id,
+        sessionToken,
+        message: 'MFA verification required',
+      });
+    }
+    
     // Update last login
     await db.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
     
@@ -56,6 +92,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
+    logger.error('Login error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -79,6 +116,7 @@ router.get('/me', async (req, res) => {
     
     res.json({ data: users[0] });
   } catch (error) {
+    logger.error('Error getting current user:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -92,7 +130,7 @@ router.put('/me/profile', async (req, res) => {
       return res.status(401).json({ error: 'User ID not provided' });
     }
     
-    const { name, email, mobile, password, oldPassword } = req.body;
+    const { name, email, mobile, password, oldPassword, session_timeout } = req.body;
     
     // If password is being updated, validate old password first
     if (password) {
@@ -135,6 +173,15 @@ router.put('/me/profile', async (req, res) => {
       updates.push('password_hash = ?');
       params.push(passwordHash);
     }
+    if (session_timeout !== undefined) {
+      // Validate session timeout (1-1440 minutes)
+      const timeout = parseInt(session_timeout);
+      if (isNaN(timeout) || timeout < 1 || timeout > 1440) {
+        return res.status(400).json({ error: 'Session timeout must be between 1 and 1440 minutes' });
+      }
+      updates.push('session_timeout = ?');
+      params.push(timeout);
+    }
     
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -159,6 +206,7 @@ router.put('/me/profile', async (req, res) => {
     
     res.json({ data: updatedUser[0] });
   } catch (error) {
+    logger.error('Error updating user profile:', error);
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(400).json({ error: 'Email already exists' });
     }
@@ -212,6 +260,7 @@ router.get('/me/permissions', async (req, res) => {
       data: permissions.map((p) => p.code) 
     });
   } catch (error) {
+    logger.error('Error getting user permissions:', error);
     res.status(500).json({ error: error.message });
   }
 });

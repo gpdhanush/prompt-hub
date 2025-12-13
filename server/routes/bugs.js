@@ -3,6 +3,7 @@ import { db } from '../config/database.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyBugAssigned, notifyBugStatusUpdated, notifyBugComment } from '../utils/notificationService.js';
+import { logger } from '../utils/logger.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';

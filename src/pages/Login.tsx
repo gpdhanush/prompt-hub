@@ -41,6 +41,30 @@ export default function Login() {
       // Production mode: Real login API call
       const response = await authApi.login(email, password);
       
+      // Check if MFA is required
+      if (response.requiresMfaSetup) {
+        toast({
+          title: "MFA Setup Required",
+          description: "MFA is required for your role. Please set it up now.",
+        });
+        navigate("/mfa/setup", { state: { userId: response.userId } });
+        return;
+      }
+      
+      if (response.requiresMfa) {
+        toast({
+          title: "MFA Verification Required",
+          description: "Please verify your MFA code to continue.",
+        });
+        navigate("/mfa/verify", {
+          state: {
+            userId: response.userId,
+            sessionToken: response.sessionToken,
+          },
+        });
+        return;
+      }
+      
       // Store token and user info securely (encrypted)
       await secureStorageWithCache.setItem('auth_token', response.token);
       await secureStorageWithCache.setItem('user', JSON.stringify(response.user));

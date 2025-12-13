@@ -3,10 +3,13 @@ import { useState, useEffect } from "react";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminHeader } from "./AdminHeader";
 import { isAuthenticated, getCurrentUserAsync, getAuthTokenAsync } from "@/lib/auth";
-import { initializeSecureStorage } from "@/lib/secureStorage";
+import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
 import { Loader2 } from "lucide-react";
 import { useFCM } from "@/hooks/useFCM";
 import { logger } from "@/lib/logger";
+import { useIdleTimeout } from "@/hooks/useIdleTimeout";
+import { useQuery } from "@tanstack/react-query";
+import { authApi } from "@/lib/api";
 
 export function AdminLayout() {
   const [isLoading, setIsLoading] = useState(true);
@@ -14,6 +17,22 @@ export function AdminLayout() {
   
   // Initialize FCM for push notifications (only for authenticated users)
   const { permission, requestPermission, isRegistered } = useFCM();
+
+  // Fetch user profile to get session timeout
+  const { data: userProfile } = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: () => authApi.getMe(),
+    enabled: isAuth,
+    refetchOnWindowFocus: false,
+  });
+
+  const sessionTimeout = userProfile?.data?.session_timeout || 30; // Default 30 minutes
+
+  // Setup idle timeout
+  useIdleTimeout({
+    timeoutMinutes: sessionTimeout,
+    enabled: isAuth && sessionTimeout > 0,
+  });
 
   useEffect(() => {
     // Register service worker for push notifications

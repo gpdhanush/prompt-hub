@@ -538,7 +538,7 @@ export const reimbursementsApi = {
 // Auth API
 export const authApi = {
   login: (email: string, password: string) =>
-    request<{ token: string; user: any }>('/auth/login', {
+    request<{ token: string; user: any; requiresMfa?: boolean; userId?: number; sessionToken?: string; requiresMfaSetup?: boolean }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -546,10 +546,46 @@ export const authApi = {
     request<{ data: any }>('/auth/me'),
   getPermissions: () =>
     request<{ data: string[] }>('/auth/me/permissions'),
-  updateProfile: (data: { name?: string; email?: string; mobile?: string; password?: string; oldPassword?: string }) =>
+  updateProfile: (data: { name?: string; email?: string; mobile?: string; password?: string; oldPassword?: string; session_timeout?: number }) =>
     request<{ data: any }>('/auth/me/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
+    }),
+};
+
+// MFA API
+export const mfaApi = {
+  setup: () =>
+    request<{ secret: string; qrCode: string; backupCodes: string[]; manualEntryKey: string }>('/mfa/setup', {
+      method: 'POST',
+    }),
+  verifySetup: (code: string, backupCode?: string) =>
+    request<{ success: boolean; message: string }>('/mfa/verify-setup', {
+      method: 'POST',
+      body: JSON.stringify({ code, backupCode }),
+    }),
+  verify: (userId: number, code: string, backupCode?: string, sessionToken?: string) =>
+    request<{ success: boolean; token: string; user: any }>('/mfa/verify', {
+      method: 'POST',
+      body: JSON.stringify({ userId, code, backupCode, sessionToken }),
+    }),
+  disable: (password?: string) =>
+    request<{ success: boolean; message: string }>('/mfa/disable', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+  getStatus: () =>
+    request<{ mfaEnabled: boolean; mfaRequired: boolean; enforcedByAdmin: boolean; mfaVerifiedAt: string | null; role: string }>('/mfa/status'),
+  regenerateBackupCodes: () =>
+    request<{ backupCodes: string[] }>('/mfa/regenerate-backup-codes', {
+      method: 'POST',
+    }),
+  getEnforcement: () =>
+    request<{ data: any[] }>('/mfa/enforcement'),
+  updateEnforcement: (roleId: number, mfaRequired: boolean, enforcedByAdmin: boolean) =>
+    request<{ success: boolean; message: string }>(`/mfa/enforcement/${roleId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ mfa_required: mfaRequired, enforced_by_admin: enforcedByAdmin }),
     }),
 };
 
@@ -567,6 +603,18 @@ export const reportsApi = {
     request<{ data: any[] }>('/reports/projects'),
   getTopPerformer: (params?: { period?: string }) =>
     request<{ data: any }>(`/reports/top-performer?${new URLSearchParams(params as any).toString()}`),
+  getLeaveReport: (params?: { month?: number; year?: number; search?: string; status?: string; page?: number; limit?: number }) => {
+    const cleanParams: any = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof typeof params];
+        if (value !== undefined && value !== null && value !== '') {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    return request<{ data: any[]; summary: any; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/reports/leaves?${new URLSearchParams(cleanParams as any).toString()}`);
+  },
 };
 
 // Notifications API
