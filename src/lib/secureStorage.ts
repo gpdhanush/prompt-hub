@@ -328,7 +328,8 @@ async function deriveKey(): Promise<CryptoKey> {
       return await unwrapEncryptionKey(wrappedKeyStorage, masterKey);
     } catch (error) {
       // If unwrapping fails, generate a new key (master key may have changed)
-      logger.warn('Failed to unwrap encryption key, generating new one');
+      // This is expected on first run or after clearing browser data
+      logger.debug('Failed to unwrap encryption key, generating new one (this is normal on first run)');
       localStorage.removeItem(obfuscatedMasterKey);
     }
   }

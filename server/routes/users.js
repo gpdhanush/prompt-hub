@@ -4,6 +4,7 @@ import { authenticate, canManageUsers, requireSuperAdmin, canAccessUserManagemen
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyUserUpdated } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
+import { validateUserCreation, getAvailablePositions } from '../utils/positionValidation.js';
 
 const router = express.Router();
 
@@ -43,6 +44,22 @@ router.get('/assignable', async (req, res) => {
 
 // Restrict access to Users page - only Admin, Super Admin, and Team Lead can view
 router.use(canAccessUserManagement);
+
+// Get available positions for current user (filtered by hierarchy)
+router.get('/available-positions', async (req, res) => {
+  try {
+    const creatorUserId = req.user?.id;
+    if (!creatorUserId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    
+    const availablePositions = await getAvailablePositions(creatorUserId);
+    res.json({ data: availablePositions });
+  } catch (error) {
+    logger.error('Error getting available positions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Get all users with pagination
 router.get('/', async (req, res) => {
@@ -255,7 +272,7 @@ router.post('/', canManageUsers, async (req, res) => {
     const [roleInfo] = await db.query('SELECT reporting_person_role_id FROM roles WHERE id = ?', [roleId]);
     const reportingPersonRoleId = roleInfo[0]?.reporting_person_role_id || null;
     
-    // Get position_id if provided
+    // Get position_id if provided - validate position hierarchy
     let positionId = null;
     if (position) {
       // Map frontend position values to database position names
@@ -272,9 +289,17 @@ router.post('/', canManageUsers, async (req, res) => {
       if (positions.length > 0) {
         positionId = positions[0].id;
       } else {
-        // If position doesn't exist, create it
-        const [newPosition] = await db.query('INSERT INTO positions (name) VALUES (?)', [dbPositionName]);
-        positionId = newPosition.insertId;
+        // If position doesn't exist, return error (don't auto-create)
+        return res.status(400).json({ error: `Position "${dbPositionName}" not found. Please select a valid position.` });
+      }
+      
+      // Validate position hierarchy - check if creator can create user with this position
+      const creatorUserId = req.user?.id;
+      if (creatorUserId && positionId) {
+        const validation = await validateUserCreation(creatorUserId, positionId);
+        if (!validation.valid) {
+          return res.status(403).json({ error: validation.error });
+        }
       }
     }
     

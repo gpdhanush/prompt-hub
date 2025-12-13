@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ImageUploadCrop } from "@/components/ui/image-upload-crop";
-import { employeesApi, usersApi, rolesApi } from "@/lib/api";
+import { employeesApi, usersApi, rolesApi, positionsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
 import { Loader2 } from "lucide-react";
@@ -52,6 +52,7 @@ export default function EmployeeEdit() {
     // Employee basic info
     empCode: "",
     role: "",
+    position: "",
     teamLeadId: "",
     date_of_joining: "",
     employee_status: "Active",
@@ -100,56 +101,96 @@ export default function EmployeeEdit() {
     queryFn: () => rolesApi.getAll(),
   });
 
+  // Fetch available positions (filtered by hierarchy)
+  const { data: positionsData } = useQuery({
+    queryKey: ['available-positions'],
+    queryFn: () => employeesApi.getAvailablePositions(),
+  });
+
   const allUsers = usersData?.data || [];
   const allRoles = rolesData?.data || [];
+  const availablePositions = positionsData?.data || [];
   
   // Filter out Super Admin users if current user is not Super Admin
+  // Get Super Admin role name from database
+  const superAdminRole = allRoles.find((r: any) => 
+    r.name === 'Super Admin' || r.name === 'SuperAdmin' || r.name === 'Super Administrator'
+  );
+  const superAdminRoleName = superAdminRole?.name || 'Super Admin';
+  
   const filteredUsers = isSuperAdmin 
     ? allUsers 
-    : allUsers.filter((user: any) => user.role !== 'Super Admin');
+    : allUsers.filter((user: any) => user.role !== superAdminRoleName);
   
-  // Filter roles based on current user's role
-  // Team Leaders cannot create Super Admin or Admin roles (they are higher roles)
+  // Filter roles based on current user's role and hierarchy
+  // Get manager roles from database (reuse superAdminRole already declared above)
+  
+  const managerRoles = allRoles.filter((r: any) => {
+    const managerNames = ['Admin', 'Team Lead', 'Team Leader', 'Manager', 'Accounts Manager', 'Office Manager', 'HR Manager'];
+    return managerNames.includes(r.name);
+  }).map((r: any) => r.name);
+  
   const availableRoles = isTeamLeader
-    ? allRoles.filter((role: any) => role.name !== 'Super Admin' && role.name !== 'Admin')
+    ? allRoles.filter((role: any) => 
+        role.name !== superAdminRoleName && 
+        !managerRoles.includes(role.name)
+      )
     : allRoles;
   
   // Get available reporting managers based on selected role and current user
-  // Super Admin creating TL: Show Super Admin users
-  // TL creating employee: Show all TL names
+  // Uses role hierarchy from roles table (reporting_person_role_id)
   const getAvailableReportingManagers = () => {
     const selectedRole = formData.role;
     const currentUserId = employeeData?.data?.user_id;
     
-    if (selectedRole === 'Team Lead' || selectedRole === 'Team Leader') {
-      // When editing a Team Leader role
+    if (!selectedRole) {
+      return [];
+    }
+    
+    // Find the selected role in allRoles to get its reporting_person_role_name
+    const selectedRoleData = allRoles.find((role: any) => role.name === selectedRole);
+    const reportingRoleName = selectedRoleData?.reporting_person_role_name;
+    
+    // If role has a reporting_person_role_name defined, use that
+    if (reportingRoleName) {
+      // Filter users to only show those with the reporting role
+      return filteredUsers.filter((user: any) => 
+        user.role === reportingRoleName && user.id !== currentUserId
+      );
+    }
+    
+    // Fallback to old logic if no reporting_person_role_name is defined
+    const isManagerRole = managerRoles.includes(selectedRole);
+    
+    if (isManagerRole) {
+      // When editing a manager role
       if (isSuperAdmin) {
-        // Super Admin editing TL: Show Super Admin users
+        // Super Admin editing manager: Show Super Admin users
         return allUsers.filter((user: any) => 
-          user.role === 'Super Admin' && user.id !== currentUserId
+          user.role === superAdminRoleName && user.id !== currentUserId
         );
       } else {
-        // Other users editing TL: Show Admin or Super Admin (if visible)
+        // Other users editing manager: Show Admin or Super Admin (if visible)
         return filteredUsers.filter((user: any) => 
-          (user.role === 'Super Admin' || user.role === 'Admin') && user.id !== currentUserId
+          (user.role === superAdminRoleName || managerRoles.includes(user.role)) && user.id !== currentUserId
         );
       }
     } else {
-      // For other roles (Developer, Designer, Tester, etc.)
+      // For other roles (Developer, Designer, Tester, etc. - Level 2)
       if (isSuperAdmin) {
-        // Super Admin: Show all Team Leaders
+        // Super Admin: Show all managers
         return filteredUsers.filter((user: any) => 
-          (user.role === 'Team Leader' || user.role === 'Team Lead') && user.id !== currentUserId
+          managerRoles.includes(user.role) && user.id !== currentUserId
         );
       } else if (isTeamLeader) {
-        // Team Leader editing employee: Show all TL names
+        // Team Leader editing employee: Show all managers
         return filteredUsers.filter((user: any) => 
-          (user.role === 'Team Leader' || user.role === 'Team Lead') && user.id !== currentUserId
+          managerRoles.includes(user.role) && user.id !== currentUserId
         );
       } else {
-        // Other roles (Admin, etc.): Show Team Leaders, Admin, or Super Admin
+        // Other roles (Admin, etc.): Show managers or Super Admin
         return filteredUsers.filter((user: any) => 
-          (user.role === 'Team Leader' || user.role === 'Team Lead' || user.role === 'Super Admin' || user.role === 'Admin') && user.id !== currentUserId
+          (managerRoles.includes(user.role) || user.role === superAdminRoleName) && user.id !== currentUserId
         );
       }
     }
@@ -236,6 +277,7 @@ export default function EmployeeEdit() {
         password: "", // Don't pre-fill password
         mobile: emp.mobile || "",
         role: emp.role || "", // Use role name directly from API
+        position: emp.position || "", // Position name from API
         empCode: emp.emp_code || "",
         teamLeadId: emp.team_lead_user_id ? emp.team_lead_user_id.toString() : "",
         date_of_birth: formatDateFromDB(emp.date_of_birth),
@@ -261,6 +303,27 @@ export default function EmployeeEdit() {
       });
     }
   }, [employeeData]);
+
+  // Auto-select reporting manager based on role hierarchy when role changes (only if not already set)
+  useEffect(() => {
+    if (formData.role && allRoles.length > 0 && canManage) {
+      const selectedRoleData = allRoles.find((role: any) => role.name === formData.role);
+      const reportingRoleName = selectedRoleData?.reporting_person_role_name;
+      
+      if (reportingRoleName && !formData.teamLeadId) {
+        // Find users with the reporting role
+        const currentUserId = employeeData?.data?.user_id;
+        const reportingManagers = filteredUsers.filter((user: any) => 
+          user.role === reportingRoleName && user.id !== currentUserId
+        );
+        
+        // Auto-select the first available reporting manager if there's exactly one
+        if (reportingManagers.length === 1) {
+          setFormData(prev => ({ ...prev, teamLeadId: reportingManagers[0].id.toString() }));
+        }
+      }
+    }
+  }, [formData.role, allRoles, filteredUsers, canManage]);
 
   // Document upload state
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -407,6 +470,7 @@ export default function EmployeeEdit() {
         name: data.name,
         email: data.email,
         mobile: data.mobile,
+        position: data.position || null, // Position name
         empCode: data.empCode,
         teamLeadId: teamLeadIdValue, // Explicitly include, even if null
         date_of_birth: formatDateForDB(data.date_of_birth),
@@ -677,17 +741,35 @@ export default function EmployeeEdit() {
                             </SelectItem>
                           ))
                         ) : (
-                          // Fallback if roles not loaded (filtered based on user role)
-                          <>
-                            {!isTeamLeader && <SelectItem value="Super Admin">Super Admin</SelectItem>}
-                            {!isTeamLeader && <SelectItem value="Admin">Admin</SelectItem>}
-                            <SelectItem value="Team Lead">Team Lead</SelectItem>
-                            <SelectItem value="Developer">Developer</SelectItem>
-                            <SelectItem value="Designer">Designer</SelectItem>
-                            <SelectItem value="Tester">Tester</SelectItem>
-                            <SelectItem value="Employee">Employee</SelectItem>
-                            <SelectItem value="Viewer">Viewer</SelectItem>
-                          </>
+                          // Fallback if roles not loaded - show all roles from API
+                          allRoles.map((role: any) => (
+                            <SelectItem key={role.id} value={role.name}>
+                              {role.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="position">Position *</Label>
+                    <Select
+                      value={formData.position}
+                      onValueChange={(value) => setFormData({ ...formData, position: value })}
+                      disabled={!canManage}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Position" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availablePositions.length > 0 ? (
+                          availablePositions.map((pos: any) => (
+                            <SelectItem key={pos.id} value={pos.name}>
+                              {pos.name} {pos.level !== undefined ? `(Level ${pos.level})` : ''}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="" disabled>No positions available</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
@@ -711,62 +793,6 @@ export default function EmployeeEdit() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {formData.role === 'Team Lead' || formData.role === 'Team Leader' ? (
-                        <>
-                          {isSuperAdmin ? (
-                            <>
-                              <strong>For Team Leader:</strong> Select a Super Admin as the reporting manager.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No Super Admins found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <strong>For Team Leader:</strong> Select an Admin or Super Admin as your reporting manager.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No Admins or Super Admins found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {isSuperAdmin ? (
-                            <>
-                              Select a Team Leader this employee reports to.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No Team Leaders found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          ) : isTeamLeader ? (
-                            <>
-                              Select a Team Leader this employee reports to.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No Team Leaders found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              Select the team lead, admin, or manager this employee reports to.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No team leads or managers found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -797,62 +823,6 @@ export default function EmployeeEdit() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {formData.role === 'Team Lead' || formData.role === 'Team Leader' ? (
-                        <>
-                          {isSuperAdmin ? (
-                            <>
-                              <strong>For Team Leader:</strong> Select a Super Admin as the reporting manager.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No Super Admins found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <strong>For Team Leader:</strong> Select an Admin or Super Admin as your reporting manager.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No Admins or Super Admins found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {isSuperAdmin ? (
-                            <>
-                              Select a Team Leader this employee reports to.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No Team Leaders found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          ) : isTeamLeader ? (
-                            <>
-                              Select a Team Leader this employee reports to.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No Team Leaders found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              Select the team lead, admin, or manager this employee reports to.
-                              {availableReportingManagers.length === 0 && (
-                                <span className="block mt-1 text-amber-600">
-                                  ⚠ No team leads or managers found. Create one first or select "None" for now.
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">

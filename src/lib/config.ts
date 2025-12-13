@@ -47,6 +47,7 @@ export const FIREBASE_CONFIG = {
 export const ENV_CONFIG = {
   IS_DEV: import.meta.env.DEV || import.meta.env.MODE === 'development',
   IS_PROD: import.meta.env.PROD || import.meta.env.MODE === 'production',
+  APP_VERSION: import.meta.env.VITE_APP_VERSION || '1.0.0',
 } as const;
 
 /**

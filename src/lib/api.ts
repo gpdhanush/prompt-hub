@@ -143,6 +143,8 @@ export const usersApi = {
 
 // Employees API
 export const employeesApi = {
+  getAvailablePositions: () =>
+    request<{ data: any[] }>('/employees/available-positions'),
   getAll: (params?: { page?: number; limit?: number; search?: string }) =>
     request<{ data: any[]; pagination: any }>(
       `/employees?${new URLSearchParams(params as any).toString()}`
@@ -751,6 +753,10 @@ export const positionsApi = {
     request<{ data: any[] }>('/positions'),
   getById: (id: number) =>
     request<{ data: any }>(`/positions/${id}`),
+  getAvailable: () =>
+    request<{ data: any[] }>('/positions/available'),
+  getHierarchy: () =>
+    request<{ data: any[] }>('/positions/hierarchy'),
   create: (data: any) =>
     request<{ data: any }>('/positions', {
       method: 'POST',

@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
 import { secureStorageWithCache } from "@/lib/secureStorage";
 import { useLoading } from "@/contexts/LoadingContext";
+import { ENV_CONFIG } from "@/lib/config";
 
 // Development: Test loader without API call (set to false to enable real login)
 const TEST_LOADER_ONLY = false;
@@ -96,11 +97,10 @@ export default function Login() {
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-gradient-to-br from-primary/20 via-background to-background p-12 relative overflow-hidden">
         <div className="relative z-10">
           <div className="flex flex-col items-center gap-4">
-            <Logo  iconSize={128} showText={false} noBox={true} />
+            <Logo iconSize={128} showText={false} noBox={true} />
             <div className="text-center">
               <h1 className="text-4xl font-bold">Naethra EMS</h1>
               <p className="text-lg text-muted-foreground mt-2">Employee and Project Management System</p>
-              <p className="text-sm text-muted-foreground mt-1">Naethra Technologies Pvt. Ltd</p>
             </div>
           </div>
         </div>
@@ -219,6 +219,9 @@ export default function Login() {
             </p>
             <p>
               Created by <span className="font-semibold">gpdhanush</span>
+            </p>
+            <p className="text-xs opacity-70 font-bold">
+              Version: {ENV_CONFIG.APP_VERSION}
             </p>
           </div>
         </div>

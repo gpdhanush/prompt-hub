@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate, canAccessUserManagement } from '../middleware/auth.js';
+import { authenticate, canAccessUserManagement, requirePermission } from '../middleware/auth.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -8,6 +8,8 @@ import { fileURLToPath } from 'url';
 import { encryptBankDetails, decryptBankDetails, encryptDocumentNumber, decryptDocumentNumber } from '../utils/encryption.js';
 import { logCreate, logUpdate, logDelete, getClientIp, getUserAgent } from '../utils/auditLogger.js';
 import { logger } from '../utils/logger.js';
+import { validateUserCreation, getAvailablePositions } from '../utils/positionValidation.js';
+import { getManagerRoles, getSuperAdminRole, isSuperAdmin, getAllRoles } from '../utils/roleHelpers.js';
 
 const router = express.Router();
 
@@ -124,7 +126,12 @@ router.get('/by-user/:userId', async (req, res) => {
     
     // Users can only access their own employee data, unless they're admin/team lead
     const currentUserRole = req.user?.role || '';
-    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    // Get manager roles from database
+    const managerRoles = await getManagerRoles();
+    const superAdminRole = await getSuperAdminRole();
+    const allManagerRoles = [...managerRoles, 'Manager']; // Include Manager as it might not be in DB
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
     
     if (!canManage && parseInt(userId) !== currentUserId) {
       return res.status(403).json({ error: 'You can only access your own profile' });
@@ -165,10 +172,12 @@ router.get('/by-user/:userId', async (req, res) => {
         u.name,
         u.email,
         u.mobile,
-        r.name as role
+        r.name as role,
+        p.name as position
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
       LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
       WHERE e.user_id = ?
     `, [userId]);
     
@@ -217,8 +226,25 @@ router.get('/by-user/:userId', async (req, res) => {
   }
 });
 
-// Restrict access to Employees page - Admin, Super Admin, Team Lead, and Manager can access
-router.use(canAccessUserManagement);
+// Restrict access to Employees page - uses permission-based authorization
+// Super Admin always has access, others need 'employees.view' permission
+router.use(requirePermission('employees.view'));
+
+// Get available positions for current user (filtered by hierarchy)
+router.get('/available-positions', async (req, res) => {
+  try {
+    const creatorUserId = req.user?.id;
+    if (!creatorUserId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    
+    const availablePositions = await getAvailablePositions(creatorUserId);
+    res.json({ data: availablePositions });
+  } catch (error) {
+    logger.error('Error getting available positions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Get all employees with pagination
 router.get('/', async (req, res) => {
@@ -228,12 +254,13 @@ router.get('/', async (req, res) => {
     
     // Get current user's role
     const currentUserRole = req.user?.role || '';
-    const isSuperAdmin = currentUserRole === 'Super Admin';
+    const currentUserId = req.user?.id;
+    const userIsSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
     
     logger.debug('=== GET EMPLOYEES REQUEST ===');
     logger.debug('Current user ID:', req.user?.id);
     logger.debug('Current user role:', currentUserRole);
-    logger.debug('Is Super Admin:', isSuperAdmin);
+    logger.debug('Is Super Admin:', userIsSuperAdmin);
     
     let query = `
       SELECT 
@@ -247,10 +274,12 @@ router.get('/', async (req, res) => {
         u.email,
         u.mobile,
         r.name as role,
+        p.name as position,
         tl.name as team_lead_name
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
       LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
       LEFT JOIN employees tl_emp ON e.team_lead_id = tl_emp.id
       LEFT JOIN users tl ON tl_emp.user_id = tl.id
       WHERE 1=1
@@ -259,9 +288,13 @@ router.get('/', async (req, res) => {
     const params = [];
     
     // If not Super Admin, exclude Super Admin users from results
-    if (!isSuperAdmin) {
-      query += ` AND r.name != 'Super Admin'`;
-      logger.debug('Filtering out Super Admin employees for non-Super Admin user');
+    if (!userIsSuperAdmin) {
+      const superAdminRole = await getSuperAdminRole();
+      if (superAdminRole) {
+        query += ` AND r.name != ?`;
+        params.push(superAdminRole.name);
+        logger.debug('Filtering out Super Admin employees for non-Super Admin user');
+      }
     } else {
       logger.debug('Super Admin user - showing all employees including Super Admins');
     }
@@ -290,8 +323,12 @@ router.get('/', async (req, res) => {
     const countParams = [];
     
     // If not Super Admin, exclude Super Admin users from count
-    if (!isSuperAdmin) {
-      countQuery += ` AND r.name != 'Super Admin'`;
+    if (!userIsSuperAdmin) {
+      const superAdminRole = await getSuperAdminRole();
+      if (superAdminRole) {
+        countQuery += ` AND r.name != ?`;
+        countParams.push(superAdminRole.name);
+      }
     }
     
     if (search) {
@@ -415,6 +452,50 @@ router.post('/', async (req, res) => {
     
     const dbRoleName = role || 'Developer';
     
+    // Get position_id if provided - validate position hierarchy
+    let positionId = null;
+    if (position) {
+      // Map frontend position values to database position names if needed
+      const positionMapping = {
+        'developer': 'Developer',
+        'senior-dev': 'Senior Developer',
+        'tech-lead': 'Team Lead',
+        'pm': 'Project Manager',
+        'qa': 'QA Engineer'
+      };
+      
+      const dbPositionName = positionMapping[position] || position;
+      const [positions] = await db.query('SELECT id FROM positions WHERE name = ?', [dbPositionName]);
+      if (positions.length > 0) {
+        positionId = positions[0].id;
+      } else {
+        // If position doesn't exist, return error (don't auto-create)
+        return res.status(400).json({ error: `Position "${dbPositionName}" not found. Please select a valid position.` });
+      }
+      
+      // Validate position hierarchy - check if creator can create user with this position
+      // Only validate if migration has been run (level column exists)
+      const creatorUserId = req.user?.id;
+      if (creatorUserId && positionId) {
+        try {
+          const validation = await validateUserCreation(creatorUserId, positionId);
+          if (!validation.valid) {
+            return res.status(403).json({ error: validation.error });
+          }
+        } catch (validationError) {
+          // If validation fails due to missing columns, log warning but allow creation
+          // This handles the case where migration hasn't been run yet
+          if (validationError.message && validationError.message.includes('ER_BAD_FIELD_ERROR')) {
+            logger.warn('Position hierarchy validation skipped - migration may not be run:', validationError.message);
+            // Allow creation to proceed without validation
+          } else {
+            // For other validation errors, return the error
+            return res.status(403).json({ error: validationError.message || 'Position validation failed' });
+          }
+        }
+      }
+    }
+    
     // Validation
     if (mobile && mobile !== '') {
       const mobileDigits = mobile.replace(/\D/g, ''); // Remove non-digits
@@ -486,13 +567,25 @@ router.post('/', async (req, res) => {
     const processedEmergencyRelation = toUpperCase(emergency_contact_relation);
     const processedEmergencyNumber = emergency_contact_number ? extractDigits(emergency_contact_number) : emergency_contact_number;
     
-    // Team Leader and Manager can only create Developer, Designer, and Tester roles
+    // Check if current user can only create specific roles (Level 1 users can only create Level 2 roles)
     const currentUserRole = req.user?.role;
-    if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
-        !['Developer', 'Designer', 'Tester'].includes(dbRoleName)) {
-      return res.status(403).json({ 
-        error: `${currentUserRole} can only create employees with Developer, Designer, or Tester roles` 
-      });
+    const currentUserId = req.user?.id;
+    
+    // Get manager roles and check if current user is a manager (Level 1)
+    const managerRoles = await getManagerRoles();
+    const isManager = managerRoles.includes(currentUserRole);
+    
+    if (isManager && currentUserId) {
+      // Get roles that Level 2 users typically have (employee roles)
+      const level2Roles = await getRolesByLevel(2);
+      
+      // If the role being created is not a Level 2 role, check if it's allowed
+      // Level 1 managers can typically only create Level 2 employees
+      if (level2Roles.length > 0 && !level2Roles.includes(dbRoleName)) {
+        return res.status(403).json({ 
+          error: `${currentUserRole} can only create employees with roles: ${level2Roles.join(', ')}` 
+        });
+      }
     }
     
     // Check for duplicate email before creating user
@@ -510,8 +603,32 @@ router.post('/', async (req, res) => {
     }
     
     // First create user
-    const [roles] = await db.query('SELECT id FROM roles WHERE name = ?', [dbRoleName]);
+    const [roles] = await db.query('SELECT id, reporting_person_role_id FROM roles WHERE name = ?', [dbRoleName]);
     const roleId = roles[0]?.id || 4; // Default to Developer
+    const reportingPersonRoleId = roles[0]?.reporting_person_role_id || null;
+    
+    // Auto-set teamLeadId based on role hierarchy if not provided
+    if ((!teamLeadId || teamLeadId === '' || teamLeadId === 'none') && reportingPersonRoleId) {
+      // Get the reporting role name
+      const [reportingRole] = await db.query('SELECT name FROM roles WHERE id = ?', [reportingPersonRoleId]);
+      if (reportingRole.length > 0) {
+        const reportingRoleName = reportingRole[0].name;
+        
+        // Find a user with the reporting role
+        const [reportingUsers] = await db.query(`
+          SELECT u.id 
+          FROM users u
+          INNER JOIN roles r ON u.role_id = r.id
+          WHERE r.name = ? AND u.status = 'Active'
+          LIMIT 1
+        `, [reportingRoleName]);
+        
+        if (reportingUsers.length > 0) {
+          teamLeadId = reportingUsers[0].id.toString();
+          logger.debug(`Auto-set teamLeadId to ${teamLeadId} based on role hierarchy (${dbRoleName} reports to ${reportingRoleName})`);
+        }
+      }
+    }
     
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.default.hash(password, 10);
@@ -521,9 +638,9 @@ router.post('/', async (req, res) => {
     
     try {
       [userResult] = await db.query(`
-        INSERT INTO users (name, email, mobile, password_hash, role_id, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [processedName, email, processedMobile, passwordHash, roleId, userStatus]);
+        INSERT INTO users (name, email, mobile, password_hash, role_id, position_id, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [processedName, email, processedMobile, passwordHash, roleId, positionId, userStatus]);
     } catch (userError) {
       if (userError.code === 'ER_DUP_ENTRY') {
         // Check which field caused the duplicate
@@ -584,15 +701,20 @@ router.post('/', async (req, res) => {
           const teamLeadRole = teamLeadUser[0].role_name;
           
           // Create employee record if they're being used as a team lead
-          // This applies to Team Lead, Super Admin, and Admin roles
+          // This applies to manager roles (Level 1) and Super Admin
           // We create it because they're actually being assigned as a reporting manager
-          if (teamLeadRole === 'Team Leader' || teamLeadRole === 'Team Lead' || teamLeadRole === 'Super Admin' || teamLeadRole === 'Admin') {
+          // Reuse managerRoles already declared above, just get superAdminRole
+          const superAdminRole = await getSuperAdminRole();
+          const isManagerRole = managerRoles.includes(teamLeadRole);
+          const isSuperAdminRole = superAdminRole && teamLeadRole === superAdminRole.name;
+          
+          if (isManagerRole || isSuperAdminRole) {
             // Generate employee code based on role
             const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
             let empCodePrefix = 'EMP-TL';
-            if (teamLeadRole === 'Super Admin') {
+            if (isSuperAdminRole) {
               empCodePrefix = 'EMP-SA';
-            } else if (teamLeadRole === 'Admin') {
+            } else if (teamLeadRole === 'Admin' || teamLeadRole.includes('Admin')) {
               empCodePrefix = 'EMP-AD';
             }
             const empCodeForTL = `${empCodePrefix}-${String(empCount[0].count + 1).padStart(4, '0')}`;
@@ -713,7 +835,7 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { 
-      name, email, mobile, password, empCode, teamLeadId, status,
+      name, email, mobile, password, empCode, teamLeadId, status, position,
       date_of_birth, gender, date_of_joining, employee_status,
       bank_name, bank_account_number, ifsc_code,
       address1, address2, landmark, state, district, pincode,
@@ -752,7 +874,10 @@ router.put('/:id', async (req, res) => {
     // Check if user can update (either admin/team lead or updating own profile)
     const currentUserId = req.user?.id;
     const currentUserRole = req.user?.role;
-    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    const managerRoles = await getManagerRoles();
+    const superAdminRole = await getSuperAdminRole();
+    const allManagerRoles = [...managerRoles, 'Manager'];
+    const canManage = allManagerRoles.includes(currentUserRole) || (superAdminRole && currentUserRole === superAdminRole.name);
     const isOwnProfile = currentUserId === userId;
     
     if (!canManage && !isOwnProfile) {
@@ -798,8 +923,8 @@ router.put('/:id', async (req, res) => {
       return value;
     };
     
-    // Update user if name/email/mobile/password provided
-    if (name || email || mobile || password) {
+    // Update user if name/email/mobile/password/position provided
+    if (name || email || mobile || password || position) {
       const updates = [];
       const params = [];
       if (name) { updates.push('name = ?'); params.push(toUpperCase(name)); }
@@ -814,6 +939,27 @@ router.put('/:id', async (req, res) => {
         const passwordHash = await bcrypt.default.hash(password, 10);
         updates.push('password_hash = ?');
         params.push(passwordHash);
+      }
+      if (position) {
+        // Get position_id from position name
+        const [positions] = await db.query('SELECT id FROM positions WHERE name = ?', [position]);
+        if (positions.length > 0) {
+          const newPositionId = positions[0].id;
+          
+          // Validate position hierarchy if changing position
+          const creatorUserId = req.user?.id;
+          if (creatorUserId) {
+            const validation = await validateUserCreation(creatorUserId, newPositionId);
+            if (!validation.valid) {
+              return res.status(403).json({ error: validation.error });
+            }
+          }
+          
+          updates.push('position_id = ?');
+          params.push(newPositionId);
+        } else {
+          return res.status(400).json({ error: `Position "${position}" not found. Please select a valid position.` });
+        }
       }
       if (updates.length > 0) {
         params.push(userId);
@@ -887,11 +1033,45 @@ router.put('/:id', async (req, res) => {
       // Check if teamLeadId property exists in request body (even if value is null)
       if ('teamLeadId' in req.body) {
         logger.debug('Processing teamLeadId:', teamLeadId, 'Type:', typeof teamLeadId);
-        if (teamLeadId === null || teamLeadId === '' || teamLeadId === 'none' || teamLeadId === undefined) {
+        
+        // Auto-set teamLeadId based on role hierarchy if not provided
+        let finalTeamLeadId = teamLeadId;
+        if ((teamLeadId === null || teamLeadId === '' || teamLeadId === 'none' || teamLeadId === undefined)) {
+          // Get the current role's reporting_person_role_id
+          const currentRole = employees[0].role;
+          const [roleData] = await db.query('SELECT reporting_person_role_id FROM roles WHERE name = ?', [currentRole]);
+          const reportingPersonRoleId = roleData[0]?.reporting_person_role_id || null;
+          
+          if (reportingPersonRoleId) {
+            // Get the reporting role name
+            const [reportingRole] = await db.query('SELECT name FROM roles WHERE id = ?', [reportingPersonRoleId]);
+            if (reportingRole.length > 0) {
+              const reportingRoleName = reportingRole[0].name;
+              
+              // Find a user with the reporting role (excluding the current user)
+              const [reportingUsers] = await db.query(`
+                SELECT u.id 
+                FROM users u
+                INNER JOIN roles r ON u.role_id = r.id
+                WHERE r.name = ? AND u.status = 'Active' AND u.id != ?
+                LIMIT 1
+              `, [reportingRoleName, userId]);
+              
+              if (reportingUsers.length > 0) {
+                finalTeamLeadId = reportingUsers[0].id.toString();
+                logger.debug(`Auto-set teamLeadId to ${finalTeamLeadId} based on role hierarchy (${currentRole} reports to ${reportingRoleName})`);
+              }
+            }
+          }
+        }
+        
+        if (finalTeamLeadId === null || finalTeamLeadId === '' || finalTeamLeadId === 'none' || finalTeamLeadId === undefined) {
           logger.debug('Setting team_lead_id to NULL (clearing team lead)');
           empUpdates.push('team_lead_id = ?');
           empParams.push(null);
         } else {
+          // Use finalTeamLeadId instead of teamLeadId
+          teamLeadId = finalTeamLeadId;
           // Convert user_id to employee_id
           logger.debug('Looking up employee for team lead user_id:', teamLeadId);
           let [teamLeadEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [teamLeadId]);
@@ -912,15 +1092,19 @@ router.put('/:id', async (req, res) => {
               const teamLeadRole = teamLeadUser[0].role_name;
               
               // Create employee record if they're being used as a team lead
-              // This applies to Team Lead, Super Admin, and Admin roles
+              // This applies to manager roles (Level 1) and Super Admin
               // We create it because they're actually being assigned as a reporting manager
-              if (teamLeadRole === 'Team Leader' || teamLeadRole === 'Team Lead' || teamLeadRole === 'Super Admin' || teamLeadRole === 'Admin') {
+              // Reuse managerRoles and superAdminRole already declared above
+              const isManagerRole = managerRoles.includes(teamLeadRole);
+              const isSuperAdminRole = superAdminRole && teamLeadRole === superAdminRole.name;
+              
+              if (isManagerRole || isSuperAdminRole) {
                 // Generate employee code based on role
                 const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
                 let empCodePrefix = 'EMP-TL';
-                if (teamLeadRole === 'Super Admin') {
+                if (isSuperAdminRole) {
                   empCodePrefix = 'EMP-SA';
-                } else if (teamLeadRole === 'Admin') {
+                } else if (teamLeadRole === 'Admin' || teamLeadRole.includes('Admin')) {
                   empCodePrefix = 'EMP-AD';
                 }
                 const empCode = `${empCodePrefix}-${String(empCount[0].count + 1).padStart(4, '0')}`;
@@ -1239,10 +1423,12 @@ router.delete('/:id', async (req, res) => {
         u.name,
         u.email,
         u.mobile,
-        r.name as role
+        r.name as role,
+        p.name as position
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
       LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
       WHERE e.id = ?
     `, [id]);
     
@@ -1252,14 +1438,23 @@ router.delete('/:id', async (req, res) => {
     
     const employeeRole = employees[0].role;
     const currentUserRole = req.user?.role;
+    const currentUserId = req.user?.id;
     const beforeData = employees[0]; // Store before data for audit log
     
-    // Team Leader and Manager can only delete Developer, Designer, and Tester employees
-    if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
-        !['Developer', 'Designer', 'Tester'].includes(employeeRole)) {
-      return res.status(403).json({ 
-        error: `${currentUserRole} can only delete employees with Developer, Designer, or Tester roles` 
-      });
+    // Check if current user is a manager and can only delete Level 2 employees
+    const managerRoles = await getManagerRoles();
+    const isManager = managerRoles.includes(currentUserRole);
+    
+    if (isManager && currentUserId) {
+      // Get Level 2 roles (employee roles)
+      const level2Roles = await getRolesByLevel(2);
+      
+      // Managers can only delete Level 2 employees
+      if (level2Roles.length > 0 && !level2Roles.includes(employeeRole)) {
+        return res.status(403).json({ 
+          error: `${currentUserRole} can only delete employees with roles: ${level2Roles.join(', ')}` 
+        });
+      }
     }
     
     // Delete user (cascade will delete employee)
@@ -1280,7 +1475,10 @@ router.get('/:id/documents', async (req, res) => {
     const { id } = req.params;
     const currentUserId = req.user?.id;
     const currentUserRole = req.user?.role || '';
-    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    const managerRoles = await getManagerRoles();
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    const allManagerRoles = [...managerRoles, 'Manager'];
+    const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
     
     // Check if employee exists and user has access
     const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
@@ -1337,7 +1535,10 @@ router.post('/:id/documents', uploadDocument.single('file'), async (req, res) =>
     const { document_type, document_number } = req.body;
     const currentUserId = req.user?.id;
     const currentUserRole = req.user?.role || '';
-    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    const managerRoles = await getManagerRoles();
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    const allManagerRoles = [...managerRoles, 'Manager'];
+    const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
     
     // Check if employee exists and user has access
     const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
@@ -1414,7 +1615,10 @@ router.delete('/:id/documents/:docId', async (req, res) => {
     const { id, docId } = req.params;
     const currentUserId = req.user?.id;
     const currentUserRole = req.user?.role || '';
-    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    const managerRoles = await getManagerRoles();
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    const allManagerRoles = [...managerRoles, 'Manager'];
+    const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
     
     // Check if document exists
     const [documents] = await db.query(`
