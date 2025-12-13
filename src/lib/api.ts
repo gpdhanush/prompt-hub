@@ -246,6 +246,14 @@ export const employeesApi = {
     request<{ message: string }>(`/employees/${id}/documents/${docId}`, {
       method: 'DELETE',
     }),
+  verifyDocument: (id: number, docId: number) =>
+    request<{ data: any; message: string }>(`/employees/${id}/documents/${docId}/verify`, {
+      method: 'PUT',
+    }),
+  unverifyDocument: (id: number, docId: number) =>
+    request<{ data: any; message: string }>(`/employees/${id}/documents/${docId}/unverify`, {
+      method: 'PUT',
+    }),
 };
 
 // Projects API
@@ -587,19 +595,59 @@ export const leavesApi = {
 
 // Reimbursements API
 export const reimbursementsApi = {
-  getAll: (params?: { page?: number; limit?: number }) =>
-    request<{ data: any[]; pagination: any }>(
-      `/reimbursements?${new URLSearchParams(params as any).toString()}`
-    ),
-  create: (data: any) =>
-    request<{ data: any }>('/reimbursements', {
+  getAll: (params?: { page?: number; limit?: number; status?: string; search?: string; my_claims?: string }) => {
+    const cleanParams: any = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof typeof params];
+        if (value !== undefined && value !== null && value !== '') {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    return request<{ data: any[]; pagination: any }>(
+      `/reimbursements?${new URLSearchParams(cleanParams as any).toString()}`
+    );
+  },
+  getById: (id: number) =>
+    request<{ data: any }>(`/reimbursements/${id}`),
+  create: (data: FormData) =>
+    request<{ data: any; message: string }>('/reimbursements', {
+      method: 'POST',
+      body: data,
+      headers: {}, // Let browser set Content-Type for FormData
+    }),
+  update: (id: number, data: any) =>
+    request<{ data: any; message: string }>(`/reimbursements/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: number) =>
+    request<{ message: string }>(`/reimbursements/${id}`, {
+      method: 'DELETE',
+    }),
+  approve: (id: number, data?: { comments?: string }) =>
+    request<{ data: any; message: string }>(`/reimbursements/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
+  reject: (id: number, data: { rejection_reason: string }) =>
+    request<{ data: any; message: string }>(`/reimbursements/${id}/reject`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  update: (id: number, data: any) =>
-    request<{ data: any }>(`/reimbursements/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
+  uploadFiles: (id: number, files: File[]) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    return request<{ data: any[]; message: string }>(`/reimbursements/${id}/attachments`, {
+      method: 'POST',
+      body: formData,
+      headers: {}, // Let browser set Content-Type for FormData
+    });
+  },
+  deleteAttachment: (id: number, attachmentId: number) =>
+    request<{ message: string }>(`/reimbursements/${id}/attachments/${attachmentId}`, {
+      method: 'DELETE',
     }),
 };
 
@@ -935,6 +983,11 @@ export const assetsApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  createEmployeeAsset: (data: any) =>
+    request<{ data: any; message: string }>('/assets/employee/create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   update: (id: number, data: any) =>
     request<{ message: string }>(`/assets/${id}`, {
       method: 'PUT',
@@ -985,8 +1038,183 @@ export const assetsApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  
+  getTicketComments: (ticketId: number) =>
+    request<{ data: any[] }>(`/assets/tickets/${ticketId}/comments`),
+  addTicketComment: (ticketId: number, data: { comment: string; is_internal?: boolean }) =>
+    request<{ data: any; message: string }>(`/assets/tickets/${ticketId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  uploadTicketAttachment: (ticketId: number, file: File, comment?: string) =>
+    request<{ data: any; message: string }>(`/assets/tickets/${ticketId}/attachments`, {
+      method: 'POST',
+      body: (() => {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (comment) formData.append('comment', comment);
+        return formData;
+      })(),
+      headers: {}, // Let the browser set Content-Type for FormData
+    }),
+  getTicketAttachments: (ticketId: number) =>
+    request<{ data: any[] }>(`/assets/tickets/${ticketId}/attachments`),
+  deleteTicketAttachment: (ticketId: number, attachmentId: number) =>
+    request<{ message: string }>(`/assets/tickets/${ticketId}/attachments/${attachmentId}`, {
+      method: 'DELETE',
+    }),
+
+  // Inventory
+  getInventory: (params?: { page?: number; limit?: number; category_id?: number; search?: string; low_stock?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.category_id) queryParams.append('category_id', params.category_id.toString());
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.low_stock) queryParams.append('low_stock', params.low_stock.toString());
+    const query = queryParams.toString();
+    return request<{ data: any[]; total: number; page: number; limit: number }>(`/assets/inventory${query ? `?${query}` : ''}`);
+  },
+  getInventoryItem: (id: number) =>
+    request<{ data: any }>(`/assets/inventory/${id}`),
+  createInventoryItem: (data: any) =>
+    request<{ data: any; message: string }>('/assets/inventory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateInventoryItem: (id: number, data: any) =>
+    request<{ data: any; message: string }>(`/assets/inventory/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteInventoryItem: (id: number) =>
+    request<{ message: string }>(`/assets/inventory/${id}`, {
+      method: 'DELETE',
+    }),
+  adjustStock: (id: number, data: { quantity: number; reason: string; notes?: string }) =>
+    request<{ data: any; message: string }>(`/assets/inventory/${id}/adjust`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getInventoryHistory: (params?: { page?: number; limit?: number; asset_id?: number; type?: string; date_from?: string; date_to?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.asset_id) queryParams.append('asset_id', params.asset_id.toString());
+    if (params?.type) queryParams.append('type', params.type);
+    if (params?.date_from) queryParams.append('date_from', params.date_from);
+    if (params?.date_to) queryParams.append('date_to', params.date_to);
+    const query = queryParams.toString();
+    return request<{ data: any[]; total: number; page: number; limit: number }>(`/assets/inventory/history${query ? `?${query}` : ''}`);
+  },
+  getLowStockAlerts: () =>
+    request<{ data: any[] }>('/assets/inventory/low-stock'),
+  getInventoryStats: () =>
+    request<{ data: any }>('/assets/inventory/stats'),
+  getInventoryReports: (params?: { report_type: string; date_from?: string; date_to?: string; category_id?: number }) => {
+    const queryParams = new URLSearchParams();
+    queryParams.append('report_type', params?.report_type || 'stock_levels');
+    if (params?.date_from) queryParams.append('date_from', params.date_from);
+    if (params?.date_to) queryParams.append('date_to', params.date_to);
+    if (params?.category_id) queryParams.append('category_id', params.category_id.toString());
+    const query = queryParams.toString();
+    return request<{ data: any }>(`/assets/inventory/reports?${query}`);
+  },
+
   // Dashboard
   getDashboardStats: () =>
     request<{ data: any }>('/assets/dashboard/stats'),
+
+  // Maintenance
+  getMaintenance: (params?: { page?: number; limit?: number; status?: string; asset_id?: number; maintenance_type?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.asset_id) queryParams.append('asset_id', params.asset_id.toString());
+    if (params?.maintenance_type) queryParams.append('maintenance_type', params.maintenance_type);
+    const query = queryParams.toString();
+    return request<{ data: any[]; total: number; page: number; limit: number }>(`/assets/maintenance${query ? `?${query}` : ''}`);
+  },
+  getMaintenanceById: (id: number) =>
+    request<{ data: any }>(`/assets/maintenance/${id}`),
+  createMaintenance: (data: any) =>
+    request<{ data: any; message: string }>('/assets/maintenance', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateMaintenance: (id: number, data: any) =>
+    request<{ message: string }>(`/assets/maintenance/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteMaintenance: (id: number) =>
+    request<{ message: string }>(`/assets/maintenance/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Approvals
+  getApprovals: (params?: { page?: number; limit?: number; status?: string; request_type?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.request_type) queryParams.append('request_type', params.request_type);
+    const query = queryParams.toString();
+    return request<{ data: any[]; total: number; page: number; limit: number }>(`/assets/approvals${query ? `?${query}` : ''}`);
+  },
+  createApproval: (data: any) =>
+    request<{ data: any; message: string }>('/assets/approvals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateApproval: (id: number, data: { status: string; comments?: string; rejection_reason?: string }) =>
+    request<{ message: string }>(`/assets/approvals/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // Reports
+  getReports: (params: { report_type: string; date_from?: string; date_to?: string; category_id?: number }) => {
+    const queryParams = new URLSearchParams();
+    queryParams.append('report_type', params.report_type);
+    if (params.date_from) queryParams.append('date_from', params.date_from);
+    if (params.date_to) queryParams.append('date_to', params.date_to);
+    if (params.category_id) queryParams.append('category_id', params.category_id.toString());
+    return request<{ data: any }>(`/assets/reports?${queryParams.toString()}`);
+  },
+
+  // Settings
+  getSettings: (category?: string) => {
+    const query = category ? `?category=${category}` : '';
+    return request<{ data: any[] }>(`/assets/settings${query}`);
+  },
+  getSetting: (key: string) =>
+    request<{ data: any }>(`/assets/settings/${key}`),
+  updateSetting: (key: string, data: { setting_value: string; description?: string }) =>
+    request<{ message: string }>(`/assets/settings/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // Delete asset
+  deleteAsset: (id: number) =>
+    request<{ message: string }>(`/assets/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Bulk operations
+  bulkReturnAssignments: (data: { assignment_ids: number[]; returned_date?: string; condition_on_return?: string; notes?: string }) =>
+    request<{ message: string; results: any[]; errors: any[] }>('/assets/assignments/bulk-return', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getAssignmentAnalytics: (params?: { date_from?: string; date_to?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.date_from) queryParams.append('date_from', params.date_from);
+    if (params?.date_to) queryParams.append('date_to', params.date_to);
+    const query = queryParams.toString();
+    return request<{ data: any }>(`/assets/assignments/analytics${query ? `?${query}` : ''}`);
+  },
+  getAssignmentHistory: (assetId: number) =>
+    request<{ data: any[] }>(`/assets/assignments/history/${assetId}`),
 };

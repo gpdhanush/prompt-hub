@@ -1646,6 +1646,128 @@ router.post('/:id/documents', uploadDocument.single('file'), async (req, res) =>
   }
 });
 
+// Verify employee document (Admin, Team Lead, Manager only)
+router.put('/:id/documents/:docId/verify', async (req, res) => {
+  try {
+    const { id, docId } = req.params;
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role || '';
+    const managerRoles = await getManagerRoles();
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    const allManagerRoles = [...managerRoles, 'Manager', 'Admin', 'Team Lead', 'Team Leader'];
+    const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
+    
+    if (!canManage) {
+      return res.status(403).json({ error: 'Only Admin, Team Lead, or Manager can verify documents' });
+    }
+    
+    // Check if document exists
+    const [documents] = await db.query(`
+      SELECT d.*, e.user_id as employee_user_id
+      FROM employee_documents d
+      INNER JOIN employees e ON d.employee_id = e.id
+      WHERE d.id = ? AND d.employee_id = ?
+    `, [docId, id]);
+    
+    if (documents.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    // Update document verification status
+    await db.query(`
+      UPDATE employee_documents SET
+        verified = ?,
+        verified_by = ?,
+        verified_at = NOW()
+      WHERE id = ?
+    `, [true, currentUserId, docId]);
+    
+    // Fetch updated document
+    const [updatedDocs] = await db.query(`
+      SELECT 
+        d.*,
+        u.name as verified_by_name
+      FROM employee_documents d
+      LEFT JOIN users u ON d.verified_by = u.id
+      WHERE d.id = ?
+    `, [docId]);
+    
+    const updatedDoc = updatedDocs[0];
+    // Decrypt document_number before sending
+    if (updatedDoc.document_number) {
+      updatedDoc.document_number = decryptDocumentNumber(updatedDoc.document_number);
+    }
+    
+    res.json({ 
+      data: updatedDoc,
+      message: 'Document verified successfully' 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Unverify employee document (Admin, Team Lead, Manager only)
+router.put('/:id/documents/:docId/unverify', async (req, res) => {
+  try {
+    const { id, docId } = req.params;
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role || '';
+    const managerRoles = await getManagerRoles();
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    const allManagerRoles = [...managerRoles, 'Manager', 'Admin'];
+    const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
+    
+    if (!canManage) {
+      return res.status(403).json({ error: 'Only Admin, Team Lead, or Manager can unverify documents' });
+    }
+    
+    // Check if document exists
+    const [documents] = await db.query(`
+      SELECT d.*, e.user_id as employee_user_id
+      FROM employee_documents d
+      INNER JOIN employees e ON d.employee_id = e.id
+      WHERE d.id = ? AND d.employee_id = ?
+    `, [docId, id]);
+    
+    if (documents.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    // Update document verification status
+    await db.query(`
+      UPDATE employee_documents SET
+        verified = ?,
+        verified_by = NULL,
+        verified_at = NULL
+      WHERE id = ?
+    `, [false, docId]);
+    
+    // Fetch updated document
+    const [updatedDocs] = await db.query(`
+      SELECT 
+        d.*,
+        u.name as verified_by_name
+      FROM employee_documents d
+      LEFT JOIN users u ON d.verified_by = u.id
+      WHERE d.id = ?
+    `, [docId]);
+    
+    const updatedDoc = updatedDocs[0];
+    // Decrypt document_number before sending
+    if (updatedDoc.document_number) {
+      updatedDoc.document_number = decryptDocumentNumber(updatedDoc.document_number);
+    }
+    
+    res.json({ 
+      data: updatedDoc,
+      message: 'Document unverified successfully' 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete employee document
 router.delete('/:id/documents/:docId', async (req, res) => {
   try {

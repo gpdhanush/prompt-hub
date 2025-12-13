@@ -18,6 +18,9 @@ import Tasks from "./pages/Tasks";
 import Bugs from "./pages/Bugs";
 import Leaves from "./pages/Leaves";
 import Reimbursements from "./pages/Reimbursements";
+import ReimbursementCreate from "./pages/ReimbursementCreate";
+import ReimbursementEdit from "./pages/ReimbursementEdit";
+import ReimbursementView from "./pages/ReimbursementView";
 import AIPrompts from "./pages/AIPrompts";
 import AuditLogs from "./pages/AuditLogs";
 import Settings from "./pages/Settings";
@@ -51,11 +54,21 @@ import ReturnAsset from "./pages/ReturnAsset";
 import AssetTickets from "./pages/AssetTickets";
 import AssetMaintenance from "./pages/AssetMaintenance";
 import AssetInventory from "./pages/AssetInventory";
+import InventoryAdjustment from "./pages/InventoryAdjustment";
+import InventoryHistory from "./pages/InventoryHistory";
+import InventoryReports from "./pages/InventoryReports";
+import InventoryCreate from "./pages/InventoryCreate";
+import InventoryEdit from "./pages/InventoryEdit";
 import AssetReports from "./pages/AssetReports";
 import AssetApprovals from "./pages/AssetApprovals";
 import AssetSettings from "./pages/AssetSettings";
 import MyITAssets from "./pages/MyITAssets";
+import MyDevices from "./pages/MyDevices";
+import MyDeviceView from "./pages/MyDeviceView";
 import RaiseTicket from "./pages/RaiseTicket";
+import AssetTicketDetail from "./pages/AssetTicketDetail";
+import MyTickets from "./pages/MyTickets";
+import SupportTicketView from "./pages/SupportTicketView";
 import { useEffect, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
@@ -308,6 +321,18 @@ const AppContent = () => {
                 path="/reimbursements" 
                 element={<Reimbursements />} 
               />
+              <Route 
+                path="/reimbursements/new" 
+                element={<ReimbursementCreate />} 
+              />
+              <Route 
+                path="/reimbursements/:id" 
+                element={<ReimbursementView />} 
+              />
+              <Route 
+                path="/reimbursements/:id/edit" 
+                element={<ReimbursementEdit />} 
+              />
               <Route path="/prompts" element={<AIPrompts />} />
               <Route 
                 path="/audit-logs" 
@@ -322,7 +347,7 @@ const AppContent = () => {
               <Route 
                 path="/reports" 
                 element={
-                  <ProtectedRoute allowedRoles={['Super Admin', 'Admin', 'Team Leader', 'Team Lead']}>
+                  <ProtectedRoute requiredPermission="reports.view">
                     <Reports />
                   </ProtectedRoute>
                 } 
@@ -422,13 +447,38 @@ const AppContent = () => {
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/it-assets/tickets" 
+              <Route
+                path="/it-assets/tickets"
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Developer', 'Employee', 'Tester', 'Designer', 'Team Leader', 'Team Lead']}>
                     <AssetTickets />
                   </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/it-assets/tickets/:id"
+                element={
+                  <ProtectedRoute>
+                    <AssetTicketDetail />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Support - All users except Super Admin */}
+              <Route 
+                path="/support" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
+                    <MyTickets />
+                  </ProtectedRoute>
                 } 
+              />
+              <Route
+                path="/support/tickets/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
+                    <SupportTicketView />
+                  </ProtectedRoute>
+                }
               />
               <Route 
                 path="/it-assets/maintenance" 
@@ -438,13 +488,53 @@ const AppContent = () => {
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/it-assets/inventory" 
+              <Route
+                path="/it-assets/inventory/create"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <InventoryCreate />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/it-assets/inventory/history"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <InventoryHistory />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/it-assets/inventory/reports"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <InventoryReports />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/it-assets/inventory/:id/edit"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <InventoryEdit />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/it-assets/inventory/:id/adjust"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <InventoryAdjustment />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/it-assets/inventory"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
                     <AssetInventory />
                   </ProtectedRoute>
-                } 
+                }
               />
               <Route 
                 path="/it-assets/reports" 
@@ -470,7 +560,24 @@ const AppContent = () => {
                   </ProtectedRoute>
                 } 
               />
-              {/* Employee IT Assets View - All users except Super Admin */}
+              {/* My Devices - All users except Super Admin */}
+              <Route 
+                path="/my-devices" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
+                    <MyDevices />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/my-devices/:id" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
+                    <MyDeviceView />
+                  </ProtectedRoute>
+                } 
+              />
+              {/* Employee IT Assets View - All users except Super Admin (deprecated, keeping for backward compatibility) */}
               <Route 
                 path="/my-it-assets" 
                 element={

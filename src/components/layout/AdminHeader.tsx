@@ -1,6 +1,6 @@
-import { Bell, Search, User, Moon, Sun, Settings, UserCircle, LogOut } from "lucide-react";
+import { Bell, Search, User, Moon, Sun, Settings, UserCircle, LogOut, Headphones, Palette } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
@@ -28,7 +28,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { getCurrentUser, clearAuth } from "@/lib/auth";
-import { notificationsApi } from "@/lib/api";
+import { notificationsApi, authApi } from "@/lib/api";
+import { useLocation } from "react-router-dom";
+import { AvatarImage } from "@/components/ui/avatar";
+import { getProfilePhotoUrl } from "@/lib/imageUtils";
 
 export function AdminHeader() {
   const { theme, setTheme } = useTheme();
@@ -36,11 +39,46 @@ export function AdminHeader() {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const location = useLocation();
   
   // Get current user from secure storage
   const currentUser = getCurrentUser();
   const userName = currentUser?.name || 'User';
   const userInitials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+  const userRole = currentUser?.role || '';
+  const isSuperAdmin = userRole === 'Super Admin';
+  const canAccessSupport = !isSuperAdmin;
+
+  // Fetch user profile with employee data (for profile photo)
+  const { data: userProfileData } = useQuery({
+    queryKey: ['user-profile-header'],
+    queryFn: () => authApi.getMe(),
+    enabled: !!currentUser,
+  });
+
+  const userProfile = userProfileData?.data;
+  
+  // Check for profile photo in multiple possible locations
+  const employeeProfilePhoto = useMemo(() => {
+    if (!userProfile) return null;
+    return userProfile?.employee?.profile_photo_url 
+      || userProfile?.employee?.photo 
+      || userProfile?.profile_photo_url
+      || userProfile?.photo
+      || null;
+  }, [userProfile]);
+  
+  const hasProfilePhoto = useMemo(() => {
+    if (!employeeProfilePhoto) return false;
+    const photoStr = String(employeeProfilePhoto).trim();
+    return photoStr !== '' && photoStr !== 'null' && photoStr !== 'undefined';
+  }, [employeeProfilePhoto]);
+  
+  // Get the profile photo URL
+  const profilePhotoUrl = useMemo(() => {
+    if (!hasProfilePhoto || !employeeProfilePhoto) return undefined;
+    return getProfilePhotoUrl(employeeProfilePhoto);
+  }, [hasProfilePhoto, employeeProfilePhoto]);
 
   // Fetch unread notification count
   const { data: unreadCountData } = useQuery({
@@ -94,11 +132,13 @@ export function AdminHeader() {
             variant="ghost"
             size="icon"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="relative"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >
             {theme === "dark" ? (
-              <Sun className="h-5 w-5" />
+              <Sun className="h-5 w-5 text-amber-500" />
             ) : (
-              <Moon className="h-5 w-5" />
+              <Moon className="h-5 w-5 text-blue-600" />
             )}
           </Button>
         )}
@@ -106,10 +146,10 @@ export function AdminHeader() {
         {/* Notifications */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5 text-muted-foreground" />
+            <Button variant="ghost" size="icon" className="relative" title="Notifications">
+              <Bell className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               {unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground animate-pulse">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -161,18 +201,47 @@ export function AdminHeader() {
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* Support - All users except Super Admin */}
+        {canAccessSupport && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/support')}
+            className={location.pathname === '/support' ? 'bg-primary/10 text-primary' : ''}
+            title="Support"
+          >
+            <Headphones className="h-5 w-5 text-green-600 dark:text-green-400" />
+          </Button>
+        )}
+
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-3 px-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary/20 text-primary text-sm">
+            <Button variant="ghost" className="flex items-center gap-3 px-2 hover:bg-primary/5">
+              {hasProfilePhoto && (
+                <div className="hidden md:flex flex-col items-end mr-2">
+                  <span className="text-sm font-medium">{userName}</span>
+                  <span className="text-xs text-muted-foreground">{userRole}</span>
+                </div>
+              )}
+              <Avatar className="h-8 w-8 ring-2 ring-primary/20">
+                {hasProfilePhoto && profilePhotoUrl ? (
+                  <AvatarImage 
+                    src={profilePhotoUrl} 
+                    alt={userName}
+                    className="object-cover"
+                  />
+                ) : null}
+                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary text-sm font-semibold">
                   {userInitials}
                 </AvatarFallback>
               </Avatar>
-              <div className="hidden flex-col items-start md:flex">
-                <span className="text-sm font-medium">{userName}</span>
-              </div>
+              {!hasProfilePhoto && (
+                <div className="hidden flex-col items-start md:flex">
+                  <span className="text-sm font-medium">{userName}</span>
+                  <span className="text-xs text-muted-foreground">{userRole}</span>
+                </div>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

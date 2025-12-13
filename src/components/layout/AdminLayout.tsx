@@ -10,6 +10,9 @@ import { logger } from "@/lib/logger";
 import { useIdleTimeout } from "@/hooks/useIdleTimeout";
 import { useQuery } from "@tanstack/react-query";
 import { authApi } from "@/lib/api";
+import { PWAService } from "@/lib/pwaService";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 
 export function AdminLayout() {
   const [isLoading, setIsLoading] = useState(true);
@@ -35,28 +38,26 @@ export function AdminLayout() {
   });
 
   useEffect(() => {
-    // Register service worker for push notifications
-    const registerServiceWorker = async () => {
+    // Register PWA service worker (includes Firebase messaging)
+    const registerServiceWorkers = async () => {
+      // Register main PWA service worker
+      await PWAService.register();
+      
+      // Also register Firebase messaging service worker for push notifications
       if ('serviceWorker' in navigator) {
         try {
           const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
             scope: '/',
           });
-          logger.info('✅ Service Worker registered:', registration.scope);
-          
-          // Wait for service worker to be ready
-          await navigator.serviceWorker.ready;
-          logger.info('✅ Service Worker ready');
+          logger.info('✅ Firebase Service Worker registered:', registration.scope);
         } catch (error: any) {
-          logger.error('❌ Service Worker registration failed:', error);
-          logger.error('Error details:', error.message);
+          logger.error('❌ Firebase Service Worker registration failed:', error);
+          // Non-critical, continue without Firebase messaging
         }
-      } else {
-        logger.warn('⚠️  Service Workers are not supported in this browser');
       }
     };
 
-    registerServiceWorker();
+    registerServiceWorkers();
 
     // Initialize secure storage and check authentication
     const checkAuth = async () => {
@@ -106,6 +107,9 @@ export function AdminLayout() {
           <Outlet />
         </main>
       </div>
+      {/* PWA Components */}
+      <PWAInstallPrompt />
+      <PWAUpdatePrompt />
     </div>
   );
 }

@@ -104,9 +104,16 @@ router.get('/me', async (req, res) => {
     const userId = req.headers['user-id'] || 1; // Mock for now
     
     const [users] = await db.query(`
-      SELECT u.*, r.name as role
+      SELECT 
+        u.*, 
+        r.name as role,
+        r.level as role_level,
+        e.id as employee_id,
+        e.profile_photo_url,
+        e.emp_code
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN employees e ON u.id = e.user_id
       WHERE u.id = ?
     `, [userId]);
     
@@ -114,7 +121,24 @@ router.get('/me', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    res.json({ data: users[0] });
+    const user = users[0];
+    
+    // Structure response with employee data nested
+    const response = {
+      ...user,
+      employee: user.employee_id ? {
+        id: user.employee_id,
+        profile_photo_url: user.profile_photo_url,
+        emp_code: user.emp_code
+      } : null
+    };
+    
+    // Remove duplicate fields
+    delete response.employee_id;
+    delete response.profile_photo_url;
+    delete response.emp_code;
+    
+    res.json({ data: response });
   } catch (error) {
     logger.error('Error getting current user:', error);
     res.status(500).json({ error: error.message });

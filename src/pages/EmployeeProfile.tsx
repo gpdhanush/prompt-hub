@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { employeesApi } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
+import { Loader2 } from "lucide-react";
 import {
   User,
   Mail,
@@ -51,7 +53,12 @@ import {
 export default function EmployeeProfile() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("personal");
+
+  // Get current user info to check permissions
+  const currentUser = getCurrentUser();
+  const canManage = ['Admin', 'Super Admin', 'Team Lead', 'Manager'].includes(currentUser?.role || '');
 
   // Fetch employee data from API
   const { data, isLoading, error } = useQuery({
@@ -61,7 +68,7 @@ export default function EmployeeProfile() {
   });
 
   // Fetch documents
-  const { data: documentsData } = useQuery({
+  const { data: documentsData, refetch: refetchDocuments } = useQuery({
     queryKey: ['employee-documents', id],
     queryFn: () => employeesApi.getDocuments(Number(id)),
     enabled: !!id,
@@ -69,6 +76,42 @@ export default function EmployeeProfile() {
 
   const employee = data?.data;
   const documents = documentsData?.data || [];
+
+  // Verify document mutation
+  const verifyDocumentMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      return employeesApi.verifyDocument(Number(id), docId);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Document verified successfully." });
+      refetchDocuments();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to verify document.",
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Unverify document mutation
+  const unverifyDocumentMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      return employeesApi.unverifyDocument(Number(id), docId);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Document unverified successfully." });
+      refetchDocuments();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to unverify document.",
+        variant: "destructive"
+      });
+    },
+  });
 
   // Format date helper
   const formatDate = (dateString: string | null | undefined) => {
@@ -592,6 +635,51 @@ export default function EmployeeProfile() {
                             <Download className="mr-2 h-4 w-4" />
                             Download
                           </Button>
+                          {canManage && (
+                            <>
+                              {!doc.verified ? (
+                                <Button
+                                  type="button"
+                                  variant="default"
+                                  size="sm"
+                                  className="shadow-sm"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    verifyDocumentMutation.mutate(doc.id);
+                                  }}
+                                  disabled={verifyDocumentMutation.isPending}
+                                >
+                                  {verifyDocumentMutation.isPending ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="mr-2 h-4 w-4" />
+                                  )}
+                                  Verify
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="shadow-sm"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    unverifyDocumentMutation.mutate(doc.id);
+                                  }}
+                                  disabled={unverifyDocumentMutation.isPending}
+                                >
+                                  {unverifyDocumentMutation.isPending ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <XCircle className="mr-2 h-4 w-4" />
+                                  )}
+                                  Unverify
+                                </Button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
                     );

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Save, Info, Upload, FileText, Trash2, Download, Eye, EyeOff, X } from "lucide-react";
+import { ArrowLeft, Save, Info, Upload, FileText, Trash2, Download, Eye, EyeOff, X, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -416,6 +416,42 @@ export default function EmployeeEdit() {
       toast({ 
         title: "Error", 
         description: error.message || "Failed to delete document.",
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Verify document mutation
+  const verifyDocumentMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      return employeesApi.verifyDocument(Number(id), docId);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Document verified successfully." });
+      refetchDocuments();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to verify document.",
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Unverify document mutation
+  const unverifyDocumentMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      return employeesApi.unverifyDocument(Number(id), docId);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Document unverified successfully." });
+      refetchDocuments();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to unverify document.",
         variant: "destructive"
       });
     },
@@ -1262,6 +1298,22 @@ export default function EmployeeEdit() {
                         <div className="text-xs text-muted-foreground mt-1">
                           {new Date(doc.uploaded_at).toLocaleDateString()}
                         </div>
+                        {doc.verified ? (
+                          <div className="flex items-center gap-1 mt-2">
+                            <CheckCircle className="h-3 w-3 text-green-600" />
+                            <span className="text-xs text-green-600 font-medium">Verified</span>
+                            {doc.verified_by_name && (
+                              <span className="text-xs text-muted-foreground">
+                                by {doc.verified_by_name}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 mt-2">
+                            <XCircle className="h-3 w-3 text-yellow-600" />
+                            <span className="text-xs text-yellow-600 font-medium">Pending Verification</span>
+                          </div>
+                        )}
                       </div>
                       {(canManage || isOwnProfile) && (
                         <Button
@@ -1317,6 +1369,51 @@ export default function EmployeeEdit() {
                         <Download className="mr-2 h-4 w-4" />
                         Download
                       </Button>
+                      {canManage && (
+                        <>
+                          {!doc.verified ? (
+                            <Button
+                              type="button"
+                              variant="default"
+                              size="sm"
+                              className="flex-1"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                verifyDocumentMutation.mutate(doc.id);
+                              }}
+                              disabled={verifyDocumentMutation.isPending}
+                            >
+                              {verifyDocumentMutation.isPending ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                              )}
+                              Verify
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                unverifyDocumentMutation.mutate(doc.id);
+                              }}
+                              disabled={unverifyDocumentMutation.isPending}
+                            >
+                              {unverifyDocumentMutation.isPending ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <XCircle className="mr-2 h-4 w-4" />
+                              )}
+                              Unverify
+                            </Button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

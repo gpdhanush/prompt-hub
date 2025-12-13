@@ -100,6 +100,11 @@ export const bugStatusMap = {
 
 export const reimbursementStatusMap = {
   Pending: "warning",
+  "Waiting for Approval": "warning",
+  "Level 1 Approved": "info",
+  "Level 1 Rejected": "error",
+  "Super Admin Approved": "success",
+  "Super Admin Rejected": "error",
   Approved: "success",
   Rejected: "error",
   Processing: "info",

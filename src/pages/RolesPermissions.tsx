@@ -11,16 +11,22 @@ import { rolesApi } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 
 // Permission modules mapping
+// Note: This is for reference only. Actual permissions are fetched from database.
+// The Roles & Permissions page dynamically loads permissions from the database.
 const permissionModules = [
   { module: 'Users', permissions: ['View', 'Create', 'Edit', 'Delete'] },
   { module: 'Employees', permissions: ['View', 'Create', 'Edit', 'Delete'] },
   { module: 'Projects', permissions: ['View', 'Create', 'Edit', 'Delete'] },
   { module: 'Tasks', permissions: ['View', 'Create', 'Edit', 'Assign'] },
   { module: 'Bugs', permissions: ['View', 'Create', 'Edit'] },
-  { module: 'Leaves', permissions: ['View', 'Create', 'Edit', 'Approve'] },
+  { module: 'Leaves', permissions: ['View', 'Create', 'Edit', 'Approve', 'Accept', 'Reject'] },
   { module: 'Reimbursements', permissions: ['View', 'Create', 'Edit', 'Approve'] },
   { module: 'Reports', permissions: ['View'] },
   { module: 'Settings', permissions: ['Edit'] },
+  { module: 'My Devices', permissions: ['View', 'Create'] },
+  { module: 'IT Asset Management', permissions: ['Dashboard View', 'Assets View', 'Assets Create', 'Assets Edit', 'Assets Delete', 'Assignments View', 'Assignments Create', 'Assignments Edit', 'Assignments Delete', 'Tickets View', 'Tickets Create', 'Tickets Edit', 'Tickets Approve', 'Maintenance View', 'Maintenance Create', 'Maintenance Edit', 'Maintenance Delete', 'Inventory View', 'Inventory Create', 'Inventory Edit', 'Inventory Delete', 'Inventory Adjust'] },
+  { module: 'Audit', permissions: ['View'] },
+  { module: 'Roles', permissions: ['View'] },
 ];
 
 export default function RolesPermissions() {
@@ -130,10 +136,35 @@ export default function RolesPermissions() {
   };
 
   // Check if all permissions in a module are checked
-  const areAllModulePermissionsChecked = (roleId: number, module: string) => {
+  const areAllModulePermissionsChecked = (roleId: number, moduleKey: string) => {
     const permissions = rolePermissions[roleId] || [];
     const localPerms = localPermissions[roleId] || {};
-    const modulePerms = permissions.filter((perm: any) => perm.module === module);
+    // Handle both regular modules and IT Asset Management sub-menus
+    const [module, menuName] = moduleKey.split('::');
+    let modulePerms: any[];
+    if (menuName) {
+      // IT Asset Management sub-menu
+      const itAssetMenuMapping: Record<string, string> = {
+        'IT Asset Dashboard': 'dashboard',
+        'Assets': 'assets',
+        'Assignments': 'assignments',
+        'Tickets': 'tickets',
+        'Maintenance': 'maintenance',
+        'Inventory': 'inventory',
+      };
+      const menuKey = itAssetMenuMapping[menuName] || menuName.toLowerCase();
+      modulePerms = permissions.filter((perm: any) => {
+        if (perm.module !== module) return false;
+        const codeParts = perm.code.split('.');
+        if (codeParts.length >= 2) {
+          return codeParts[1] === menuKey || (menuKey === 'IT Asset Dashboard' && perm.code.includes('dashboard'));
+        }
+        return false;
+      });
+    } else {
+      // Regular module
+      modulePerms = permissions.filter((perm: any) => perm.module === module);
+    }
     return modulePerms.length > 0 && modulePerms.every((perm: any) => localPerms[perm.id] === true);
   };
 
@@ -146,10 +177,35 @@ export default function RolesPermissions() {
   };
 
   // Check if some (but not all) permissions in a module are checked
-  const areSomeModulePermissionsChecked = (roleId: number, module: string) => {
+  const areSomeModulePermissionsChecked = (roleId: number, moduleKey: string) => {
     const permissions = rolePermissions[roleId] || [];
     const localPerms = localPermissions[roleId] || {};
-    const modulePerms = permissions.filter((perm: any) => perm.module === module);
+    // Handle both regular modules and IT Asset Management sub-menus
+    const [module, menuName] = moduleKey.split('::');
+    let modulePerms: any[];
+    if (menuName) {
+      // IT Asset Management sub-menu
+      const itAssetMenuMapping: Record<string, string> = {
+        'IT Asset Dashboard': 'dashboard',
+        'Assets': 'assets',
+        'Assignments': 'assignments',
+        'Tickets': 'tickets',
+        'Maintenance': 'maintenance',
+        'Inventory': 'inventory',
+      };
+      const menuKey = itAssetMenuMapping[menuName] || menuName.toLowerCase();
+      modulePerms = permissions.filter((perm: any) => {
+        if (perm.module !== module) return false;
+        const codeParts = perm.code.split('.');
+        if (codeParts.length >= 2) {
+          return codeParts[1] === menuKey || (menuKey === 'IT Asset Dashboard' && perm.code.includes('dashboard'));
+        }
+        return false;
+      });
+    } else {
+      // Regular module
+      modulePerms = permissions.filter((perm: any) => perm.module === module);
+    }
     const checkedCount = modulePerms.filter((perm: any) => localPerms[perm.id] === true).length;
     return checkedCount > 0 && checkedCount < modulePerms.length;
   };
@@ -168,9 +224,34 @@ export default function RolesPermissions() {
   };
 
   // Toggle all permissions in a module
-  const handleToggleModulePermissions = (roleId: number, module: string, checked: boolean) => {
+  const handleToggleModulePermissions = (roleId: number, moduleKey: string, checked: boolean) => {
     const permissions = rolePermissions[roleId] || [];
-    const modulePerms = permissions.filter((perm: any) => perm.module === module);
+    // Handle both regular modules and IT Asset Management sub-menus
+    const [module, menuName] = moduleKey.split('::');
+    let modulePerms: any[];
+    if (menuName) {
+      // IT Asset Management sub-menu
+      const itAssetMenuMapping: Record<string, string> = {
+        'IT Asset Dashboard': 'dashboard',
+        'Assets': 'assets',
+        'Assignments': 'assignments',
+        'Tickets': 'tickets',
+        'Maintenance': 'maintenance',
+        'Inventory': 'inventory',
+      };
+      const menuKey = itAssetMenuMapping[menuName] || menuName.toLowerCase();
+      modulePerms = permissions.filter((perm: any) => {
+        if (perm.module !== module) return false;
+        const codeParts = perm.code.split('.');
+        if (codeParts.length >= 2) {
+          return codeParts[1] === menuKey || (menuKey === 'IT Asset Dashboard' && perm.code.includes('dashboard'));
+        }
+        return false;
+      });
+    } else {
+      // Regular module
+      modulePerms = permissions.filter((perm: any) => perm.module === module);
+    }
     setLocalPermissions(prev => {
       const current = prev[roleId] || {};
       const updated = { ...current };
@@ -356,17 +437,87 @@ export default function RolesPermissions() {
                           const localPerms = localPermissions[role.id] || {};
                           
                           // Group permissions by module
+                          // For IT Asset Management, also group by menu name (Assets, Assignments, etc.)
                           const groupedPermissions: Record<string, any[]> = {};
+                          const itAssetMenuMapping: Record<string, string> = {
+                            'dashboard': 'IT Asset Dashboard',
+                            'assets': 'Assets',
+                            'assignments': 'Assignments',
+                            'tickets': 'Tickets',
+                            'maintenance': 'Maintenance',
+                            'inventory': 'Inventory',
+                          };
+                          
                           permissions.forEach((perm: any) => {
-                            if (!groupedPermissions[perm.module]) {
-                              groupedPermissions[perm.module] = [];
+                            if (perm.module === 'IT Asset Management') {
+                              // Extract menu name from permission code (e.g., "it_assets.assets.view" -> "assets")
+                              const codeParts = perm.code.split('.');
+                              if (codeParts.length >= 2) {
+                                const menuKey = codeParts[1]; // "assets", "assignments", etc.
+                                const menuName = itAssetMenuMapping[menuKey] || menuKey;
+                                const groupKey = `${perm.module}::${menuName}`;
+                                if (!groupedPermissions[groupKey]) {
+                                  groupedPermissions[groupKey] = [];
+                                }
+                                groupedPermissions[groupKey].push(perm);
+                              } else {
+                                // Fallback for dashboard or other special cases
+                                if (perm.code.includes('dashboard')) {
+                                  const groupKey = `${perm.module}::IT Asset Dashboard`;
+                                  if (!groupedPermissions[groupKey]) {
+                                    groupedPermissions[groupKey] = [];
+                                  }
+                                  groupedPermissions[groupKey].push(perm);
+                                } else {
+                                  // Default grouping
+                                  if (!groupedPermissions[perm.module]) {
+                                    groupedPermissions[perm.module] = [];
+                                  }
+                                  groupedPermissions[perm.module].push(perm);
+                                }
+                              }
+                            } else {
+                              // Regular module grouping
+                              if (!groupedPermissions[perm.module]) {
+                                groupedPermissions[perm.module] = [];
+                              }
+                              groupedPermissions[perm.module].push(perm);
                             }
-                            groupedPermissions[perm.module].push(perm);
+                          });
+                          
+                          // Sort IT Asset Management sub-menus in a specific order
+                          const itAssetMenuOrder = ['IT Asset Dashboard', 'Assets', 'Assignments', 'Tickets', 'Maintenance', 'Inventory'];
+                          const sortedKeys = Object.keys(groupedPermissions).sort((a, b) => {
+                            const [moduleA, menuA] = a.split('::');
+                            const [moduleB, menuB] = b.split('::');
+                            
+                            if (moduleA === 'IT Asset Management' && moduleB === 'IT Asset Management') {
+                              const indexA = itAssetMenuOrder.indexOf(menuA || '');
+                              const indexB = itAssetMenuOrder.indexOf(menuB || '');
+                              if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                              if (indexA !== -1) return -1;
+                              if (indexB !== -1) return 1;
+                            }
+                            return 0;
+                          });
+                          
+                          // Create sorted grouped permissions
+                          const sortedGroupedPermissions: Record<string, any[]> = {};
+                          sortedKeys.forEach(key => {
+                            sortedGroupedPermissions[key] = groupedPermissions[key];
+                          });
+                          Object.keys(groupedPermissions).forEach(key => {
+                            if (!sortedGroupedPermissions[key]) {
+                              sortedGroupedPermissions[key] = groupedPermissions[key];
+                            }
                           });
                           
                           const totalPermissions = permissions.length;
                           
-                          return Object.keys(groupedPermissions).length > 0 ? (
+                          // Check if we have IT Asset Management permissions to show parent module
+                          const hasITAssetPermissions = Object.keys(sortedGroupedPermissions).some(key => key.startsWith('IT Asset Management::'));
+                          
+                          return Object.keys(sortedGroupedPermissions).length > 0 ? (
                             <div className="space-y-4">
                               {/* Global Check All */}
                               {isEditing && (
@@ -389,26 +540,48 @@ export default function RolesPermissions() {
                                 </div>
                               )}
                               
-                              {Object.entries(groupedPermissions).map(([module, perms]) => (
-                                <div key={module} className="space-y-3 p-4 bg-gradient-to-br from-muted/50 via-muted/30 to-transparent rounded-lg border border-border/50">
+                              {hasITAssetPermissions && (
+                                <div className="p-3 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent rounded-lg border border-primary/10 mb-2">
+                                  <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                    <span className="inline-block w-2 h-2 rounded-full bg-primary"></span>
+                                    IT Asset Management
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {Object.entries(sortedGroupedPermissions).map(([moduleKey, perms]) => {
+                                // Extract module name and menu name (for IT Asset Management)
+                                const [module, menuName] = moduleKey.split('::');
+                                const displayName = menuName || module;
+                                const isITAssetSubMenu = !!menuName;
+                                
+                                return (
+                                <div key={moduleKey} className={`space-y-3 p-4 bg-gradient-to-br from-muted/50 via-muted/30 to-transparent rounded-lg border border-border/50 ${isITAssetSubMenu ? 'ml-4 border-l-2 border-l-primary/30' : ''}`}>
                                   <div className="flex items-center justify-between mb-3">
-                                    <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                      <span className="inline-block w-2 h-2 rounded-full bg-primary"></span>
-                                      {module}
-                                    </p>
+                                    {isITAssetSubMenu ? (
+                                      <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary/60"></span>
+                                        {displayName}
+                                      </p>
+                                    ) : (
+                                      <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                        <span className="inline-block w-2 h-2 rounded-full bg-primary"></span>
+                                        {displayName}
+                                      </p>
+                                    )}
                                     {isEditing && (
                                       <div className="flex items-center gap-2">
                                         <Checkbox
-                                          id={`module-check-all-${role.id}-${module}`}
-                                          checked={areAllModulePermissionsChecked(role.id, module)}
+                                          id={`module-check-all-${role.id}-${moduleKey}`}
+                                          checked={areAllModulePermissionsChecked(role.id, moduleKey)}
                                           onCheckedChange={(checked) => 
-                                            handleToggleModulePermissions(role.id, module, checked as boolean)
+                                            handleToggleModulePermissions(role.id, moduleKey, checked as boolean)
                                           }
                                           disabled={updatePermissionsMutation.isPending}
                                           className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                                         />
                                         <Label 
-                                          htmlFor={`module-check-all-${role.id}-${module}`}
+                                          htmlFor={`module-check-all-${role.id}-${moduleKey}`}
                                           className="text-xs text-muted-foreground cursor-pointer font-medium"
                                         >
                                           Check All ({perms.length})
@@ -416,9 +589,12 @@ export default function RolesPermissions() {
                                       </div>
                                     )}
                                   </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 ${isITAssetSubMenu ? '' : ''}`}>
                                     {perms.map((perm: any) => {
-                                      const permName = perm.code.split('.').pop()?.replace(/([A-Z])/g, ' $1').trim() || perm.code;
+                                      // Extract permission name from code (e.g., "it_assets.assets.view" -> "view")
+                                      // Capitalize first letter for better display
+                                      const permCode = perm.code.split('.').pop() || perm.code;
+                                      const permName = permCode.charAt(0).toUpperCase() + permCode.slice(1);
                                       const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
                                       
                                       return (
@@ -464,7 +640,8 @@ export default function RolesPermissions() {
                                     })}
                                   </div>
                                 </div>
-                              ))}
+                              );
+                              })}
                             </div>
                           ) : (
                             <div className="text-sm text-muted-foreground py-4">

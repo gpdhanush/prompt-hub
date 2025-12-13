@@ -37,7 +37,7 @@ export default function AssetAssignments() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Asset Assignments</h1>
-        <Button onClick={() => navigate("/it-assets/assign")}>
+        <Button onClick={() => navigate("/it-assets/assignments/new")}>
           <Plus className="mr-2 h-4 w-4" />
           Assign Asset
         </Button>

@@ -46,7 +46,9 @@ const allMenuItems = [
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
+  { name: "My Devices", href: "/my-devices", icon: Laptop, section: "main" },
   { name: "Reports", href: "/reports", icon: BarChart3, section: "main" },
+  
   // IT Asset Management - Admin only (full menu)
   { name: "IT Asset Dashboard", href: "/it-assets/dashboard", icon: LayoutDashboard, section: "it-assets" },
   { name: "Assets", href: "/it-assets/assets", icon: Package, section: "it-assets" },
@@ -54,11 +56,6 @@ const allMenuItems = [
   { name: "Tickets", href: "/it-assets/tickets", icon: Ticket, section: "it-assets" },
   { name: "Maintenance", href: "/it-assets/maintenance", icon: Wrench, section: "it-assets" },
   { name: "Inventory", href: "/it-assets/inventory", icon: Warehouse, section: "it-assets" },
-  { name: "Asset Reports", href: "/it-assets/reports", icon: FileBarChart, section: "it-assets" },
-  { name: "Approvals", href: "/it-assets/approvals", icon: CheckCircle, section: "it-assets" },
-  { name: "Asset Settings", href: "/it-assets/settings", icon: Settings, section: "it-assets" },
-  // Employee IT Assets View (simplified)
-  { name: "My IT Assets", href: "/my-it-assets", icon: Laptop, section: "employee-assets" },
 ];
 
 export function AdminSidebar() {
@@ -84,7 +81,7 @@ export function AdminSidebar() {
   // For leaves and reimbursements, default to true if permission doesn't exist (for backward compatibility)
   const canAccessLeaves = isSuperAdmin || hasPermission('leaves.view') || true;
   const canAccessReimbursements = isSuperAdmin || hasPermission('reimbursements.view') || true;
-  const canAccessReports = isSuperAdmin || hasPermission('reports.view') || userRole === 'Admin' || userRole === 'Team Leader' || userRole === 'Team Lead';
+  const canAccessReports = isSuperAdmin || hasPermission('reports.view');
   
   // Roles & Positions - Super Admin only (system-level)
   const canAccessRolesPositions = isSuperAdmin;
@@ -97,8 +94,11 @@ export function AdminSidebar() {
   const isAdmin = userRole === 'Admin' || isSuperAdmin;
   const canAccessITAssets = isAdmin;
   
-  // Employee IT Assets - All users except Super Admin (employees see their own assets)
-  const canAccessMyITAssets = !isSuperAdmin;
+  // Tickets menu - Admin can see all, employees can see their own
+  const canAccessTickets = !isSuperAdmin; // All users except Super Admin can access tickets (filtered by role)
+  
+  // My Devices - All users except Super Admin (employees see their own devices)
+  const canAccessMyDevices = !isSuperAdmin;
 
   const isActive = (href: string) => location.pathname === href;
 
@@ -172,28 +172,35 @@ export function AdminSidebar() {
             if (item.href === '/roles-permissions' && !canAccessRolesPermissions) return false;
             // Audit Logs - Super Admin and Admin only
             if (item.href === '/audit-logs' && !canAccessAuditLogs) return false;
-            // IT Asset Management - Admin only
-            if (item.section === 'it-assets' && !canAccessITAssets) return false;
-            // My IT Assets - All users except Super Admin
-            if (item.section === 'employee-assets' && !canAccessMyITAssets) return false;
+            // IT Asset Management - Admin only (except Tickets which employees can access)
+            if (item.section === 'it-assets') {
+              // Tickets menu is accessible to all users (except Super Admin)
+              if (item.href === '/it-assets/tickets' && !canAccessTickets) return false;
+              // Other IT Asset menus are Admin only
+              if (item.href !== '/it-assets/tickets' && !canAccessITAssets) return false;
+            }
+            // My Devices - All users except Super Admin (now in main section, check by href)
+            if (item.href === '/my-devices' && !canAccessMyDevices) return false;
             return true;
           })
           .map((item, index, filteredItems) => {
-            // Show section headers (skip for items with null section)
+            // Show section headers (skip for items with null section or empty label)
             const prevItem = index > 0 ? filteredItems[index - 1] : null;
-            const showSectionHeader = item.section !== null && (!prevItem || prevItem.section !== item.section);
             const sectionLabels: Record<string, string> = {
               main: "Management",
               admin: "Administration",
               "it-assets": "IT Asset Management",
-              "employee-assets": "My Assets",
             };
+            const sectionLabel = item.section ? sectionLabels[item.section] : '';
+            const showSectionHeader = item.section !== null && 
+                                     sectionLabel !== '' && 
+                                     (!prevItem || prevItem.section !== item.section);
 
             return (
               <div key={item.href}>
                 {showSectionHeader && !collapsed && (
                   <p className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {sectionLabels[item.section]}
+                    {sectionLabel}
                   </p>
                 )}
                 <NavItem item={item} />
