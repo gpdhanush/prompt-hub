@@ -2,6 +2,8 @@ import { Bell, Search, User, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +28,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { getCurrentUser, clearAuth } from "@/lib/auth";
+import { notificationsApi } from "@/lib/api";
 
 export function AdminHeader() {
   const { theme, setTheme } = useTheme();
@@ -38,6 +41,24 @@ export function AdminHeader() {
   const currentUser = getCurrentUser();
   const userName = currentUser?.name || 'User';
   const userInitials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+
+  // Fetch unread notification count
+  const { data: unreadCountData } = useQuery({
+    queryKey: ['notifications-unread-count'],
+    queryFn: () => notificationsApi.getUnreadCount(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+    enabled: !!currentUser, // Only fetch if user is logged in
+  });
+
+  // Fetch recent unread notifications for dropdown
+  const { data: recentNotificationsData } = useQuery({
+    queryKey: ['notifications-recent'],
+    queryFn: () => notificationsApi.getAll({ is_read: false }),
+    enabled: !!currentUser,
+  });
+
+  const unreadCount = unreadCountData?.count || 0;
+  const recentNotifications = recentNotificationsData?.data?.slice(0, 5) || [];
 
   useEffect(() => {
     setMounted(true);
@@ -83,12 +104,62 @@ export function AdminHeader() {
         )}
         
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5 text-muted-foreground" />
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">
-            3
-          </span>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative">
+              <Bell className="h-5 w-5 text-muted-foreground" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80">
+            <DropdownMenuLabel className="flex items-center justify-between">
+              <span>Notifications</span>
+              {unreadCount > 0 && (
+                <StatusBadge variant="error" className="text-xs">
+                  {unreadCount} new
+                </StatusBadge>
+              )}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <div className="max-h-96 overflow-y-auto">
+              {recentNotifications.length === 0 ? (
+                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  No new notifications
+                </div>
+              ) : (
+                recentNotifications.map((notif: any) => (
+                  <DropdownMenuItem
+                    key={notif.id}
+                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                    onClick={() => {
+                      navigate('/notifications');
+                    }}
+                  >
+                    <div className="flex items-start justify-between w-full">
+                      <p className="text-sm font-medium line-clamp-1">{notif.title}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {notif.message}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {notif.created_at 
+                        ? formatDistanceToNow(new Date(notif.created_at), { addSuffix: true })
+                        : 'Just now'}
+                    </p>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate('/notifications')} className="text-center justify-center">
+              View all notifications
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* User Menu */}
         <DropdownMenu>

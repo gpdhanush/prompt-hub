@@ -16,6 +16,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
+  UserCircle,
+  KeyRound,
+  FileText,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -32,26 +35,29 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getCurrentUser, clearAuth } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 
-const navItems = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Users", href: "/users", icon: Users },
-  { name: "Employees", href: "/employees", icon: UserCog },
-  { name: "Projects", href: "/projects", icon: FolderKanban },
-  { name: "Tasks", href: "/tasks", icon: CheckSquare },
-  { name: "Bugs", href: "/bugs", icon: Bug },
-  { name: "Leaves", href: "/leaves", icon: Calendar },
-  { name: "Reimbursements", href: "/reimbursements", icon: Receipt },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
-];
-
-const bottomItems = [
-  { name: "Notifications", href: "/notifications", icon: Bell },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
-
-const adminItems = [
-  { name: "Roles & Positions", href: "/roles-positions", icon: Shield },
+// All menu items in one list - organized by sections
+const allMenuItems = [
+  // Main Management
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, section: "main" },
+  { name: "Users", href: "/users", icon: Users, section: "main" },
+  { name: "Employees", href: "/employees", icon: UserCog, section: "main" },
+  { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
+  { name: "Tasks", href: "/tasks", icon: CheckSquare, section: "main" },
+  { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
+  { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
+  { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
+  { name: "Reports", href: "/reports", icon: BarChart3, section: "main" },
+  // Profile
+  { name: "Profile Setup", href: "/profile-setup", icon: UserCircle, section: "profile" },
+  // Administration (Super Admin only)
+  { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
+  { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
+  // System
+  { name: "Audit Logs", href: "/audit-logs", icon: FileText, section: "system" },
+  { name: "Notifications", href: "/notifications", icon: Bell, section: "system" },
+  { name: "Settings", href: "/settings", icon: Settings, section: "system" },
 ];
 
 export function AdminSidebar() {
@@ -65,12 +71,29 @@ export function AdminSidebar() {
   const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   
-  // Only Admin, Super Admin, and Team Leader can access Users and Employees pages
-  // Developer, Designer, Tester, and Viewer roles cannot access these pages
-  const canAccessUserManagement = userRole === 'Admin' || userRole === 'Super Admin' || userRole === 'Team Leader' || userRole === 'Team Lead';
+  // Use permission-based checks instead of hardcoded roles
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   
-  // Only Super Admin, Admin, and Team Leader can access Reports
-  const canAccessReports = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Leader' || userRole === 'Team Lead';
+  // Super Admin always has access to everything
+  const isSuperAdmin = userRole === 'Super Admin';
+  
+  // Check permissions for page access (Super Admin bypasses all checks)
+  const canAccessUsers = isSuperAdmin || hasPermission('users.view');
+  const canAccessEmployees = isSuperAdmin || hasPermission('employees.view');
+  const canAccessProjects = isSuperAdmin || hasPermission('projects.view');
+  const canAccessTasks = isSuperAdmin || hasPermission('tasks.view');
+  const canAccessBugs = isSuperAdmin || hasPermission('bugs.view');
+  // For leaves and reimbursements, default to true if permission doesn't exist (for backward compatibility)
+  const canAccessLeaves = isSuperAdmin || hasPermission('leaves.view') || true;
+  const canAccessReimbursements = isSuperAdmin || hasPermission('reimbursements.view') || true;
+  const canAccessReports = isSuperAdmin || hasPermission('reports.view') || userRole === 'Admin' || userRole === 'Team Leader' || userRole === 'Team Lead';
+  
+  // Roles & Positions - Super Admin only (system-level)
+  const canAccessRolesPositions = isSuperAdmin;
+  // Roles & Permissions - Super Admin only
+  const canAccessRolesPermissions = isSuperAdmin;
+  // Audit Logs - Super Admin and Admin only
+  const canAccessAuditLogs = isSuperAdmin || userRole === 'Admin';
 
   const isActive = (href: string) => location.pathname === href;
 
@@ -85,7 +108,7 @@ export function AdminSidebar() {
     navigate('/login');
   };
 
-  const NavItem = ({ item }: { item: typeof navItems[0] }) => (
+  const NavItem = ({ item }: { item: typeof allMenuItems[0] }) => (
     <NavLink
       to={item.href}
       className={cn(
@@ -137,48 +160,52 @@ export function AdminSidebar() {
         </Button>
       </div>
 
-      {/* Navigation */}
+      {/* Navigation - All items in one scrollable list */}
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {!collapsed && (
-          <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Management
-          </p>
-        )}
-        {navItems
+        {allMenuItems
           .filter((item) => {
-            // Hide Users and Employees for Developer, Designer, Tester, and Viewer roles
-            if ((item.href === '/users' || item.href === '/employees') && !canAccessUserManagement) {
-              return false;
-            }
-            // Hide Reports for roles other than Super Admin, Admin, and Team Lead
-            if (item.href === '/reports' && !canAccessReports) {
-              return false;
-            }
+            // Permission-based visibility checks
+            if (item.href === '/users' && !canAccessUsers) return false;
+            if (item.href === '/employees' && !canAccessEmployees) return false;
+            if (item.href === '/projects' && !canAccessProjects) return false;
+            if (item.href === '/tasks' && !canAccessTasks) return false;
+            if (item.href === '/bugs' && !canAccessBugs) return false;
+            if (item.href === '/leaves' && !canAccessLeaves) return false;
+            if (item.href === '/reimbursements' && !canAccessReimbursements) return false;
+            if (item.href === '/reports' && !canAccessReports) return false;
+            // Admin items - Super Admin only
+            if (item.section === 'admin' && !canAccessRolesPositions) return false;
+            if (item.href === '/roles-permissions' && !canAccessRolesPermissions) return false;
+            // Audit Logs - Super Admin and Admin only
+            if (item.href === '/audit-logs' && !canAccessAuditLogs) return false;
             return true;
           })
-          .map((item) => (
-          <NavItem key={item.href} item={item} />
-        ))}
+          .map((item, index, filteredItems) => {
+            // Show section headers
+            const prevItem = index > 0 ? filteredItems[index - 1] : null;
+            const showSectionHeader = !prevItem || prevItem.section !== item.section;
+            const sectionLabels: Record<string, string> = {
+              main: "Management",
+              profile: "Profile",
+              admin: "Administration",
+              system: "System",
+            };
+
+            return (
+              <div key={item.href}>
+                {showSectionHeader && !collapsed && (
+                  <p className="mb-2 mt-4 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {sectionLabels[item.section]}
+                  </p>
+                )}
+                <NavItem item={item} />
+              </div>
+            );
+          })}
       </nav>
 
-      {/* Bottom */}
+      {/* Logout Button - Fixed at bottom */}
       <div className="border-t border-sidebar-border p-3">
-        {userRole === 'Super Admin' && (
-          <>
-            {!collapsed && (
-              <p className="mb-2 px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Administration
-              </p>
-            )}
-            {adminItems.map((item) => (
-              <NavItem key={item.href} item={item} />
-            ))}
-            <div className="my-2 border-t border-sidebar-border" />
-          </>
-        )}
-        {bottomItems.map((item) => (
-          <NavItem key={item.href} item={item} />
-        ))}
         <button
           onClick={() => setShowLogoutDialog(true)}
           className={cn(

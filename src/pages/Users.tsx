@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, User, Mail, Phone, Briefcase, Shield, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,6 +45,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import {
   Pagination,
@@ -56,6 +58,8 @@ import {
 } from "@/components/ui/pagination";
 import { usersApi, rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
+import { logger } from "@/lib/logger";
+import { getProfilePhotoUrl } from "@/lib/imageUtils";
 
 type User = {
   id: number;
@@ -66,6 +70,10 @@ type User = {
   position?: string;
   status: "Active" | "Inactive" | "Suspended";
   last_login?: string;
+  mfa_enabled?: boolean;
+  mfs?: boolean;
+  profile_photo_url?: string;
+  photo?: string;
 };
 
 export default function Users() {
@@ -456,7 +464,7 @@ export default function Users() {
       }
     }
 
-    console.log('Creating user with data:', {
+    logger.debug('Creating user with data:', {
       name: userForm.name,
       email: userForm.email,
       role: userForm.role,
@@ -689,11 +697,10 @@ export default function Users() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>User ID</TableHead>
+                <TableHead>S.No</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>Position</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last Login</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -702,86 +709,88 @@ export default function Users() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-destructive">
+                  <TableCell colSpan={7} className="text-center py-8 text-destructive">
                     Error loading users. Please check your database connection.
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No users found
                   </TableCell>
                 </TableRow>
               ) : (
-                users.map((user) => (
-                  <TableRow key={user.id}>
-                  <TableCell className="font-mono text-muted-foreground">
-                    #{user.id}
-                  </TableCell>
-                  <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      variant={
-                        user.role === "Super Admin" ? "purple" :
-                        user.role === "Admin" ? "purple" :
-                        user.role === "Team Lead" ? "info" :
-                        (user.role === "Developer" || user.role === "Designer" || user.role === "Tester") ? "neutral" : "neutral"
-                      }
-                    >
-                      {user.role}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell>{user.position}</TableCell>
-                  <TableCell>
-                    <StatusBadge variant={userStatusMap[user.status]}>
-                      {user.status}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(user.last_login)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleView(user)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View
-                        </DropdownMenuItem>
-                        {canManageUsers && (
-                          <>
-                            <DropdownMenuItem onClick={() => handleEdit(user)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
+                users.map((user, index) => {
+                  const serialNumber = ((currentPage - 1) * pageLimit) + index + 1;
+                  return (
+                    <TableRow key={user.id}>
+                      <TableCell className="text-muted-foreground">
+                        {serialNumber}
+                      </TableCell>
+                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          variant={
+                            user.role === "Super Admin" ? "purple" :
+                            user.role === "Admin" ? "purple" :
+                            user.role === "Team Lead" ? "info" :
+                            (user.role === "Developer" || user.role === "Designer" || user.role === "Tester") ? "neutral" : "neutral"
+                          }
+                        >
+                          {user.role}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={userStatusMap[user.status]}>
+                          {user.status}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(user.last_login)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleView(user)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View
                             </DropdownMenuItem>
-                            {/* Hide delete button for Super Admin users */}
-                            {user.role !== 'Super Admin' && (
-                              <DropdownMenuItem 
-                                className="text-destructive"
-                                onClick={() => handleDelete(user)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
+                            {canManageUsers && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleEdit(user)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                {/* Hide delete button for Super Admin users */}
+                                {user.role !== 'Super Admin' && (
+                                  <DropdownMenuItem 
+                                    className="text-destructive"
+                                    onClick={() => handleDelete(user)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
+                              </>
                             )}
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-                ))
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -838,59 +847,117 @@ export default function Users() {
 
       {/* View User Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>User Details</DialogTitle>
+            <DialogTitle className="text-2xl">User Details</DialogTitle>
             <DialogDescription>
-              View user information and details
+              View comprehensive user information and account details
             </DialogDescription>
           </DialogHeader>
           {selectedUser && (
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">User ID</Label>
-                <div className="font-mono text-sm">#{selectedUser.id}</div>
+            <div className="space-y-6 py-4">
+              {/* Profile Header Card */}
+              <Card className="border-0 shadow-lg bg-gradient-to-br from-primary/5 via-background to-primary/5 overflow-hidden">
+                <CardContent className="pt-6 pb-6">
+                  <div className="flex items-start gap-6">
+                    <div className="relative group">
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full blur-xl"></div>
+                      <Avatar className="h-24 w-24 relative border-4 border-background shadow-xl">
+                        <AvatarImage 
+                          src={getProfilePhotoUrl(selectedUser.profile_photo_url || selectedUser.photo || null)} 
+                        />
+                        <AvatarFallback className="text-2xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground font-semibold">
+                          {selectedUser.name ? selectedUser.name.split(" ").map((n: string) => n[0]).join("").toUpperCase() : "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                    <div className="flex-1 space-y-3">
+                      <div>
+                        <h2 className="text-2xl font-bold mb-1">{selectedUser.name}</h2>
+                      </div>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <StatusBadge variant={userStatusMap[selectedUser.status]}>
+                          {selectedUser.status}
+                        </StatusBadge>
+                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                          <Briefcase className="h-3.5 w-3.5" />
+                          {selectedUser.role}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Contact Information and Account Information Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Contact Information Card */}
+                <Card className="shadow-md border-0 bg-gradient-to-br from-primary/5 via-background to-primary/5">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">
+                      Contact Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="text-xs text-muted-foreground">Email Address</Label>
+                      </div>
+                      <div className="text-sm font-medium pl-5">
+                        {selectedUser.email}
+                      </div>
+                    </div>
+                    {selectedUser.mobile && (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Label className="text-xs text-muted-foreground">Mobile Number</Label>
+                        </div>
+                        <div className="text-sm font-medium pl-5">
+                          {selectedUser.mobile}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Account Information */}
+                <Card className="shadow-md border-0 bg-gradient-to-br from-primary/5 via-background to-primary/5">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">
+                      Account Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="text-xs text-muted-foreground">MFS Status</Label>
+                      </div>
+                      <div className="pl-5 pt-1">
+                        <StatusBadge variant={(selectedUser.mfs ?? selectedUser.mfa_enabled) ? "success" : "neutral"}>
+                          {(selectedUser.mfs ?? selectedUser.mfa_enabled) ? "On" : "Off"}
+                        </StatusBadge>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="text-xs text-muted-foreground">Last Login</Label>
+                      </div>
+                      <div className="text-sm font-medium pl-5 pt-1">
+                        {formatDate(selectedUser.last_login)}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">Full Name</Label>
-                <div className="font-medium">{selectedUser.name}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">Email</Label>
-                <div>{selectedUser.email}</div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Role</Label>
-                  <StatusBadge
-                    variant={
-                      selectedUser.role === "Super Admin" ? "purple" :
-                      selectedUser.role === "Admin" ? "purple" :
-                      selectedUser.role === "Team Lead" ? "info" :
-                      (selectedUser.role === "Developer" || selectedUser.role === "Designer" || selectedUser.role === "Tester") ? "neutral" : "neutral"
-                    }
-                  >
-                    {selectedUser.role}
-                  </StatusBadge>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Position</Label>
-                  <div>{selectedUser.position}</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Status</Label>
-                  <StatusBadge variant={userStatusMap[selectedUser.status]}>
-                    {selectedUser.status}
-                  </StatusBadge>
-                </div>
-                <div className="grid gap-2">
-                  <Label className="text-muted-foreground">Last Login</Label>
-                  <div className="text-sm">{formatDate(selectedUser.last_login)}</div>
-                </div>
-              </div>
-              <div className="flex gap-2 pt-2">
+
+              <Separator />
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
                 <Button 
                   variant="outline" 
                   className="flex-1" 
@@ -898,15 +965,18 @@ export default function Users() {
                 >
                   Close
                 </Button>
-                <Button 
-                  className="flex-1"
-                  onClick={() => {
-                    setShowViewDialog(false);
-                    handleEdit(selectedUser);
-                  }}
-                >
-                  Edit User
-                </Button>
+                {canManageUsers && (
+                  <Button 
+                    className="flex-1 shadow-md"
+                    onClick={() => {
+                      setShowViewDialog(false);
+                      handleEdit(selectedUser);
+                    }}
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit User
+                  </Button>
+                )}
               </div>
             </div>
           )}

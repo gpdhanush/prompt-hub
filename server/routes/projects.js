@@ -1,6 +1,9 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authorize, requirePermission } from '../middleware/auth.js';
+import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
+import { notifyProjectAssigned, notifyProjectComment } from '../utils/notificationService.js';
+import { logger } from '../utils/logger.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -62,11 +65,11 @@ router.get('/', async (req, res) => {
     const userId = req.user?.id;
     const userRole = req.user?.role || '';
     
-    console.log('=== PROJECTS LIST REQUEST ===');
-    console.log('my_projects query param:', my_projects);
-    console.log('my_projects type:', typeof my_projects);
-    console.log('userId:', userId);
-    console.log('userRole:', userRole);
+    logger.debug('=== PROJECTS LIST REQUEST ===');
+    logger.debug('my_projects query param:', my_projects);
+    logger.debug('my_projects type:', typeof my_projects);
+    logger.debug('userId:', userId);
+    logger.debug('userRole:', userRole);
     
     let query = `
       SELECT DISTINCT
@@ -96,10 +99,10 @@ router.get('/', async (req, res) => {
       my_projects !== 'undefined' &&
       userId;
     
-    console.log('shouldFilterMyProjects:', shouldFilterMyProjects);
+    logger.debug('shouldFilterMyProjects:', shouldFilterMyProjects);
     
     if (shouldFilterMyProjects) {
-      console.log('Applying "My Projects" filter');
+      logger.debug('Applying "My Projects" filter');
       // Show projects where user is team lead, project admin, creator, or assigned member
       query += ` AND (
         p.team_lead_id = ? OR 
@@ -109,7 +112,7 @@ router.get('/', async (req, res) => {
       )`;
       params.push(userId, userId, userId, userId);
     } else {
-      console.log('Showing ALL projects (no filter applied)');
+      logger.debug('Showing ALL projects (no filter applied)');
     }
     // For "all" view, all authenticated users see all projects - no role-based filtering
     
@@ -149,8 +152,8 @@ router.get('/', async (req, res) => {
     const [countResult] = await db.query(countQuery, countParams);
     const total = countResult[0].total;
     
-    console.log('Total projects found:', total);
-    console.log('Projects returned:', projects.length);
+    logger.debug('Total projects found:', total);
+    logger.debug('Projects returned:', projects.length);
     
     res.json({
       data: projects,
@@ -215,8 +218,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create project - only Team Leader and Super Admin
-router.post('/', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
+// Create project - check for projects.create permission
+router.post('/', requirePermission('projects.create'), async (req, res) => {
   try {
     const {
       name, description, status, start_date, end_date, team_lead_id, member_ids, member_roles,
@@ -226,7 +229,7 @@ router.post('/', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (re
       risk_level, priority, progress,
       daily_reporting_required, report_submission_time, auto_reminder_notifications,
       internal_notes, client_notes, admin_remarks,
-      github_repo_url, bitbucket_repo_url,
+      github_repo_url, bitbucket_repo_url, technologies_used,
       milestones
     } = req.body;
     
@@ -296,7 +299,7 @@ router.post('/', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (re
       projectCode, name, description || null, logo_url || null, estimated_delivery_plan || null,
       client_name || null, client_contact_person || null, client_email || null, client_phone || null, is_internal || false,
       start_date || null, end_date || null, target_end_date || null, actual_end_date || null, project_duration_days,
-      normalizedStatus, progress || 0, risk_level || null, priority || null,
+      normalizedStatus, progress || 0, (risk_level && risk_level.trim() !== '') ? risk_level : null, (priority && priority.trim() !== '') ? priority : null,
       daily_reporting_required || false, report_submission_time || null, auto_reminder_notifications || false,
       internal_notes || null, client_notes || null, admin_remarks || null,
       github_repo_url || null, bitbucket_repo_url || null, technologies_used ? JSON.stringify(technologies_used) : null,
@@ -340,9 +343,29 @@ router.post('/', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (re
     }
     
     const [newProject] = await db.query('SELECT * FROM projects WHERE id = ?', [projectId]);
+    
+    // Create audit log for project creation
+    await logCreate(req, 'Projects', projectId, {
+      id: projectId,
+      project_code: projectCode,
+      name: name,
+      status: normalizedStatus,
+      created_by: created_by
+    }, 'Project');
+    
+    // Notify project members about assignment
+    if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
+      const notificationPromises = member_ids
+        .filter(id => id && id !== '')
+        .map(userId => 
+          notifyProjectAssigned(parseInt(userId), projectId, name, created_by)
+        );
+      await Promise.allSettled(notificationPromises);
+    }
+    
     res.status(201).json({ data: newProject[0] });
   } catch (error) {
-    console.error('Error creating project:', error);
+    logger.error('Error creating project:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -359,9 +382,16 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
       risk_level, priority, progress,
       daily_reporting_required, report_submission_time, auto_reminder_notifications,
       internal_notes, client_notes, admin_remarks,
-      github_repo_url, bitbucket_repo_url,
+      github_repo_url, bitbucket_repo_url, technologies_used,
       milestones
     } = req.body;
+    
+    // Get before data for audit log
+    const [existingProjects] = await db.query('SELECT * FROM projects WHERE id = ?', [id]);
+    if (existingProjects.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const beforeData = existingProjects[0];
     
     // Valid status values matching database ENUM
     const validStatuses = ['Not Started', 'Planning', 'In Progress', 'Testing', 'Pre-Prod', 'Production', 'Completed', 'On Hold', 'Cancelled'];
@@ -419,8 +449,8 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
     if (project_duration_days !== null) { updateFields.push('project_duration_days = ?'); updateValues.push(project_duration_days); }
     if (normalizedStatus !== undefined) { updateFields.push('status = ?'); updateValues.push(normalizedStatus); }
     if (progress !== undefined) { updateFields.push('progress = ?'); updateValues.push(progress); }
-    if (risk_level !== undefined) { updateFields.push('risk_level = ?'); updateValues.push(risk_level); }
-    if (priority !== undefined) { updateFields.push('priority = ?'); updateValues.push(priority); }
+    if (risk_level !== undefined) { updateFields.push('risk_level = ?'); updateValues.push(risk_level && risk_level.trim() !== '' ? risk_level : null); }
+    if (priority !== undefined) { updateFields.push('priority = ?'); updateValues.push(priority && priority.trim() !== '' ? priority : null); }
     if (daily_reporting_required !== undefined) { updateFields.push('daily_reporting_required = ?'); updateValues.push(daily_reporting_required); }
     if (report_submission_time !== undefined) { updateFields.push('report_submission_time = ?'); updateValues.push(report_submission_time || null); }
     if (auto_reminder_notifications !== undefined) { updateFields.push('auto_reminder_notifications = ?'); updateValues.push(auto_reminder_notifications); }
@@ -450,7 +480,15 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
     }
     
     // Update project members if provided
+    // Get existing members before update for notification comparison
+    let existingMemberIds = [];
     if (member_ids !== undefined && Array.isArray(member_ids)) {
+      const [existingMembers] = await db.query(
+        'SELECT user_id FROM project_users WHERE project_id = ?',
+        [id]
+      );
+      existingMemberIds = existingMembers.map(m => m.user_id);
+      
       // Delete existing members
       await db.query('DELETE FROM project_users WHERE project_id = ?', [id]);
       
@@ -495,9 +533,31 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
     }
     
     const [updated] = await db.query('SELECT * FROM projects WHERE id = ?', [id]);
+    
+    // Create audit log for project update
+    await logUpdate(req, 'Projects', id, beforeData, updated[0], 'Project');
+    
+    // Notify newly assigned project members
+    if (member_ids !== undefined && Array.isArray(member_ids) && member_ids.length > 0) {
+      // Get project name
+      const projectName = updated[0].name || 'Project';
+      
+      // Notify only new members (not in existing list)
+      const newMemberIds = member_ids
+        .filter(memberId => memberId && memberId !== '' && !existingMemberIds.includes(parseInt(memberId)))
+        .map(memberId => parseInt(memberId));
+      
+      if (newMemberIds.length > 0) {
+        const notificationPromises = newMemberIds.map(userId => 
+          notifyProjectAssigned(userId, parseInt(id), projectName, req.user.id)
+        );
+        await Promise.allSettled(notificationPromises);
+      }
+    }
+    
     res.json({ data: updated[0] });
   } catch (error) {
-    console.error('Update project error:', error);
+    logger.error('Update project error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -505,7 +565,20 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
 // Delete project - only Team Leader and Super Admin
 router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
-    await db.query('DELETE FROM projects WHERE id = ?', [req.params.id]);
+    const { id } = req.params;
+    
+    // Get before data for audit log
+    const [existingProjects] = await db.query('SELECT * FROM projects WHERE id = ?', [id]);
+    if (existingProjects.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const beforeData = existingProjects[0];
+    
+    await db.query('DELETE FROM projects WHERE id = ?', [id]);
+    
+    // Create audit log for project deletion
+    await logDelete(req, 'Projects', id, beforeData, 'Project');
+    
     res.json({ message: 'Project deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -914,6 +987,20 @@ router.post('/:id/comments', async (req, res) => {
       LEFT JOIN users u ON c.user_id = u.id
       WHERE c.id = ?
     `, [result.insertId]);
+    
+    // Get project name for notification
+    const [projects] = await db.query('SELECT name FROM projects WHERE id = ?', [id]);
+    const projectName = projects[0]?.name || 'Project';
+    
+    // Notify project members about the comment
+    await notifyProjectComment(
+      parseInt(id),
+      result.insertId,
+      user_id,
+      newComment[0].user_name || 'Someone',
+      comment,
+      projectName
+    );
     
     res.status(201).json({ data: newComment[0] });
   } catch (error) {

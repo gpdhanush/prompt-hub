@@ -1,6 +1,8 @@
 import { secureStorageWithCache, getItemSync } from './secureStorage';
+import { API_CONFIG } from './config';
+import { logger } from './logger';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = API_CONFIG.BASE_URL;
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -69,7 +71,7 @@ async function request<T>(
           };
         }
       } catch (e) {
-        console.error('Error parsing user from secure storage:', e);
+        logger.error('Error parsing user from secure storage:', e);
       }
     }
   }
@@ -91,7 +93,7 @@ async function request<T>(
             errorMessage.includes('Authentication required')) {
           // This is a real auth error - might need to handle differently
           // But don't auto-logout - let the user continue working
-          console.warn('Authentication error detected, but not logging out automatically:', errorMessage);
+          logger.warn('Authentication error detected, but not logging out automatically:', errorMessage);
         }
       }
       
@@ -122,7 +124,7 @@ export const usersApi = {
   getById: (id: number) =>
     request<{ data: any }>(`/users/${id}`),
   create: (data: any) => {
-    console.log('API: Creating user with data:', data);
+    logger.debug('API: Creating user with data:', data);
     return request<{ data: any }>('/users', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -147,6 +149,8 @@ export const employeesApi = {
     ),
   getById: (id: number) =>
     request<{ data: any }>(`/employees/${id}`),
+  getByUserId: (userId: number) =>
+    request<{ data: any }>(`/employees/by-user/${userId}`),
   create: (data: any) =>
     request<{ data: any }>('/employees', {
       method: 'POST',
@@ -159,6 +163,59 @@ export const employeesApi = {
     }),
   delete: (id: number) =>
     request<{ message: string }>(`/employees/${id}`, {
+      method: 'DELETE',
+    }),
+  // Documents
+  getDocuments: (id: number) =>
+    request<{ data: any[] }>(`/employees/${id}/documents`),
+  uploadDocument: async (id: number, formData: FormData) => {
+    const API_BASE_URL = API_CONFIG.BASE_URL;
+    setGlobalLoading(true);
+    
+    try {
+      let token = getItemSync('auth_token');
+      let userStr = getItemSync('user');
+      
+      if (!token) {
+        token = await secureStorageWithCache.getItem('auth_token');
+      }
+      if (!userStr) {
+        userStr = await secureStorageWithCache.getItem('user');
+      }
+      
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            if (user.id) {
+              headers['user-id'] = user.id.toString();
+            }
+          } catch (e) {
+            logger.error('Error parsing user from secure storage:', e);
+          }
+        }
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/employees/${id}/documents`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new ApiError(response.status, errorData.error || 'Request failed');
+      }
+      
+      return await response.json();
+    } finally {
+      setGlobalLoading(false);
+    }
+  },
+  deleteDocument: (id: number, docId: number) =>
+    request<{ message: string }>(`/employees/${id}/documents/${docId}`, {
       method: 'DELETE',
     }),
 };
@@ -197,7 +254,7 @@ export const projectsApi = {
     }),
   // Files
   uploadFile: async (id: number, formData: FormData) => {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    const API_BASE_URL = API_CONFIG.BASE_URL;
     setGlobalLoading(true);
     
     try {
@@ -222,7 +279,7 @@ export const projectsApi = {
               headers['user-id'] = user.id.toString();
             }
           } catch (e) {
-            console.error('Error parsing user from secure storage:', e);
+            logger.error('Error parsing user from secure storage:', e);
           }
         }
       }
@@ -315,10 +372,20 @@ export const projectsApi = {
 
 // Tasks API
 export const tasksApi = {
-  getAll: (params?: { page?: number; limit?: number; project_id?: number; my_tasks?: number }) =>
-    request<{ data: any[]; pagination: any }>(
-      `/tasks?${new URLSearchParams(params as any).toString()}`
-    ),
+  getAll: (params?: { page?: number; limit?: number; project_id?: number; my_tasks?: number }) => {
+    // Filter out undefined values to avoid sending them in query string
+    const cleanParams: any = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        if (params[key as keyof typeof params] !== undefined) {
+          cleanParams[key] = params[key as keyof typeof params];
+        }
+      });
+    }
+    return request<{ data: any[]; pagination: any }>(
+      `/tasks?${new URLSearchParams(cleanParams).toString()}`
+    );
+  },
   getById: (id: number) =>
     request<{ data: any }>(`/tasks/${id}`),
   create: (data: any) =>
@@ -354,7 +421,7 @@ export const bugsApi = {
   getById: (id: number) =>
     request<{ data: any }>(`/bugs/${id}`),
   create: async (formData: FormData) => {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    const API_BASE_URL = API_CONFIG.BASE_URL;
     setGlobalLoading(true);
     
     try {
@@ -380,7 +447,7 @@ export const bugsApi = {
               headers['user-id'] = user.id.toString();
             }
           } catch (e) {
-            console.error('Error parsing user from secure storage:', e);
+            logger.error('Error parsing user from secure storage:', e);
           }
         }
       }
@@ -398,7 +465,7 @@ export const bugsApi = {
         } catch (e) {
           errorData = { error: response.statusText };
         }
-        console.error('Bug creation error:', errorData);
+        logger.error('Bug creation error:', errorData);
         throw new ApiError(response.status, errorData.error || errorData.message || 'Request failed');
       }
       
@@ -477,6 +544,13 @@ export const authApi = {
     }),
   getMe: () =>
     request<{ data: any }>('/auth/me'),
+  getPermissions: () =>
+    request<{ data: string[] }>('/auth/me/permissions'),
+  updateProfile: (data: { name?: string; email?: string; mobile?: string; password?: string; oldPassword?: string }) =>
+    request<{ data: any }>('/auth/me/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
 // Reports API
@@ -497,7 +571,7 @@ export const reportsApi = {
 
 // Notifications API
 export const notificationsApi = {
-  getAll: (params?: { user_id?: number; is_read?: boolean }) =>
+  getAll: (params?: { is_read?: boolean }) =>
     request<{ data: any[] }>(
       `/notifications?${new URLSearchParams(params as any).toString()}`
     ),
@@ -505,6 +579,12 @@ export const notificationsApi = {
     request<{ message: string }>(`/notifications/${id}/read`, {
       method: 'PATCH',
     }),
+  markAllAsRead: () =>
+    request<{ message: string }>('/notifications/read-all', {
+      method: 'PATCH',
+    }),
+  getUnreadCount: () =>
+    request<{ count: number }>('/notifications/unread-count'),
 };
 
 // Prompts API
@@ -529,10 +609,52 @@ export const promptsApi = {
 
 // Audit Logs API
 export const auditLogsApi = {
-  getAll: (params?: { page?: number; limit?: number }) =>
-    request<{ data: any[]; pagination: any }>(
-      `/audit-logs?${new URLSearchParams(params as any).toString()}`
-    ),
+  getAll: (params?: { 
+    page?: number; 
+    limit?: number;
+    search?: string;
+    action?: string;
+    module?: string;
+    userId?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    // Filter out undefined, null, and empty string values
+    const cleanParams: any = {};
+    if (params) {
+      Object.keys(params).forEach(key => {
+        const value = params[key as keyof typeof params];
+        if (value !== undefined && value !== null && value !== '') {
+          cleanParams[key] = value;
+        }
+      });
+    }
+    const queryString = new URLSearchParams(cleanParams).toString();
+    return request<{ data: any[]; pagination: any; stats: any }>(
+      `/audit-logs${queryString ? `?${queryString}` : ''}`
+    );
+  },
+  getById: (id: number) =>
+    request<{ data: any }>(`/audit-logs/${id}`),
+  getFilterOptions: () =>
+    request<{ actions: string[]; modules: string[]; users: any[] }>('/audit-logs/filters/options'),
+  restore: (id: number) =>
+    request<{ message: string; restoredData: any }>(`/audit-logs/${id}/restore`, {
+      method: 'POST',
+    }),
+  exportCSV: (params?: {
+    startDate?: string;
+    endDate?: string;
+    action?: string;
+    module?: string;
+  }) => {
+    const queryString = new URLSearchParams(params as any).toString();
+    return fetch(`${API_CONFIG.BASE_URL}/audit-logs/export/csv${queryString ? `?${queryString}` : ''}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
+  },
 };
 
 // Settings API
@@ -615,4 +737,50 @@ export const rolePositionsApi = {
     }),
   getAll: () =>
     request<{ data: any[] }>('/role-positions'),
+};
+
+// Permissions API
+export const fcmApi = {
+  register: async (token: string, deviceInfo?: { deviceId?: string; deviceType?: string; browser?: string; platform?: string }) => {
+    return request<{ success: boolean; message: string }>('/fcm/register', {
+      method: 'POST',
+      body: JSON.stringify({ token, ...deviceInfo }),
+    });
+  },
+  unregister: async (token: string) => {
+    return request<{ success: boolean; message: string }>('/fcm/unregister', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  },
+  getTokens: async () => {
+    return request<{ data: any[] }>('/fcm/tokens');
+  },
+  sendTest: async (title?: string, body?: string) => {
+    return request<{ success: boolean; message: string }>('/fcm/test', {
+      method: 'POST',
+      body: JSON.stringify({ title, body }),
+    });
+  },
+};
+
+export const permissionsApi = {
+  getAll: () =>
+    request<{ data: any[] }>('/permissions'),
+  getById: (id: number) =>
+    request<{ data: any }>(`/permissions/${id}`),
+  create: (data: any) =>
+    request<{ data: any }>('/permissions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: number, data: any) =>
+    request<{ data: any }>(`/permissions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: number) =>
+    request<{ message: string }>(`/permissions/${id}`, {
+      method: 'DELETE',
+    }),
 };

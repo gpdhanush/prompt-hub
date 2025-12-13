@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate, authorize } from '../middleware/auth.js';
+import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 
 const router = express.Router();
 
@@ -71,6 +72,13 @@ router.post('/', authorize('Super Admin'), async (req, res) => {
       WHERE r.id = ?
     `, [result.insertId]);
     
+    // Create audit log for role creation
+    await logCreate(req, 'Roles', result.insertId, {
+      id: result.insertId,
+      name: name,
+      description: description
+    }, 'Role');
+    
     res.status(201).json({ data: newRole[0] });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -86,11 +94,19 @@ router.put('/:id', authorize('Super Admin'), async (req, res) => {
     const { id } = req.params;
     const { name, description, reporting_person_role_id } = req.body;
     
-    // Check if role exists
-    const [existing] = await db.query('SELECT id FROM roles WHERE id = ?', [id]);
+    // Check if role exists and get before data
+    const [existing] = await db.query(`
+      SELECT 
+        r.*,
+        rp.name as reporting_person_role_name
+      FROM roles r
+      LEFT JOIN roles rp ON r.reporting_person_role_id = rp.id
+      WHERE r.id = ?
+    `, [id]);
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Role not found' });
     }
+    const beforeData = existing[0];
     
     // If name is being changed, check for duplicates
     if (name) {
@@ -123,6 +139,9 @@ router.put('/:id', authorize('Super Admin'), async (req, res) => {
       WHERE r.id = ?
     `, [id]);
     
+    // Create audit log for role update
+    await logUpdate(req, 'Roles', id, beforeData, updated[0], 'Role');
+    
     res.json({ data: updated[0] });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -137,14 +156,23 @@ router.delete('/:id', authorize('Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Check if role exists
-    const [existing] = await db.query('SELECT name FROM roles WHERE id = ?', [id]);
+    // Check if role exists and get before data
+    const [existing] = await db.query(`
+      SELECT 
+        r.*,
+        rp.name as reporting_person_role_name
+      FROM roles r
+      LEFT JOIN roles rp ON r.reporting_person_role_id = rp.id
+      WHERE r.id = ?
+    `, [id]);
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Role not found' });
     }
     
+    const beforeData = existing[0];
+    
     // Prevent deletion of Super Admin role
-    if (existing[0].name === 'Super Admin') {
+    if (beforeData.name === 'Super Admin') {
       return res.status(400).json({ error: 'Cannot delete Super Admin role' });
     }
     
@@ -157,6 +185,10 @@ router.delete('/:id', authorize('Super Admin'), async (req, res) => {
     }
     
     await db.query('DELETE FROM roles WHERE id = ?', [id]);
+    
+    // Create audit log for role deletion
+    await logDelete(req, 'Roles', id, beforeData, 'Role');
+    
     res.json({ message: 'Role deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -183,7 +215,7 @@ router.get('/:id/permissions', authorize('Super Admin', 'Admin', 'Team Leader', 
     
     res.json({ data: permissions });
   } catch (error) {
-    console.error('Error fetching role permissions:', error);
+    logger.error('Error fetching role permissions:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -254,7 +286,7 @@ router.put('/:id/permissions', authorize('Super Admin'), async (req, res) => {
       throw error;
     }
   } catch (error) {
-    console.error('Error updating role permissions:', error);
+    logger.error('Error updating role permissions:', error);
     res.status(500).json({ error: error.message });
   }
 });

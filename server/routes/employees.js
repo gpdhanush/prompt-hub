@@ -5,6 +5,9 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { encryptBankDetails, decryptBankDetails, encryptDocumentNumber, decryptDocumentNumber } from '../utils/encryption.js';
+import { logCreate, logUpdate, logDelete, getClientIp, getUserAgent } from '../utils/auditLogger.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -42,22 +45,57 @@ const uploadProfilePhoto = multer({
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
+// Configure multer for employee document uploads
+const documentUploadDir = path.join(__dirname, '..', 'uploads', 'employee-documents');
+if (!fs.existsSync(documentUploadDir)) {
+  fs.mkdirSync(documentUploadDir, { recursive: true });
+}
+
+const documentStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, documentUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `doc-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const documentFilter = (req, file, cb) => {
+  // Allow images and PDFs only
+  const allowedMimes = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf'
+  ];
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only images (JPEG, PNG, GIF, WebP) and PDF files are allowed.'), false);
+  }
+};
+
+const uploadDocument = multer({
+  storage: documentStorage,
+  fileFilter: documentFilter,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
 // Upload profile photo - accessible to all authenticated users (before canAccessUserManagement)
 router.post('/upload-profile-photo', authenticate, uploadProfilePhoto.single('file'), async (req, res) => {
   try {
-    console.log('=== PROFILE PHOTO UPLOAD ===');
-    console.log('File received:', req.file ? 'Yes' : 'No');
-    console.log('File details:', req.file);
+    logger.debug('=== PROFILE PHOTO UPLOAD ===');
+    logger.debug('File received:', req.file ? 'Yes' : 'No');
+    logger.debug('File details:', req.file);
     
     if (!req.file) {
-      console.error('No file uploaded');
+      logger.error('No file uploaded');
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
     const filePath = `/uploads/profile-photos/${req.file.filename}`;
     const fullUrl = `${req.protocol}://${req.get('host')}${filePath}`;
     
-    console.log('File uploaded successfully:', filePath);
+    logger.info('File uploaded successfully:', filePath);
     
     res.status(200).json({
       message: 'Profile photo uploaded successfully',
@@ -66,7 +104,7 @@ router.post('/upload-profile-photo', authenticate, uploadProfilePhoto.single('fi
       filename: req.file.filename
     });
   } catch (error) {
-    console.error('Upload error:', error);
+    logger.error('Upload error:', error);
     // Clean up uploaded file on error
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
@@ -77,6 +115,107 @@ router.post('/upload-profile-photo', authenticate, uploadProfilePhoto.single('fi
 
 // Apply authentication to all routes
 router.use(authenticate);
+
+// Get employee by user_id - accessible to all authenticated users (for profile)
+router.get('/by-user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.user?.id;
+    
+    // Users can only access their own employee data, unless they're admin/team lead
+    const currentUserRole = req.user?.role || '';
+    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    
+    if (!canManage && parseInt(userId) !== currentUserId) {
+      return res.status(403).json({ error: 'You can only access your own profile' });
+    }
+    
+    const [employees] = await db.query(`
+      SELECT 
+        e.id,
+        e.user_id,
+        e.emp_code,
+        e.team_lead_id,
+        DATE_FORMAT(e.date_of_birth, '%Y-%m-%d') as date_of_birth,
+        e.gender,
+        DATE_FORMAT(e.date_of_joining, '%Y-%m-%d') as date_of_joining,
+        e.employee_status,
+        e.status,
+        e.state,
+        e.district,
+        e.pincode,
+        e.country,
+        e.bank_name,
+        e.bank_account_number,
+        e.ifsc_code,
+        e.address1,
+        e.address2,
+        e.landmark,
+        e.pf_uan_number,
+        e.emergency_contact_name,
+        e.emergency_contact_relation,
+        e.emergency_contact_number,
+        e.annual_leave_count,
+        e.sick_leave_count,
+        e.casual_leave_count,
+        e.profile_photo_url,
+        e.created_by,
+        e.created_at,
+        e.updated_at,
+        u.name,
+        u.email,
+        u.mobile,
+        r.name as role
+      FROM employees e
+      INNER JOIN users u ON e.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE e.user_id = ?
+    `, [userId]);
+    
+    if (employees.length === 0) {
+      return res.json({ data: null });
+    }
+    
+    // Decrypt bank details before sending
+    const employee = employees[0];
+    const decryptedBankDetails = decryptBankDetails({
+      bank_name: employee.bank_name,
+      bank_account_number: employee.bank_account_number,
+      ifsc_code: employee.ifsc_code
+    });
+    
+    if (decryptedBankDetails) {
+      // Update fields that were successfully decrypted
+      // If a field exists in decryptedBankDetails, use it (even if it's the same as original - means it was plain text)
+      if (decryptedBankDetails.hasOwnProperty('bank_name')) {
+        employee.bank_name = decryptedBankDetails.bank_name || '';
+      }
+      if (decryptedBankDetails.hasOwnProperty('bank_account_number')) {
+        employee.bank_account_number = decryptedBankDetails.bank_account_number || '';
+      }
+      if (decryptedBankDetails.hasOwnProperty('ifsc_code')) {
+        employee.ifsc_code = decryptedBankDetails.ifsc_code || '';
+      }
+    } else {
+      // If decryption completely failed, check if data looks encrypted and clear it
+      // This prevents showing encrypted strings to users
+      if (employee.bank_name && employee.bank_name.length > 50 && /^[A-Za-z0-9+/=]+$/.test(employee.bank_name)) {
+        // Looks like encrypted base64 data that couldn't be decrypted
+        employee.bank_name = '';
+      }
+      if (employee.bank_account_number && employee.bank_account_number.length > 50 && /^[A-Za-z0-9+/=]+$/.test(employee.bank_account_number)) {
+        employee.bank_account_number = '';
+      }
+      if (employee.ifsc_code && employee.ifsc_code.length > 50 && /^[A-Za-z0-9+/=]+$/.test(employee.ifsc_code)) {
+        employee.ifsc_code = '';
+      }
+    }
+    
+    res.json({ data: employee });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Restrict access to Employees page - Admin, Super Admin, Team Lead, and Manager can access
 router.use(canAccessUserManagement);
@@ -91,17 +230,19 @@ router.get('/', async (req, res) => {
     const currentUserRole = req.user?.role || '';
     const isSuperAdmin = currentUserRole === 'Super Admin';
     
-    console.log('=== GET EMPLOYEES REQUEST ===');
-    console.log('Current user ID:', req.user?.id);
-    console.log('Current user role:', currentUserRole);
-    console.log('Is Super Admin:', isSuperAdmin);
+    logger.debug('=== GET EMPLOYEES REQUEST ===');
+    logger.debug('Current user ID:', req.user?.id);
+    logger.debug('Current user role:', currentUserRole);
+    logger.debug('Is Super Admin:', isSuperAdmin);
     
     let query = `
       SELECT 
         e.id,
         e.emp_code,
         e.status,
-        e.hire_date,
+        e.employee_status,
+        e.profile_photo_url,
+        DATE_FORMAT(e.date_of_joining, '%Y-%m-%d') as date_of_joining,
         u.name,
         u.email,
         u.mobile,
@@ -120,9 +261,9 @@ router.get('/', async (req, res) => {
     // If not Super Admin, exclude Super Admin users from results
     if (!isSuperAdmin) {
       query += ` AND r.name != 'Super Admin'`;
-      console.log('Filtering out Super Admin employees for non-Super Admin user');
+      logger.debug('Filtering out Super Admin employees for non-Super Admin user');
     } else {
-      console.log('Super Admin user - showing all employees including Super Admins');
+      logger.debug('Super Admin user - showing all employees including Super Admins');
     }
     
     if (search) {
@@ -135,8 +276,8 @@ router.get('/', async (req, res) => {
     
     const [employees] = await db.query(query, params);
     
-    console.log(`Found ${employees.length} employees`);
-    console.log('Employee roles in results:', employees.map(e => `${e.name} (${e.role || 'N/A'})`).join(', '));
+    logger.debug(`Found ${employees.length} employees`);
+    logger.debug('Employee roles in results:', employees.map(e => `${e.name} (${e.role || 'N/A'})`).join(', '));
     
     // Get total count
     let countQuery = `
@@ -182,31 +323,26 @@ router.get('/:id', async (req, res) => {
     
     const [employees] = await db.query(`
       SELECT 
-        e.*,
-        u.name,
-        u.email,
-        u.mobile,
-        u.status as user_status,
-        r.name as role,
-        tl.name as team_lead_name,
-        tl.id as team_lead_user_id,
+        e.id,
+        e.user_id,
         e.emp_code,
-        e.status,
-        e.date_of_birth,
+        e.team_lead_id,
+        DATE_FORMAT(e.date_of_birth, '%Y-%m-%d') as date_of_birth,
         e.gender,
-        e.date_of_joining,
-        e.is_team_lead,
+        DATE_FORMAT(e.date_of_joining, '%Y-%m-%d') as date_of_joining,
         e.employee_status,
-        e.bank_name,
-        e.bank_account_number,
-        e.ifsc_code,
-        e.routing_number,
-        e.address1,
-        e.address2,
-        e.landmark,
+        e.status,
         e.state,
         e.district,
         e.pincode,
+        e.country,
+        e.bank_name,
+        e.bank_account_number,
+        e.ifsc_code,
+        e.address1,
+        e.address2,
+        e.landmark,
+        e.pf_uan_number,
         e.emergency_contact_name,
         e.emergency_contact_relation,
         e.emergency_contact_number,
@@ -215,8 +351,15 @@ router.get('/:id', async (req, res) => {
         e.casual_leave_count,
         e.profile_photo_url,
         e.created_by,
-        e.created_date,
-        e.last_updated_date
+        e.created_at,
+        e.updated_at,
+        u.name,
+        u.email,
+        u.mobile,
+        u.status as user_status,
+        r.name as role,
+        tl.name as team_lead_name,
+        tl.id as team_lead_user_id
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
       LEFT JOIN roles r ON u.role_id = r.id
@@ -229,7 +372,29 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
     
-    res.json({ data: employees[0] });
+    // Decrypt bank details before sending
+    const employee = employees[0];
+    const decryptedBankDetails = decryptBankDetails({
+      bank_name: employee.bank_name,
+      bank_account_number: employee.bank_account_number,
+      ifsc_code: employee.ifsc_code
+    });
+    
+    if (decryptedBankDetails) {
+      // Update fields that were successfully decrypted
+      // If a field exists in decryptedBankDetails, use it (even if it's the same as original - means it was plain text)
+      if (decryptedBankDetails.hasOwnProperty('bank_name')) {
+        employee.bank_name = decryptedBankDetails.bank_name;
+      }
+      if (decryptedBankDetails.hasOwnProperty('bank_account_number')) {
+        employee.bank_account_number = decryptedBankDetails.bank_account_number;
+      }
+      if (decryptedBankDetails.hasOwnProperty('ifsc_code')) {
+        employee.ifsc_code = decryptedBankDetails.ifsc_code;
+      }
+    }
+    
+    res.json({ data: employee });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -242,13 +407,84 @@ router.post('/', async (req, res) => {
     const { 
       name, email, mobile, password, role, position, empCode, teamLeadId,
       date_of_birth, gender, date_of_joining, employee_status,
-      bank_name, bank_account_number, ifsc_code, routing_number,
+      bank_name, bank_account_number, ifsc_code,
       address1, address2, landmark, state, district, pincode,
       emergency_contact_name, emergency_contact_relation, emergency_contact_number,
       annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url
     } = req.body;
     
     const dbRoleName = role || 'Developer';
+    
+    // Validation
+    if (mobile && mobile !== '') {
+      const mobileDigits = mobile.replace(/\D/g, ''); // Remove non-digits
+      if (mobileDigits.length > 10) {
+        return res.status(400).json({ error: 'Mobile number must be maximum 10 digits' });
+      }
+      if (mobileDigits.length > 0 && !/^\d{1,10}$/.test(mobileDigits)) {
+        return res.status(400).json({ error: 'Mobile number must contain only numbers' });
+      }
+    }
+    
+    if (emergency_contact_number && emergency_contact_number !== '') {
+      const contactDigits = emergency_contact_number.replace(/\D/g, ''); // Remove non-digits
+      if (contactDigits.length > 10) {
+        return res.status(400).json({ error: 'Emergency contact number must be maximum 10 digits' });
+      }
+      if (contactDigits.length > 0 && !/^\d{1,10}$/.test(contactDigits)) {
+        return res.status(400).json({ error: 'Emergency contact number must contain only numbers' });
+      }
+    }
+    
+    if (pincode && pincode !== '') {
+      const pincodeDigits = pincode.replace(/\D/g, ''); // Remove non-digits
+      if (pincodeDigits.length > 6) {
+        return res.status(400).json({ error: 'Pincode must be maximum 6 digits' });
+      }
+      if (pincodeDigits.length > 0 && !/^\d{1,6}$/.test(pincodeDigits)) {
+        return res.status(400).json({ error: 'Pincode must contain only numbers' });
+      }
+    }
+    
+    // Helper function to convert to uppercase
+    const toUpperCase = (value) => {
+      if (value && typeof value === 'string') {
+        return value.trim().toUpperCase();
+      }
+      return value;
+    };
+    
+    // Helper function to extract only digits
+    const extractDigits = (value) => {
+      if (value && typeof value === 'string') {
+        return value.replace(/\D/g, '');
+      }
+      return value;
+    };
+    
+    // Convert text fields to uppercase and extract digits for numbers
+    const processedName = toUpperCase(name);
+    const processedMobile = mobile ? extractDigits(mobile) : mobile;
+    
+    // Encrypt bank details before saving
+    const encryptedBankDetails = encryptBankDetails({
+      bank_name: bank_name ? toUpperCase(bank_name) : null,
+      bank_account_number: bank_account_number ? toUpperCase(bank_account_number) : null,
+      ifsc_code: ifsc_code ? toUpperCase(ifsc_code) : null
+    });
+    
+    const processedBankName = encryptedBankDetails?.bank_name || null;
+    const processedBankAccount = encryptedBankDetails?.bank_account_number || null;
+    const processedIfsc = encryptedBankDetails?.ifsc_code || null;
+    const processedAddress1 = toUpperCase(address1);
+    const processedAddress2 = toUpperCase(address2);
+    const processedLandmark = toUpperCase(landmark);
+    const processedState = toUpperCase(state);
+    const processedDistrict = toUpperCase(district);
+    const processedPincode = pincode ? extractDigits(pincode) : pincode;
+    const processedEmergencyName = toUpperCase(emergency_contact_name);
+    const processedEmergencyRelation = toUpperCase(emergency_contact_relation);
+    const processedEmergencyNumber = emergency_contact_number ? extractDigits(emergency_contact_number) : emergency_contact_number;
     
     // Team Leader and Manager can only create Developer, Designer, and Tester roles
     const currentUserRole = req.user?.role;
@@ -287,7 +523,7 @@ router.post('/', async (req, res) => {
       [userResult] = await db.query(`
         INSERT INTO users (name, email, mobile, password_hash, role_id, status)
         VALUES (?, ?, ?, ?, ?, ?)
-      `, [name, email, mobile, passwordHash, roleId, userStatus]);
+      `, [processedName, email, processedMobile, passwordHash, roleId, userStatus]);
     } catch (userError) {
       if (userError.code === 'ER_DUP_ENTRY') {
         // Check which field caused the duplicate
@@ -326,17 +562,17 @@ router.post('/', async (req, res) => {
     // Convert teamLeadId (user_id) to employee_id
     let teamLeadEmployeeId = null;
     if (teamLeadId && teamLeadId !== '' && teamLeadId !== 'none') {
-      console.log('Creating employee - Converting teamLeadId (user_id) to employee_id:', teamLeadId);
+      logger.debug('Creating employee - Converting teamLeadId (user_id) to employee_id:', teamLeadId);
       
       // First, check if team lead has an employee record
       let [teamLeadEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [teamLeadId]);
       
       if (teamLeadEmployee.length > 0) {
         teamLeadEmployeeId = teamLeadEmployee[0].id;
-        console.log('Found existing employee record for team lead, employee_id:', teamLeadEmployeeId);
+        logger.debug('Found existing employee record for team lead, employee_id:', teamLeadEmployeeId);
       } else {
         // If team lead doesn't have an employee record, check their role
-        console.log('Team Lead user_id not found in employees table, checking user role...');
+        logger.debug('Team Lead user_id not found in employees table, checking user role...');
         const [teamLeadUser] = await db.query(`
           SELECT u.id, u.name, r.name as role_name 
           FROM users u 
@@ -361,24 +597,20 @@ router.post('/', async (req, res) => {
             }
             const empCodeForTL = `${empCodePrefix}-${String(empCount[0].count + 1).padStart(4, '0')}`;
             
-            // Set is_team_lead automatically based on role
-            // Super Admin, Admin, and Team Lead are automatically set as team leads when used as reporting managers
-            const isTeamLead = teamLeadRole === 'Team Leader' || teamLeadRole === 'Team Lead' || teamLeadRole === 'Super Admin' || teamLeadRole === 'Admin';
-            
             const [newEmpResult] = await db.query(`
-              INSERT INTO employees (user_id, emp_code, is_team_lead, employee_status)
-              VALUES (?, ?, ?, 'Active')
-            `, [teamLeadId, empCodeForTL, isTeamLead]);
+              INSERT INTO employees (user_id, emp_code, employee_status)
+              VALUES (?, ?, 'Active')
+            `, [teamLeadId, empCodeForTL]);
             
             teamLeadEmployeeId = newEmpResult.insertId;
-            console.log(`Created employee record for ${teamLeadRole} with employee_id: ${teamLeadEmployeeId}, emp_code: ${empCodeForTL}`);
+            logger.debug(`Created employee record for ${teamLeadRole} with employee_id: ${teamLeadEmployeeId}, emp_code: ${empCodeForTL}`);
           } else {
             // For other roles, don't create employee record
-            console.log(`User has role '${teamLeadRole}', not creating employee record. Setting team_lead_id to NULL.`);
+            logger.debug(`User has role '${teamLeadRole}', not creating employee record. Setting team_lead_id to NULL.`);
             teamLeadEmployeeId = null;
           }
         } else {
-          console.log('WARNING: Team Lead user_id not found in users table, setting team_lead_id to NULL');
+          logger.warn('WARNING: Team Lead user_id not found in users table, setting team_lead_id to NULL');
         }
       }
     }
@@ -390,18 +622,18 @@ router.post('/', async (req, res) => {
       INSERT INTO employees (
         user_id, emp_code, team_lead_id,
         date_of_birth, gender, date_of_joining, employee_status,
-        bank_name, bank_account_number, ifsc_code, routing_number,
+        bank_name, bank_account_number, ifsc_code,
         address1, address2, landmark, state, district, pincode,
         emergency_contact_name, emergency_contact_relation, emergency_contact_number,
         annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url, created_by
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       userResult.insertId, empCode, teamLeadEmployeeId,
       formatDateForDB(date_of_birth), gender || null, formatDateForDB(date_of_joining), employee_status || 'Active',
-      bank_name || null, bank_account_number || null, ifsc_code || null, routing_number || null,
-      address1 || null, address2 || null, landmark || null, state || null, district || null, pincode || null,
-      emergency_contact_name || null, emergency_contact_relation || null, emergency_contact_number || null,
+      processedBankName || null, processedBankAccount || null, processedIfsc || null,
+      processedAddress1 || null, processedAddress2 || null, processedLandmark || null, processedState || null, processedDistrict || null, processedPincode || null,
+      processedEmergencyName || null, processedEmergencyRelation || null, processedEmergencyNumber || null,
       annual_leave_count || 0, sick_leave_count || 0, casual_leave_count || 0, profile_photo_url || null, createdBy
     ]);
     
@@ -417,16 +649,48 @@ router.post('/', async (req, res) => {
       WHERE e.id = ?
     `, [empResult.insertId]);
     
-    res.status(201).json({ data: newEmployee[0] });
+    // Decrypt bank details before sending
+    const employee = newEmployee[0];
+    const decryptedBankDetails = decryptBankDetails({
+      bank_name: employee.bank_name,
+      bank_account_number: employee.bank_account_number,
+      ifsc_code: employee.ifsc_code
+    });
+    
+    if (decryptedBankDetails) {
+      // Only update fields that were successfully decrypted (not null)
+      if (decryptedBankDetails.bank_name !== null && decryptedBankDetails.bank_name !== undefined) {
+        employee.bank_name = decryptedBankDetails.bank_name;
+      }
+      if (decryptedBankDetails.bank_account_number !== null && decryptedBankDetails.bank_account_number !== undefined) {
+        employee.bank_account_number = decryptedBankDetails.bank_account_number;
+      }
+      if (decryptedBankDetails.ifsc_code !== null && decryptedBankDetails.ifsc_code !== undefined) {
+        employee.ifsc_code = decryptedBankDetails.ifsc_code;
+      }
+    }
+    
+    // Create audit log for employee creation
+    await logCreate(req, 'Employees', empResult.insertId, {
+      id: empResult.insertId,
+      user_id: userResult.insertId,
+      emp_code: empCode,
+      name: processedName,
+      email: email,
+      role: dbRoleName,
+      employee_status: employee_status || 'Active'
+    }, 'Employee');
+    
+    res.status(201).json({ data: employee });
   } catch (error) {
     // If employee creation fails, try to clean up the user that was created
     // Note: userResult is declared in the outer scope, so it's accessible here
     if (userResult && userResult.insertId) {
       try {
         await db.query('DELETE FROM users WHERE id = ?', [userResult.insertId]);
-        console.log(`Cleaned up user ${userResult.insertId} after employee creation failure`);
+        logger.debug(`Cleaned up user ${userResult.insertId} after employee creation failure`);
       } catch (cleanupError) {
-        console.error('Error cleaning up user after employee creation failure:', cleanupError);
+        logger.error('Error cleaning up user after employee creation failure:', cleanupError);
       }
     }
     
@@ -439,7 +703,7 @@ router.post('/', async (req, res) => {
       }
       return res.status(400).json({ error: 'A record with this information already exists.' });
     }
-    console.error('Error creating employee:', error);
+    logger.error('Error creating employee:', error);
     res.status(500).json({ error: error.message || 'Failed to create employee. Please try again.' });
   }
 });
@@ -451,23 +715,39 @@ router.put('/:id', async (req, res) => {
     const { 
       name, email, mobile, password, empCode, teamLeadId, status,
       date_of_birth, gender, date_of_joining, employee_status,
-      bank_name, bank_account_number, ifsc_code, routing_number,
+      bank_name, bank_account_number, ifsc_code,
       address1, address2, landmark, state, district, pincode,
       emergency_contact_name, emergency_contact_relation, emergency_contact_number,
-      annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url
+      annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url, pf_uan_number
     } = req.body;
     
-    console.log('=== UPDATE EMPLOYEE REQUEST ===');
-    console.log('Employee ID:', id);
-    console.log('teamLeadId received:', teamLeadId, 'Type:', typeof teamLeadId);
-    console.log('Request body keys:', Object.keys(req.body));
+    logger.debug('=== UPDATE EMPLOYEE REQUEST ===');
+    logger.debug('Employee ID:', id);
+    logger.debug('teamLeadId received:', teamLeadId, 'Type:', typeof teamLeadId);
+    logger.debug('Request body keys:', Object.keys(req.body));
+    logger.debug('date_of_birth:', date_of_birth, 'in req.body:', 'date_of_birth' in req.body);
+    logger.debug('date_of_joining:', date_of_joining, 'in req.body:', 'date_of_joining' in req.body);
+    logger.debug('emergency_contact_relation:', emergency_contact_relation, 'in req.body:', 'emergency_contact_relation' in req.body);
     
-    // Get employee to find user_id
-    const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
+    // Get employee to find user_id and get before data for audit log
+    const [employees] = await db.query(`
+      SELECT 
+        e.*,
+        u.name,
+        u.email,
+        u.mobile,
+        u.status as user_status,
+        r.name as role
+      FROM employees e
+      INNER JOIN users u ON e.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE e.id = ?
+    `, [id]);
     if (employees.length === 0) {
       return res.status(404).json({ error: 'Employee not found' });
     }
     const userId = employees[0].user_id;
+    const beforeData = employees[0]; // Store before data for audit log
     
     // Check if user can update (either admin/team lead or updating own profile)
     const currentUserId = req.user?.id;
@@ -479,13 +759,56 @@ router.put('/:id', async (req, res) => {
       return res.status(403).json({ error: 'You can only update your own profile' });
     }
     
+    // Validation
+    if (mobile !== undefined && mobile !== null && mobile !== '') {
+      const mobileDigits = mobile.replace(/\D/g, ''); // Remove non-digits
+      if (mobileDigits.length > 10) {
+        return res.status(400).json({ error: 'Mobile number must be maximum 10 digits' });
+      }
+      if (mobileDigits.length > 0 && !/^\d{1,10}$/.test(mobileDigits)) {
+        return res.status(400).json({ error: 'Mobile number must contain only numbers' });
+      }
+    }
+    
+    if (emergency_contact_number !== undefined && emergency_contact_number !== null && emergency_contact_number !== '') {
+      const contactDigits = emergency_contact_number.replace(/\D/g, ''); // Remove non-digits
+      if (contactDigits.length > 10) {
+        return res.status(400).json({ error: 'Emergency contact number must be maximum 10 digits' });
+      }
+      if (contactDigits.length > 0 && !/^\d{1,10}$/.test(contactDigits)) {
+        return res.status(400).json({ error: 'Emergency contact number must contain only numbers' });
+      }
+    }
+    
+    if (pincode !== undefined && pincode !== null && pincode !== '') {
+      const pincodeDigits = pincode.replace(/\D/g, ''); // Remove non-digits
+      if (pincodeDigits.length > 6) {
+        return res.status(400).json({ error: 'Pincode must be maximum 6 digits' });
+      }
+      if (pincodeDigits.length > 0 && !/^\d{1,6}$/.test(pincodeDigits)) {
+        return res.status(400).json({ error: 'Pincode must contain only numbers' });
+      }
+    }
+    
+    // Convert text fields to uppercase
+    const toUpperCase = (value) => {
+      if (value && typeof value === 'string') {
+        return value.trim().toUpperCase();
+      }
+      return value;
+    };
+    
     // Update user if name/email/mobile/password provided
     if (name || email || mobile || password) {
       const updates = [];
       const params = [];
-      if (name) { updates.push('name = ?'); params.push(name); }
+      if (name) { updates.push('name = ?'); params.push(toUpperCase(name)); }
       if (email) { updates.push('email = ?'); params.push(email); }
-      if (mobile !== undefined) { updates.push('mobile = ?'); params.push(mobile); }
+      if (mobile !== undefined) { 
+        const mobileDigits = mobile.replace(/\D/g, ''); // Remove non-digits, keep only numbers
+        updates.push('mobile = ?'); 
+        params.push(mobileDigits || null); 
+      }
       if (password) {
         const bcrypt = await import('bcryptjs');
         const passwordHash = await bcrypt.default.hash(password, 10);
@@ -531,28 +854,52 @@ router.put('/:id', async (req, res) => {
       // Admins can update all fields
       if (empCode !== undefined) { empUpdates.push('emp_code = ?'); empParams.push(empCode); }
       if (status !== undefined) { empUpdates.push('status = ?'); empParams.push(status); }
-      if (date_of_birth !== undefined) { empUpdates.push('date_of_birth = ?'); empParams.push(formatDateForDB(date_of_birth)); }
+      if ('date_of_birth' in req.body) {
+        if (date_of_birth && date_of_birth !== '') {
+          const formattedDate = formatDateForDB(date_of_birth);
+          empUpdates.push('date_of_birth = ?');
+          empParams.push(formattedDate);
+          logger.debug('Processing date_of_birth:', date_of_birth, '-> formatted:', formattedDate);
+        } else {
+          // Explicitly set to null if empty
+          empUpdates.push('date_of_birth = ?');
+          empParams.push(null);
+          logger.debug('Setting date_of_birth to NULL (empty value)');
+        }
+      }
       if (gender !== undefined) { empUpdates.push('gender = ?'); empParams.push(gender || null); }
-      if (date_of_joining !== undefined) { empUpdates.push('date_of_joining = ?'); empParams.push(formatDateForDB(date_of_joining)); }
+      if ('date_of_joining' in req.body) {
+        if (date_of_joining && date_of_joining !== '') {
+          const formattedDate = formatDateForDB(date_of_joining);
+          empUpdates.push('date_of_joining = ?');
+          empParams.push(formattedDate);
+          logger.debug('Processing date_of_joining:', date_of_joining, '-> formatted:', formattedDate);
+        } else {
+          // Explicitly set to null if empty
+          empUpdates.push('date_of_joining = ?');
+          empParams.push(null);
+          logger.debug('Setting date_of_joining to NULL (empty value)');
+        }
+      }
       if (employee_status !== undefined) { empUpdates.push('employee_status = ?'); empParams.push(employee_status); }
       
       // Always handle teamLeadId if it's in the request body (including null to clear it)
       // Check if teamLeadId property exists in request body (even if value is null)
       if ('teamLeadId' in req.body) {
-        console.log('Processing teamLeadId:', teamLeadId, 'Type:', typeof teamLeadId);
+        logger.debug('Processing teamLeadId:', teamLeadId, 'Type:', typeof teamLeadId);
         if (teamLeadId === null || teamLeadId === '' || teamLeadId === 'none' || teamLeadId === undefined) {
-          console.log('Setting team_lead_id to NULL (clearing team lead)');
+          logger.debug('Setting team_lead_id to NULL (clearing team lead)');
           empUpdates.push('team_lead_id = ?');
           empParams.push(null);
         } else {
           // Convert user_id to employee_id
-          console.log('Looking up employee for team lead user_id:', teamLeadId);
+          logger.debug('Looking up employee for team lead user_id:', teamLeadId);
           let [teamLeadEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [teamLeadId]);
           let teamLeadEmployeeId = teamLeadEmployee.length > 0 ? teamLeadEmployee[0].id : null;
           
           // If Team Lead doesn't have an employee record, create one
           if (!teamLeadEmployeeId) {
-            console.log('Team Lead user_id not found in employees table, checking user role...');
+            logger.debug('Team Lead user_id not found in employees table, checking user role...');
             // Get user info to verify they exist and check their role
             const [teamLeadUser] = await db.query(`
               SELECT u.id, u.name, r.name as role_name 
@@ -578,55 +925,89 @@ router.put('/:id', async (req, res) => {
                 }
                 const empCode = `${empCodePrefix}-${String(empCount[0].count + 1).padStart(4, '0')}`;
                 
-                // Set is_team_lead automatically based on role
-                // Super Admin, Admin, and Team Lead are automatically set as team leads when used as reporting managers
-                const isTeamLead = teamLeadRole === 'Team Leader' || teamLeadRole === 'Team Lead' || teamLeadRole === 'Super Admin' || teamLeadRole === 'Admin';
-                
                 // Create employee record
                 const [newEmpResult] = await db.query(`
-                  INSERT INTO employees (user_id, emp_code, is_team_lead, employee_status)
-                  VALUES (?, ?, ?, 'Active')
-                `, [teamLeadId, empCode, isTeamLead]);
+                  INSERT INTO employees (user_id, emp_code, employee_status)
+                  VALUES (?, ?, 'Active')
+                `, [teamLeadId, empCode]);
                 
                 teamLeadEmployeeId = newEmpResult.insertId;
-                console.log(`Created employee record for ${teamLeadRole} with employee_id: ${teamLeadEmployeeId}, emp_code: ${empCode}`);
+                logger.debug(`Created employee record for ${teamLeadRole} with employee_id: ${teamLeadEmployeeId}, emp_code: ${empCode}`);
               } else {
                 // For other roles, don't create employee record
-                console.log(`User has role '${teamLeadRole}', not creating employee record. Setting team_lead_id to NULL.`);
+                logger.debug(`User has role '${teamLeadRole}', not creating employee record. Setting team_lead_id to NULL.`);
                 teamLeadEmployeeId = null;
               }
             } else {
-              console.log('ERROR: Team Lead user_id not found in users table');
+              logger.error('ERROR: Team Lead user_id not found in users table');
             }
           }
           
-          console.log('Final team lead employee_id:', teamLeadEmployeeId);
+          logger.debug('Final team lead employee_id:', teamLeadEmployeeId);
           if (teamLeadEmployeeId) {
             empUpdates.push('team_lead_id = ?');
             empParams.push(teamLeadEmployeeId);
-            console.log('Will update team_lead_id to:', teamLeadEmployeeId);
+            logger.debug('Will update team_lead_id to:', teamLeadEmployeeId);
           } else {
             // If we still don't have an employee_id, set to null
-            console.log('WARNING: Could not get/create employee record for Team Lead, setting to NULL');
+            logger.warn('WARNING: Could not get/create employee record for Team Lead, setting to NULL');
             empUpdates.push('team_lead_id = ?');
             empParams.push(null);
           }
         }
       } else {
-        console.log('WARNING: teamLeadId not found in request body - field may not be sent from frontend');
+        logger.warn('WARNING: teamLeadId not found in request body - field may not be sent from frontend');
       }
-      if (bank_name !== undefined) { empUpdates.push('bank_name = ?'); empParams.push(bank_name || null); }
-      if (bank_account_number !== undefined) { empUpdates.push('bank_account_number = ?'); empParams.push(bank_account_number || null); }
-      if (ifsc_code !== undefined) { empUpdates.push('ifsc_code = ?'); empParams.push(ifsc_code || null); }
-      if (routing_number !== undefined) { empUpdates.push('routing_number = ?'); empParams.push(routing_number || null); }
-      if (address1 !== undefined) { empUpdates.push('address1 = ?'); empParams.push(address1 || null); }
-      if (address2 !== undefined) { empUpdates.push('address2 = ?'); empParams.push(address2 || null); }
-      if (landmark !== undefined) { empUpdates.push('landmark = ?'); empParams.push(landmark || null); }
-      if (state !== undefined) { empUpdates.push('state = ?'); empParams.push(state || null); }
-      if (district !== undefined) { empUpdates.push('district = ?'); empParams.push(district || null); }
-      if (pincode !== undefined) { empUpdates.push('pincode = ?'); empParams.push(pincode || null); }
-      if (emergency_contact_name !== undefined) { empUpdates.push('emergency_contact_name = ?'); empParams.push(emergency_contact_name || null); }
-      if (emergency_contact_number !== undefined) { empUpdates.push('emergency_contact_number = ?'); empParams.push(emergency_contact_number || null); }
+      // Helper function to convert to uppercase
+      const toUpperCase = (value) => {
+        if (value && typeof value === 'string') {
+          return value.trim().toUpperCase();
+        }
+        return value;
+      };
+      
+      // Helper function to extract only digits
+      const extractDigits = (value) => {
+        if (value && typeof value === 'string') {
+          return value.replace(/\D/g, '');
+        }
+        return value;
+      };
+      
+      // Encrypt bank details before saving
+      if (bank_name !== undefined) {
+        const encrypted = encryptBankDetails({ bank_name: toUpperCase(bank_name) || null });
+        empUpdates.push('bank_name = ?');
+        empParams.push(encrypted?.bank_name || null);
+      }
+      if (bank_account_number !== undefined) {
+        const encrypted = encryptBankDetails({ bank_account_number: toUpperCase(bank_account_number) || null });
+        empUpdates.push('bank_account_number = ?');
+        empParams.push(encrypted?.bank_account_number || null);
+      }
+      if (ifsc_code !== undefined) {
+        const encrypted = encryptBankDetails({ ifsc_code: toUpperCase(ifsc_code) || null });
+        empUpdates.push('ifsc_code = ?');
+        empParams.push(encrypted?.ifsc_code || null);
+      }
+      if (pf_uan_number !== undefined) { empUpdates.push('pf_uan_number = ?'); empParams.push(toUpperCase(pf_uan_number) || null); }
+      if (address1 !== undefined) { empUpdates.push('address1 = ?'); empParams.push(toUpperCase(address1) || null); }
+      if (address2 !== undefined) { empUpdates.push('address2 = ?'); empParams.push(toUpperCase(address2) || null); }
+      if (landmark !== undefined) { empUpdates.push('landmark = ?'); empParams.push(toUpperCase(landmark) || null); }
+      if (state !== undefined) { empUpdates.push('state = ?'); empParams.push(toUpperCase(state) || null); }
+      if (district !== undefined) { empUpdates.push('district = ?'); empParams.push(toUpperCase(district) || null); }
+      if (pincode !== undefined) { 
+        const pincodeDigits = extractDigits(pincode);
+        empUpdates.push('pincode = ?'); 
+        empParams.push(pincodeDigits || null); 
+      }
+      if (emergency_contact_name !== undefined) { empUpdates.push('emergency_contact_name = ?'); empParams.push(toUpperCase(emergency_contact_name) || null); }
+      if (emergency_contact_relation !== undefined) { empUpdates.push('emergency_contact_relation = ?'); empParams.push(toUpperCase(emergency_contact_relation) || null); }
+      if (emergency_contact_number !== undefined) { 
+        const contactDigits = extractDigits(emergency_contact_number);
+        empUpdates.push('emergency_contact_number = ?'); 
+        empParams.push(contactDigits || null); 
+      }
       if (annual_leave_count !== undefined) { empUpdates.push('annual_leave_count = ?'); empParams.push(annual_leave_count); }
       if (sick_leave_count !== undefined) { empUpdates.push('sick_leave_count = ?'); empParams.push(sick_leave_count); }
       if (casual_leave_count !== undefined) { empUpdates.push('casual_leave_count = ?'); empParams.push(casual_leave_count); }
@@ -636,31 +1017,155 @@ router.put('/:id', async (req, res) => {
       if (mobile !== undefined) { 
         // Already handled in user update above
       }
-      if (address1 !== undefined) { empUpdates.push('address1 = ?'); empParams.push(address1 || null); }
-      if (address2 !== undefined) { empUpdates.push('address2 = ?'); empParams.push(address2 || null); }
-      if (landmark !== undefined) { empUpdates.push('landmark = ?'); empParams.push(landmark || null); }
-      if (state !== undefined) { empUpdates.push('state = ?'); empParams.push(state || null); }
-      if (district !== undefined) { empUpdates.push('district = ?'); empParams.push(district || null); }
-      if (pincode !== undefined) { empUpdates.push('pincode = ?'); empParams.push(pincode || null); }
-      if (emergency_contact_name !== undefined) { empUpdates.push('emergency_contact_name = ?'); empParams.push(emergency_contact_name || null); }
-      if (emergency_contact_relation !== undefined) { empUpdates.push('emergency_contact_relation = ?'); empParams.push(emergency_contact_relation || null); }
-      if (emergency_contact_number !== undefined) { empUpdates.push('emergency_contact_number = ?'); empParams.push(emergency_contact_number || null); }
-      if (profile_photo_url !== undefined) { empUpdates.push('profile_photo_url = ?'); empParams.push(profile_photo_url || null); }
+      // Allow users to update their own basic employee information
+      // Always process these fields if they're in the request (including null values)
+      if ('date_of_birth' in req.body) {
+        if (date_of_birth && date_of_birth !== '') {
+          const formattedDate = formatDateForDB(date_of_birth);
+          empUpdates.push('date_of_birth = ?');
+          empParams.push(formattedDate);
+          logger.debug('Processing date_of_birth:', date_of_birth, '-> formatted:', formattedDate);
+        } else {
+          // Explicitly set to null if empty
+          empUpdates.push('date_of_birth = ?');
+          empParams.push(null);
+          logger.debug('Setting date_of_birth to NULL (empty value)');
+        }
+      }
+      if ('gender' in req.body) { 
+        empUpdates.push('gender = ?'); 
+        empParams.push(gender || null);
+        logger.debug('Processing gender:', gender);
+      }
+      if ('date_of_joining' in req.body) {
+        if (date_of_joining && date_of_joining !== '') {
+          const formattedDate = formatDateForDB(date_of_joining);
+          empUpdates.push('date_of_joining = ?');
+          empParams.push(formattedDate);
+          logger.debug('Processing date_of_joining:', date_of_joining, '-> formatted:', formattedDate);
+        } else {
+          // Explicitly set to null if empty
+          empUpdates.push('date_of_joining = ?');
+          empParams.push(null);
+          logger.debug('Setting date_of_joining to NULL (empty value)');
+        }
+      }
+      // Helper function to convert to uppercase
+      const toUpperCase = (value) => {
+        if (value && typeof value === 'string') {
+          return value.trim().toUpperCase();
+        }
+        return value;
+      };
+      
+      // Helper function to extract only digits
+      const extractDigits = (value) => {
+        if (value && typeof value === 'string') {
+          return value.replace(/\D/g, '');
+        }
+        return value;
+      };
+      
+      // Allow users to update their own finance information - encrypt before saving
+      if ('bank_name' in req.body) {
+        const encrypted = encryptBankDetails({ bank_name: toUpperCase(bank_name) || null });
+        empUpdates.push('bank_name = ?');
+        empParams.push(encrypted?.bank_name || null);
+      }
+      if ('bank_account_number' in req.body) {
+        const encrypted = encryptBankDetails({ bank_account_number: toUpperCase(bank_account_number) || null });
+        empUpdates.push('bank_account_number = ?');
+        empParams.push(encrypted?.bank_account_number || null);
+      }
+      if ('ifsc_code' in req.body) {
+        const encrypted = encryptBankDetails({ ifsc_code: toUpperCase(ifsc_code) || null });
+        empUpdates.push('ifsc_code = ?');
+        empParams.push(encrypted?.ifsc_code || null);
+      }
+      if ('pf_uan_number' in req.body) { empUpdates.push('pf_uan_number = ?'); empParams.push(toUpperCase(pf_uan_number) || null); }
+      if ('address1' in req.body) { empUpdates.push('address1 = ?'); empParams.push(toUpperCase(address1) || null); }
+      if ('address2' in req.body) { empUpdates.push('address2 = ?'); empParams.push(toUpperCase(address2) || null); }
+      if ('landmark' in req.body) { empUpdates.push('landmark = ?'); empParams.push(toUpperCase(landmark) || null); }
+      if ('state' in req.body) { empUpdates.push('state = ?'); empParams.push(toUpperCase(state) || null); }
+      if ('district' in req.body) { empUpdates.push('district = ?'); empParams.push(toUpperCase(district) || null); }
+      if ('pincode' in req.body) { 
+        const pincodeDigits = extractDigits(pincode);
+        empUpdates.push('pincode = ?'); 
+        empParams.push(pincodeDigits || null); 
+      }
+      if ('emergency_contact_name' in req.body) { empUpdates.push('emergency_contact_name = ?'); empParams.push(toUpperCase(emergency_contact_name) || null); }
+      logger.debug('Checking emergency_contact_relation - in req.body:', 'emergency_contact_relation' in req.body, 'value:', emergency_contact_relation, 'req.body keys:', Object.keys(req.body));
+      if ('emergency_contact_relation' in req.body) {
+        empUpdates.push('emergency_contact_relation = ?');
+        empParams.push(toUpperCase(emergency_contact_relation) || null);
+        logger.debug('Processing emergency_contact_relation:', emergency_contact_relation);
+      } else {
+        logger.error('ERROR: emergency_contact_relation NOT in req.body at isOwnProfile block!');
+      }
+      if ('emergency_contact_number' in req.body) { 
+        const contactDigits = extractDigits(emergency_contact_number);
+        empUpdates.push('emergency_contact_number = ?'); 
+        empParams.push(contactDigits || null); 
+      }
+      if ('profile_photo_url' in req.body) { empUpdates.push('profile_photo_url = ?'); empParams.push(profile_photo_url || null); }
     }
     
     if (empUpdates.length > 0) {
       empParams.push(id);
-      console.log('Executing UPDATE query with fields:', empUpdates);
-      console.log('Update params:', empParams);
-      await db.query(`UPDATE employees SET ${empUpdates.join(', ')} WHERE id = ?`, empParams);
-      console.log('Employee update successful');
+      const updateQuery = `UPDATE employees SET ${empUpdates.join(', ')} WHERE id = ?`;
+      logger.debug('Executing UPDATE query with fields:', empUpdates);
+      logger.debug('Update params:', empParams);
+      logger.debug('Full SQL query:', updateQuery);
+      logger.debug('Date values in params:', {
+        date_of_birth_index: empUpdates.findIndex(f => f.includes('date_of_birth')),
+        date_of_joining_index: empUpdates.findIndex(f => f.includes('date_of_joining')),
+        date_of_birth_value: empParams[empUpdates.findIndex(f => f.includes('date_of_birth'))],
+        date_of_joining_value: empParams[empUpdates.findIndex(f => f.includes('date_of_joining'))]
+      });
+      
+      const [result] = await db.query(updateQuery, empParams);
+      logger.debug('Update result:', {
+        affectedRows: result.affectedRows,
+        changedRows: result.changedRows,
+        warningCount: result.warningCount
+      });
+      logger.debug('Employee update successful');
     } else {
-      console.log('No employee fields to update');
+      logger.debug('No employee fields to update');
     }
     
     const [updatedEmployee] = await db.query(`
       SELECT 
-        e.*,
+        e.id,
+        e.user_id,
+        e.emp_code,
+        e.team_lead_id,
+        DATE_FORMAT(e.date_of_birth, '%Y-%m-%d') as date_of_birth,
+        e.gender,
+        DATE_FORMAT(e.date_of_joining, '%Y-%m-%d') as date_of_joining,
+        e.employee_status,
+        e.status,
+        e.state,
+        e.district,
+        e.pincode,
+        e.country,
+        e.bank_name,
+        e.bank_account_number,
+        e.ifsc_code,
+        e.address1,
+        e.address2,
+        e.landmark,
+        e.pf_uan_number,
+        e.emergency_contact_name,
+        e.emergency_contact_relation,
+        e.emergency_contact_number,
+        e.annual_leave_count,
+        e.sick_leave_count,
+        e.casual_leave_count,
+        e.profile_photo_url,
+        e.created_by,
+        e.created_at,
+        e.updated_at,
         u.name,
         u.email,
         u.mobile,
@@ -676,7 +1181,46 @@ router.put('/:id', async (req, res) => {
       WHERE e.id = ?
     `, [id]);
     
-    res.json({ data: updatedEmployee[0] });
+    logger.debug('Updated employee data from DB:', {
+      id: updatedEmployee[0]?.id,
+      date_of_birth: updatedEmployee[0]?.date_of_birth,
+      date_of_joining: updatedEmployee[0]?.date_of_joining,
+      gender: updatedEmployee[0]?.gender
+    });
+    
+    // Verify the dates were actually updated by checking the raw values
+    const [verifyDates] = await db.query(`
+      SELECT date_of_birth, date_of_joining 
+      FROM employees 
+      WHERE id = ?
+    `, [id]);
+    logger.debug('Raw date values from DB (for verification):', verifyDates[0]);
+    
+    // Decrypt bank details before sending
+    const employee = updatedEmployee[0];
+    const decryptedBankDetails = decryptBankDetails({
+      bank_name: employee.bank_name,
+      bank_account_number: employee.bank_account_number,
+      ifsc_code: employee.ifsc_code
+    });
+    
+    if (decryptedBankDetails) {
+      // Only update fields that were successfully decrypted (not null)
+      if (decryptedBankDetails.bank_name !== null && decryptedBankDetails.bank_name !== undefined) {
+        employee.bank_name = decryptedBankDetails.bank_name;
+      }
+      if (decryptedBankDetails.bank_account_number !== null && decryptedBankDetails.bank_account_number !== undefined) {
+        employee.bank_account_number = decryptedBankDetails.bank_account_number;
+      }
+      if (decryptedBankDetails.ifsc_code !== null && decryptedBankDetails.ifsc_code !== undefined) {
+        employee.ifsc_code = decryptedBankDetails.ifsc_code;
+      }
+    }
+    
+    // Create audit log for employee update
+    await logUpdate(req, 'Employees', id, beforeData, employee, 'Employee');
+    
+    res.json({ data: employee });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -687,9 +1231,15 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Get employee and user info before deletion
+    // Get employee and user info before deletion (for audit log)
     const [employees] = await db.query(`
-      SELECT e.user_id, u.id as user_id, r.name as role
+      SELECT 
+        e.*,
+        u.id as user_id,
+        u.name,
+        u.email,
+        u.mobile,
+        r.name as role
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
       LEFT JOIN roles r ON u.role_id = r.id
@@ -702,6 +1252,7 @@ router.delete('/:id', async (req, res) => {
     
     const employeeRole = employees[0].role;
     const currentUserRole = req.user?.role;
+    const beforeData = employees[0]; // Store before data for audit log
     
     // Team Leader and Manager can only delete Developer, Designer, and Tester employees
     if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
@@ -714,7 +1265,186 @@ router.delete('/:id', async (req, res) => {
     // Delete user (cascade will delete employee)
     await db.query('DELETE FROM users WHERE id = ?', [employees[0].user_id]);
     
+    // Create audit log for employee deletion
+    await logDelete(req, 'Employees', id, beforeData, 'Employee');
+    
     res.json({ message: 'Employee deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get employee documents
+router.get('/:id/documents', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role || '';
+    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    
+    // Check if employee exists and user has access
+    const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
+    if (employees.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    const employeeUserId = employees[0].user_id;
+    const isOwnProfile = parseInt(currentUserId) === parseInt(employeeUserId);
+    
+    if (!canManage && !isOwnProfile) {
+      return res.status(403).json({ error: 'You can only access your own documents' });
+    }
+    
+    const [documents] = await db.query(`
+      SELECT 
+        d.id,
+        d.employee_id,
+        d.document_type,
+        d.document_number,
+        d.file_path,
+        d.file_name,
+        d.mime_type,
+        d.file_size,
+        d.uploaded_at,
+        d.verified,
+        d.verified_by,
+        d.verified_at,
+        u.name as verified_by_name
+      FROM employee_documents d
+      LEFT JOIN users u ON d.verified_by = u.id
+      WHERE d.employee_id = ?
+      ORDER BY d.uploaded_at DESC
+    `, [id]);
+    
+    // Decrypt document_number for each document
+    const decryptedDocuments = documents.map(doc => {
+      if (doc.document_number) {
+        doc.document_number = decryptDocumentNumber(doc.document_number);
+      }
+      return doc;
+    });
+    
+    res.json({ data: decryptedDocuments });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload employee document
+router.post('/:id/documents', uploadDocument.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { document_type, document_number } = req.body;
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role || '';
+    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    
+    // Check if employee exists and user has access
+    const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
+    if (employees.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    const employeeUserId = employees[0].user_id;
+    const isOwnProfile = parseInt(currentUserId) === parseInt(employeeUserId);
+    
+    if (!canManage && !isOwnProfile) {
+      return res.status(403).json({ error: 'You can only upload documents for your own profile' });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    if (!document_type) {
+      // Clean up uploaded file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(400).json({ error: 'Document type is required' });
+    }
+    
+    const filePath = `/uploads/employee-documents/${req.file.filename}`;
+    
+    // Encrypt document_number before saving
+    const encryptedDocumentNumber = document_number ? encryptDocumentNumber(document_number) : null;
+    
+    const [result] = await db.query(`
+      INSERT INTO employee_documents (
+        employee_id, document_type, document_number, file_path, file_name, mime_type, file_size
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id,
+      document_type,
+      encryptedDocumentNumber,
+      filePath,
+      req.file.originalname,
+      req.file.mimetype,
+      req.file.size
+    ]);
+    
+    const [newDocument] = await db.query(`
+      SELECT 
+        d.*,
+        u.name as verified_by_name
+      FROM employee_documents d
+      LEFT JOIN users u ON d.verified_by = u.id
+      WHERE d.id = ?
+    `, [result.insertId]);
+    
+    // Decrypt document_number before sending
+    const document = newDocument[0];
+    if (document.document_number) {
+      document.document_number = decryptDocumentNumber(document.document_number);
+    }
+    
+    res.status(201).json({ data: document });
+  } catch (error) {
+    // Clean up uploaded file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete employee document
+router.delete('/:id/documents/:docId', async (req, res) => {
+  try {
+    const { id, docId } = req.params;
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role || '';
+    const canManage = ['Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager'].includes(currentUserRole);
+    
+    // Check if document exists
+    const [documents] = await db.query(`
+      SELECT d.*, e.user_id as employee_user_id
+      FROM employee_documents d
+      INNER JOIN employees e ON d.employee_id = e.id
+      WHERE d.id = ? AND d.employee_id = ?
+    `, [docId, id]);
+    
+    if (documents.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    const document = documents[0];
+    const isOwnProfile = parseInt(currentUserId) === parseInt(document.employee_user_id);
+    
+    if (!canManage && !isOwnProfile) {
+      return res.status(403).json({ error: 'You can only delete your own documents' });
+    }
+    
+    // Delete file from filesystem
+    const filePath = path.join(__dirname, '..', document.file_path);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
+    // Delete from database
+    await db.query('DELETE FROM employee_documents WHERE id = ?', [docId]);
+    
+    res.json({ message: 'Document deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

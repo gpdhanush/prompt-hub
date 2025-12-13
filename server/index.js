@@ -1,9 +1,10 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { db } from './config/database.js';
+import { SERVER_CONFIG, CORS_CONFIG } from './config/config.js';
+import { logger } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,12 +24,46 @@ import settingsRoutes from './routes/settings.js';
 import rolesRoutes from './routes/roles.js';
 import positionsRoutes from './routes/positions.js';
 import rolePositionsRoutes from './routes/rolePositions.js';
+import permissionsRoutes from './routes/permissions.js';
+import fcmRoutes from './routes/fcm.js';
 import { performHealthCheck } from './utils/dbHealthCheck.js';
+import { initializeFirebase } from './utils/fcmService.js';
+import { reportFatalError, createErrorContext } from './utils/errorReporting.js';
 
-dotenv.config();
+// Initialize Firebase Admin SDK (async)
+initializeFirebase().catch(err => {
+  logger.error('Failed to initialize Firebase:', err);
+});
+
+// Set up global error handlers for production crash reporting
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  reportFatalError(error, {
+    source: 'uncaught_exception',
+    fatal: true,
+  });
+  // Don't exit in production, let the process manager handle it
+  if (SERVER_CONFIG.NODE_ENV === 'development') {
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  logger.error('Unhandled Promise Rejection:', error);
+  reportFatalError(error, {
+    source: 'unhandled_promise_rejection',
+    fatal: true,
+    promise: String(promise),
+  });
+});
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = SERVER_CONFIG.PORT;
+
+// Configure Express to trust proxies (for accurate IP address detection)
+// This allows req.ip to work correctly when behind a reverse proxy
+app.set('trust proxy', true);
 
 // Middleware
 app.use(cors());
@@ -39,12 +74,12 @@ app.use(express.urlencoded({ extended: true }));
 // Files are stored in server/uploads/profile-photos (based on employees.js multer config)
 import fs from 'fs';
 const uploadsPath = path.join(__dirname, 'uploads');
-console.log('📁 Static files directory:', uploadsPath);
+logger.debug('📁 Static files directory:', uploadsPath);
 
 // Ensure directory exists
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
-  console.log('✅ Created uploads directory:', uploadsPath);
+  logger.info('✅ Created uploads directory:', uploadsPath);
 }
 
 app.use('/uploads', express.static(uploadsPath));
@@ -74,20 +109,33 @@ app.use('/api/bugs', bugsRoutes);
 app.use('/api/roles', rolesRoutes);
 app.use('/api/positions', positionsRoutes);
 app.use('/api/role-positions', rolePositionsRoutes);
+app.use('/api/permissions', permissionsRoutes);
 app.use('/api/leaves', leavesRoutes);
 app.use('/api/reimbursements', reimbursementsRoutes);
 app.use('/api/prompts', promptsRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/fcm', fcmRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/settings', settingsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  logger.error('Error:', err);
+  
+  // Report to crash analytics in production
+  if (SERVER_CONFIG.NODE_ENV === 'production') {
+    const errorContext = createErrorContext(req);
+    reportFatalError(err, {
+      ...errorContext,
+      source: 'express_error_handler',
+      statusCode: err.status || 500,
+    });
+  }
+  
   res.status(err.status || 500).json({
     error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(SERVER_CONFIG.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
@@ -102,23 +150,23 @@ app.use((req, res) => {
 });
 
 const server = app.listen(PORT, async () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+  logger.info(`✅ Server running on port ${PORT}`);
   
   // Perform database health check on startup
   try {
     await performHealthCheck();
   } catch (error) {
-    console.error('❌ Health check failed:', error);
-    console.error('⚠️  Server started but database may have issues');
+    logger.error('❌ Health check failed:', error);
+    logger.error('⚠️  Server started but database may have issues');
   }
 });
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use.`);
-    console.error(`   Please either:`);
-    console.error(`   1. Kill the process using port ${PORT}: lsof -ti:${PORT} | xargs kill -9`);
-    console.error(`   2. Change the PORT in your .env file`);
+    logger.error(`❌ Port ${PORT} is already in use.`);
+    logger.error(`   Please either:`);
+    logger.error(`   1. Kill the process using port ${PORT}: lsof -ti:${PORT} | xargs kill -9`);
+    logger.error(`   2. Change the PORT in your .env file`);
     process.exit(1);
   } else {
     throw err;
@@ -127,7 +175,7 @@ server.on('error', (err) => {
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, closing server...');
+  logger.info('SIGTERM received, closing server...');
   server.close(async () => {
     await db.end();
     process.exit(0);
@@ -135,7 +183,7 @@ process.on('SIGTERM', async () => {
 });
 
 process.on('SIGINT', async () => {
-  console.log('\nSIGINT received, closing server...');
+  logger.info('\nSIGINT received, closing server...');
   server.close(async () => {
     await db.end();
     process.exit(0);

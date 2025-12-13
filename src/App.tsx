@@ -6,6 +6,9 @@ import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AdminLayout } from "./components/layout/AdminLayout";
 import { LoadingProvider, useLoading } from "./contexts/LoadingContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { logger } from "./lib/logger";
+import { ENV_CONFIG } from "./lib/config";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
@@ -31,37 +34,66 @@ import ProjectDetail from "./pages/ProjectDetail";
 import ProjectCreate from "./pages/ProjectCreate";
 import ProjectEdit from "./pages/ProjectEdit";
 import RolesPositions from "./pages/RolesPositions";
+import RolesPermissions from "./pages/RolesPermissions";
+import Permissions from "./pages/Permissions";
+import ProfileSetup from "./pages/ProfileSetup";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
 import { registerLoadingCallback } from "@/lib/api";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const queryClient = new QueryClient();
 
-// Protected Route Component - checks user role before allowing access
+// Protected Route Component - checks user role or permission before allowing access
 function ProtectedRoute({ 
   children, 
-  allowedRoles 
+  allowedRoles,
+  requiredPermission
 }: { 
   children: React.ReactNode; 
-  allowedRoles: string[] 
+  allowedRoles?: string[];
+  requiredPermission?: string;
 }) {
   const userStr = getItemSync('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const userRole = currentUser?.role || '';
+  const { hasPermission, isLoading } = usePermissions();
+
+  // Check access based on role or permission
+  let hasAccess = false;
+  
+  if (allowedRoles && allowedRoles.length > 0) {
+    hasAccess = allowedRoles.includes(userRole);
+  } else if (requiredPermission) {
+    hasAccess = hasPermission(requiredPermission);
+  } else {
+    // If neither is specified, allow access (for backward compatibility)
+    hasAccess = true;
+  }
 
   useEffect(() => {
-    if (!allowedRoles.includes(userRole)) {
+    if (!isLoading && !hasAccess) {
       toast({
         title: "Access Denied",
         description: "You don't have permission to access this page.",
         variant: "destructive",
       });
     }
-  }, [userRole, allowedRoles]);
+  }, [hasAccess, isLoading]);
 
-  if (!allowedRoles.includes(userRole)) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -75,7 +107,7 @@ const AppContent = () => {
   // Initialize secure storage on app startup
   useEffect(() => {
     initializeSecureStorage().catch(error => {
-      console.error('Failed to initialize secure storage:', error);
+      logger.error('Failed to initialize secure storage:', error);
     });
   }, []);
 
@@ -97,7 +129,7 @@ const AppContent = () => {
               <Route 
                 path="/users" 
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Leader', 'Team Lead']}>
+                  <ProtectedRoute requiredPermission="users.view">
                     <Users />
                   </ProtectedRoute>
                 } 
@@ -105,7 +137,7 @@ const AppContent = () => {
               <Route 
                 path="/employees" 
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Leader', 'Team Lead']}>
+                  <ProtectedRoute requiredPermission="employees.view">
                     <Employees />
                   </ProtectedRoute>
                 } 
@@ -113,7 +145,7 @@ const AppContent = () => {
               <Route 
                 path="/employees/new" 
                 element={
-                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Team Leader', 'Team Lead']}>
+                  <ProtectedRoute requiredPermission="employees.create">
                     <EmployeeCreate />
                   </ProtectedRoute>
                 } 
@@ -122,19 +154,95 @@ const AppContent = () => {
                 path="/employees/:id/edit" 
                 element={<EmployeeEdit />} 
               />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/projects/new" element={<ProjectCreate />} />
-              <Route path="/projects/:id" element={<ProjectDetail />} />
-              <Route path="/projects/:id/edit" element={<ProjectEdit />} />
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/bugs" element={<Bugs />} />
-              <Route path="/bugs/new" element={<BugCreate />} />
-              <Route path="/bugs/:id" element={<BugDetail />} />
-              <Route path="/bugs/:id/edit" element={<BugEdit />} />
-              <Route path="/leaves" element={<Leaves />} />
-              <Route path="/reimbursements" element={<Reimbursements />} />
+              <Route 
+                path="/projects" 
+                element={
+                  <ProtectedRoute requiredPermission="projects.view">
+                    <Projects />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/projects/new" 
+                element={
+                  <ProtectedRoute requiredPermission="projects.create">
+                    <ProjectCreate />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/projects/:id" 
+                element={
+                  <ProtectedRoute requiredPermission="projects.view">
+                    <ProjectDetail />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/projects/:id/edit" 
+                element={
+                  <ProtectedRoute requiredPermission="projects.edit">
+                    <ProjectEdit />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/tasks" 
+                element={
+                  <ProtectedRoute requiredPermission="tasks.view">
+                    <Tasks />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/bugs" 
+                element={
+                  <ProtectedRoute requiredPermission="bugs.view">
+                    <Bugs />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/bugs/new" 
+                element={
+                  <ProtectedRoute requiredPermission="bugs.create">
+                    <BugCreate />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/bugs/:id" 
+                element={
+                  <ProtectedRoute requiredPermission="bugs.view">
+                    <BugDetail />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/bugs/:id/edit" 
+                element={
+                  <ProtectedRoute requiredPermission="bugs.edit">
+                    <BugEdit />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/leaves" 
+                element={<Leaves />} 
+              />
+              <Route 
+                path="/reimbursements" 
+                element={<Reimbursements />} 
+              />
               <Route path="/prompts" element={<AIPrompts />} />
-              <Route path="/audit-logs" element={<AuditLogs />} />
+              <Route 
+                path="/audit-logs" 
+                element={
+                  <ProtectedRoute allowedRoles={['Super Admin', 'Admin']}>
+                    <AuditLogs />
+                  </ProtectedRoute>
+                } 
+              />
               <Route path="/files" element={<FileManager />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route 
@@ -155,6 +263,26 @@ const AppContent = () => {
               />
               <Route path="/employee-profile/:id" element={<EmployeeProfile />} />
               <Route path="/settings" element={<Settings />} />
+              <Route 
+                path="/profile-setup" 
+                element={<ProfileSetup />} 
+              />
+              <Route 
+                path="/roles-permissions" 
+                element={
+                  <ProtectedRoute requiredPermission="roles_permissions.view">
+                    <RolesPermissions />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/permissions" 
+                element={
+                  <ProtectedRoute allowedRoles={['Super Admin']}>
+                    <Permissions />
+                  </ProtectedRoute>
+                } 
+              />
             </Route>
             
             <Route path="*" element={<NotFound />} />
@@ -164,18 +292,74 @@ const AppContent = () => {
 };
 
 const App = () => {
+  // Set up global error handlers for production crash reporting
+  useEffect(() => {
+    // Handle unhandled errors
+    const handleError = (event: ErrorEvent) => {
+      const error = event.error || new Error(event.message || 'Unknown error');
+      logger.error('Unhandled error:', error);
+      
+      // Report to crash analytics in production
+      if (!ENV_CONFIG.IS_DEV) {
+        import('./lib/firebase').then(({ logError }) => {
+          logError(error, {
+            fatal: true,
+            source: 'global_error_handler',
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+          });
+        }).catch(() => {
+          // Silently fail if firebase not available
+        });
+      }
+    };
+
+    // Handle unhandled promise rejections
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const error = event.reason instanceof Error 
+        ? event.reason 
+        : new Error(String(event.reason || 'Unhandled promise rejection'));
+      
+      logger.error('Unhandled promise rejection:', error);
+      
+      // Report to crash analytics in production
+      if (!ENV_CONFIG.IS_DEV) {
+        import('./lib/firebase').then(({ logError }) => {
+          logError(error, {
+            fatal: true,
+            source: 'unhandled_promise_rejection',
+            reason: String(event.reason),
+          });
+        }).catch(() => {
+          // Silently fail if firebase not available
+        });
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-      <QueryClientProvider client={queryClient}>
-        <LoadingProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <AppContent />
-          </TooltipProvider>
-        </LoadingProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        <QueryClientProvider client={queryClient}>
+          <LoadingProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <AppContent />
+            </TooltipProvider>
+          </LoadingProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 };
 

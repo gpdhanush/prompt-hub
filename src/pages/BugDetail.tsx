@@ -11,6 +11,8 @@ import { toast } from "@/hooks/use-toast";
 import { bugsApi } from "@/lib/api";
 import { BugComments } from "@/components/bug/BugComments";
 import { getCurrentUser, getAuthToken } from "@/lib/auth";
+import { API_CONFIG } from "@/lib/config";
+import { logger } from "@/lib/logger";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,7 +79,7 @@ export default function BugDetail() {
       });
       navigate('/bugs');
     } catch (error: any) {
-      console.error('Error deleting bug:', error);
+      logger.error('Error deleting bug:', error);
       if (error.status === 401) {
         toast({ 
           title: "Authentication Required", 
@@ -102,7 +104,7 @@ export default function BugDetail() {
   };
 
   const handleDownloadAttachment = (attachment: any) => {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    const API_BASE_URL = API_CONFIG.BASE_URL;
     const token = getAuthToken();
     // Use the path from attachment to download
     const url = `${API_BASE_URL}/bugs/${id}/attachments/${attachment.id}`;
@@ -127,7 +129,7 @@ export default function BugDetail() {
         document.body.removeChild(a);
       })
       .catch(error => {
-        console.error('Download error:', error);
+        logger.error('Download error:', error);
         toast({
           title: "Error",
           description: "Failed to download attachment.",

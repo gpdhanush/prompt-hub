@@ -3,22 +3,15 @@
  * Centralized functions for handling image URLs, especially for profile photos
  */
 
+import { STATIC_CONFIG, ENV_CONFIG } from './config';
+import { logger } from './logger';
+
 /**
  * Get the base URL for static assets/uploads
  * Uses environment variable VITE_STATIC_URL if set, otherwise constructs from API URL
  */
 export function getStaticBaseUrl(): string {
-  // Check for explicit static URL in environment
-  if (import.meta.env.VITE_STATIC_URL) {
-    const staticUrl = import.meta.env.VITE_STATIC_URL.trim();
-    // Remove trailing slash if present
-    return staticUrl.endsWith('/') ? staticUrl.slice(0, -1) : staticUrl;
-  }
-  
-  // Otherwise, construct from API URL (remove /api if present)
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-  const baseUrl = apiUrl.replace('/api', '').replace(/\/$/, ''); // Remove /api and trailing slash
-  return baseUrl;
+  return STATIC_CONFIG.BASE_URL;
 }
 
 /**
@@ -40,9 +33,7 @@ export function getImageUrl(imagePath: string | null | undefined): string | unde
       // Replace /api/uploads/ with /uploads/ in the pathname
       const correctedPath = urlObj.pathname.replace('/api/uploads/', '/uploads/');
       const correctUrl = `${baseUrl}${correctedPath}`;
-      if (import.meta.env.DEV) {
-        console.log('[imageUtils] Fixed incorrect URL:', { original: imagePath, corrected: correctUrl });
-      }
+      logger.debug('[imageUtils] Fixed incorrect URL:', { original: imagePath, corrected: correctUrl });
       return correctUrl;
     }
     return imagePath;
@@ -67,10 +58,8 @@ export function getImageUrl(imagePath: string | null | undefined): string | unde
   const path = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
   const fullUrl = `${baseUrl}${path}`;
   
-  // Debug logging (remove in production)
-  if (import.meta.env.DEV) {
-    console.log('[imageUtils] Image URL conversion:', { imagePath, cleanPath, baseUrl, fullUrl });
-  }
+  // Debug logging (only in development)
+  logger.debug('[imageUtils] Image URL conversion:', { imagePath, cleanPath, baseUrl, fullUrl });
   
   return fullUrl;
 }

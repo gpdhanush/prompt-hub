@@ -95,7 +95,7 @@ export default function ProjectDetail() {
       });
       navigate('/projects');
     } catch (error: any) {
-      console.error('Error deleting project:', error);
+      logger.error('Error deleting project:', error);
       toast({ 
         title: "Error", 
         description: error.message || "Failed to delete project.",

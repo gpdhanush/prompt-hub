@@ -1,6 +1,8 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate, authorize } from '../middleware/auth.js';
+import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
+import { notifyBugAssigned, notifyBugStatusUpdated, notifyBugComment } from '../utils/notificationService.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -59,10 +61,10 @@ router.get('/', async (req, res) => {
     const userId = req.user?.id;
     const userRole = req.user?.role || '';
     
-    console.log('=== GET BUGS REQUEST ===');
-    console.log('User Role:', userRole);
-    console.log('User ID:', userId);
-    console.log('My Bugs filter:', my_bugs, 'Type:', typeof my_bugs);
+    logger.debug('=== GET BUGS REQUEST ===');
+    logger.debug('User Role:', userRole);
+    logger.debug('User ID:', userId);
+    logger.debug('My Bugs filter:', my_bugs, 'Type:', typeof my_bugs);
     
     // Check if tasks table has role-specific columns
     let hasRoleColumns = false;
@@ -122,21 +124,21 @@ router.get('/', async (req, res) => {
     if (shouldFilterMyBugs) {
       query += ' AND (b.assigned_to = ? OR b.reported_by = ?)';
       params.push(userId, userId);
-      console.log('Applying "My Bugs" filter for user:', userId);
+      logger.debug('Applying "My Bugs" filter for user:', userId);
     } else {
-      console.log('Showing ALL bugs to user:', userRole);
+      logger.debug('Showing ALL bugs to user:', userRole);
     }
     
     query += ' ORDER BY b.created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
     
-    console.log('Final query:', query);
-    console.log('Query params:', params);
+    logger.debug('Final query:', query);
+    logger.debug('Query params:', params);
     
     const [bugs] = await db.query(query, params);
     
-    console.log(`Found ${bugs.length} bugs`);
-    console.log('Bug IDs:', bugs.map(b => `${b.bug_code} (reported_by: ${b.reported_by}, assigned_to: ${b.assigned_to})`).join(', '));
+    logger.debug(`Found ${bugs.length} bugs`);
+    logger.debug('Bug IDs:', bugs.map(b => `${b.bug_code} (reported_by: ${b.reported_by}, assigned_to: ${b.assigned_to})`).join(', '));
     
     // Count query with same filters
     let countQuery = `
@@ -159,11 +161,11 @@ router.get('/', async (req, res) => {
     }
     
     const [countResult] = await db.query(countQuery, countParams);
-    console.log('Total bugs count:', countResult[0].total);
+    logger.debug('Total bugs count:', countResult[0].total);
     
     res.json({ data: bugs, pagination: { page: parseInt(page), limit: parseInt(limit), total: countResult[0].total, totalPages: Math.ceil(countResult[0].total / limit) } });
   } catch (error) {
-    console.error('Error fetching bugs:', error);
+    logger.error('Error fetching bugs:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -237,10 +239,10 @@ router.get('/:id', async (req, res) => {
 // Create bug - Tester, Admin, Team Leader, Developer, Designer, and Super Admin
 router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), upload.array('attachments', 10), async (req, res) => {
   try {
-    console.log('=== CREATE BUG REQUEST ===');
-    console.log('Request body:', req.body);
-    console.log('Files:', req.files ? req.files.map(f => ({ name: f.originalname, size: f.size })) : 'No files');
-    console.log('User:', req.user);
+    logger.debug('=== CREATE BUG REQUEST ===');
+    logger.debug('Request body:', req.body);
+    logger.debug('Files:', req.files ? req.files.map(f => ({ name: f.originalname, size: f.size })) : 'No files');
+    logger.debug('User:', req.user);
     
     const { 
       task_id, project_id, title, description, bug_type, severity, priority, status, resolution_type,
@@ -251,9 +253,9 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
     } = req.body;
     const reported_by = req.user.id; // Get from authenticated user
     
-    console.log('=== CREATE BUG REQUEST ===');
-    console.log('Request body:', req.body);
-    console.log('Provided assigned_to:', provided_assigned_to, 'Type:', typeof provided_assigned_to);
+    logger.debug('=== CREATE BUG REQUEST ===');
+    logger.debug('Request body:', req.body);
+    logger.debug('Provided assigned_to:', provided_assigned_to, 'Type:', typeof provided_assigned_to);
     
     if (!title && !description) {
       return res.status(400).json({ error: 'Title or description is required' });
@@ -277,7 +279,7 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
     // If assigned_to was explicitly provided in the request, use it
     if (provided_assigned_to !== undefined && provided_assigned_to !== null && provided_assigned_to !== '') {
       assigned_to = parseInt(provided_assigned_to) || null;
-      console.log(`Using provided assigned_to: ${assigned_to}`);
+      logger.debug(`Using provided assigned_to: ${assigned_to}`);
     } else {
       // Auto-assign bug based on creator's role and task assignments
       // - If Tester creates bug → assign to task's Developer
@@ -294,7 +296,7 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
           }
         } catch (err) {
           // Columns don't exist, use old schema
-          console.log('Using old task schema (no role-specific assignments)');
+          logger.debug('Using old task schema (no role-specific assignments)');
         }
         taskQuery += ' FROM tasks WHERE id = ?';
         
@@ -306,25 +308,25 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
           if (creatorRole === 'Tester') {
             // Tester creates bug → assign to Developer
             assigned_to = task.developer_id || task.assigned_to || null;
-            console.log(`Tester created bug - auto-assigning to Developer: ${assigned_to}`);
+            logger.debug(`Tester created bug - auto-assigning to Developer: ${assigned_to}`);
           } else if (creatorRole === 'Developer') {
             // Developer creates bug → assign to Tester
             assigned_to = task.tester_id || task.assigned_to || null;
-            console.log(`Developer created bug - auto-assigning to Tester: ${assigned_to}`);
+            logger.debug(`Developer created bug - auto-assigning to Tester: ${assigned_to}`);
           } else if (creatorRole === 'Designer') {
             // Designer creates bug → assign to Developer (for code fixes) or Tester (for testing)
             assigned_to = task.developer_id || task.tester_id || task.assigned_to || null;
-            console.log(`Designer created bug - auto-assigning to Developer/Tester: ${assigned_to}`);
+            logger.debug(`Designer created bug - auto-assigning to Developer/Tester: ${assigned_to}`);
           } else {
             // For other roles (Admin, Team Lead, Super Admin), use task's assigned_to
             assigned_to = task.assigned_to || null;
-            console.log(`Auto-assigning bug to task's assigned user: ${assigned_to}`);
+            logger.debug(`Auto-assigning bug to task's assigned user: ${assigned_to}`);
           }
         }
       }
     }
     
-    console.log('Inserting bug with:', { bugCode, project_id, task_id, title, bugDescription, bug_type, severity, priority, status, reported_by, assigned_to });
+    logger.debug('Inserting bug with:', { bugCode, project_id, task_id, title, bugDescription, bug_type, severity, priority, status, reported_by, assigned_to });
     
     // Build dynamic INSERT query based on available columns
     const insertFields = ['bug_code', 'description', 'severity', 'status', 'reported_by', 'assigned_to'];
@@ -405,11 +407,11 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
     
     const [result] = await db.query(query, insertValues);
     
-    console.log('Bug inserted with ID:', result.insertId);
+    logger.debug('Bug inserted with ID:', result.insertId);
     
     // Handle file attachments
     if (req.files && req.files.length > 0) {
-      console.log(`Inserting ${req.files.length} attachments`);
+      logger.debug(`Inserting ${req.files.length} attachments`);
       const attachmentPromises = req.files.map((file) => {
         return db.query(`
           INSERT INTO attachments (bug_id, uploaded_by, path, original_filename, mime_type, size)
@@ -417,14 +419,32 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
         `, [result.insertId, reported_by, file.path, file.originalname, file.mimetype, file.size]);
       });
       await Promise.all(attachmentPromises);
-      console.log('Attachments inserted successfully');
+      logger.debug('Attachments inserted successfully');
     }
     
     const [newBug] = await db.query('SELECT * FROM bugs WHERE id = ?', [result.insertId]);
-    console.log('Bug created successfully:', newBug[0]);
+    logger.debug('Bug created successfully:', newBug[0]);
+    
+    // Create audit log for bug creation
+    await logCreate(req, 'Bugs', result.insertId, {
+      id: result.insertId,
+      bug_code: bugCode,
+      title: title,
+      project_id: project_id,
+      task_id: task_id,
+      status: status || 'Open',
+      severity: severity || 'Low',
+      priority: priority || 'P4'
+    }, 'Bug');
+    
+    // Notify assigned user about bug assignment
+    if (assigned_to && assigned_to !== reported_by) {
+      await notifyBugAssigned(assigned_to, result.insertId, title || bugDescription, reported_by);
+    }
+    
     res.status(201).json({ data: newBug[0] });
   } catch (error) {
-    console.error('Error creating bug:', error);
+    logger.error('Error creating bug:', error);
     // Clean up uploaded files on error
     if (req.files && req.files.length > 0) {
       req.files.forEach((file) => {
@@ -440,6 +460,7 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
 // Update bug - Tester, Admin, Team Leader, Developer, Designer, and Super Admin
 router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
   try {
+    const { id } = req.params;
     const userRole = req.user?.role || '';
     const { 
       title, description, project_id, task_id, bug_type, severity, priority, status, resolution_type,
@@ -449,14 +470,48 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
       target_fix_date, actual_fix_date, tags
     } = req.body;
     
-    console.log('=== UPDATE BUG REQUEST ===');
-    console.log('Bug ID:', req.params.id);
-    console.log('User Role:', userRole);
-    console.log('Request body:', req.body);
+    // Get before data for audit log
+    const [existingBugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [id]);
+    if (existingBugs.length === 0) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+    const beforeData = existingBugs[0];
+    
+    logger.debug('=== UPDATE BUG REQUEST ===');
+    logger.debug('Bug ID:', id);
+    logger.debug('User Role:', userRole);
+    logger.debug('Request body:', req.body);
     
     // All users can now update bugs including assigned_to
     // Developer, Designer, and Tester can update status and assigned_to
     // Admin, Team Lead, Super Admin can update all fields
+    
+    // Valid status values matching database ENUM
+    const validStatuses = ['Open', 'In Progress', 'In Review', 'Reopened', 'Blocked', 'Fixed', 'Closed', 'Fixing', 'Retesting', 'Passed', 'Rejected', 'Duplicate', 'Not a Bug'];
+    
+    // Normalize status - map common variations to valid values
+    let normalizedStatus = status;
+    if (status) {
+      const statusMap = {
+        'Completed': 'Closed',
+        'Done': 'Closed',
+        'Resolved': 'Fixed',
+        'Resolve': 'Fixed',
+        'Complete': 'Closed',
+      };
+      
+      if (statusMap[status]) {
+        normalizedStatus = statusMap[status];
+        logger.debug(`Status mapped from "${status}" to "${normalizedStatus}"`);
+      }
+      
+      // Validate status is in allowed values
+      if (!validStatuses.includes(normalizedStatus)) {
+        return res.status(400).json({ 
+          error: `Invalid status: "${status}". Valid values are: ${validStatuses.join(', ')}` 
+        });
+      }
+    }
     
     // Use description as-is (title is now a separate field)
     const bugDescription = description || '';
@@ -469,7 +524,7 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
     const projectValue = (project_id === '' || project_id === null || project_id === undefined || project_id === 0) ? null : parseInt(project_id);
     const taskValue = (task_id === '' || task_id === null || task_id === undefined || task_id === 0) ? null : parseInt(task_id);
     
-    console.log('Processed values:', { assignedToValue, teamLeadValue, projectValue, taskValue });
+    logger.debug('Processed values:', { assignedToValue, teamLeadValue, projectValue, taskValue });
     
     // Build update fields dynamically
     const updateFields = [];
@@ -481,7 +536,7 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
       // Developer, Designer, Tester: can update status and assigned_to only
       if (status !== undefined) {
         updateFields.push('status = ?');
-        updateValues.push(status);
+        updateValues.push(normalizedStatus);
       }
       if (assigned_to !== undefined) {
         updateFields.push('assigned_to = ?');
@@ -519,7 +574,7 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
       }
       if (status !== undefined) {
         updateFields.push('status = ?');
-        updateValues.push(status);
+        updateValues.push(normalizedStatus);
       }
       if (resolution_type !== undefined) {
         updateFields.push('resolution_type = ?');
@@ -583,19 +638,48 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
     updateFields.push('updated_by = ?');
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
     updateValues.push(updated_by);
-    updateValues.push(req.params.id);
+    updateValues.push(id);
     
     if (updateFields.length > 2) { // More than just updated_by and updated_at
       const query = `UPDATE bugs SET ${updateFields.join(', ')} WHERE id = ?`;
       await db.query(query, updateValues);
-      console.log('Bug updated successfully');
+      logger.debug('Bug updated successfully');
     }
     
-    const [updated] = await db.query('SELECT * FROM bugs WHERE id = ?', [req.params.id]);
-    console.log('Updated bug:', updated[0]);
+    const [updated] = await db.query('SELECT * FROM bugs WHERE id = ?', [id]);
+    logger.debug('Updated bug:', updated[0]);
+    
+    // Create audit log for bug update
+    await logUpdate(req, 'Bugs', id, beforeData, updated[0], 'Bug');
+    
+    // Notify assigned user if bug status is updated
+    if (status && normalizedStatus && normalizedStatus !== beforeData.status) {
+      const assignedUserId = assignedToValue || updated[0].assigned_to;
+      if (assignedUserId) {
+        await notifyBugStatusUpdated(
+          assignedUserId,
+          parseInt(id),
+          title || updated[0].title || 'Bug',
+          beforeData.status,
+          normalizedStatus,
+          updated_by
+        );
+      }
+    }
+    
+    // Notify user if bug is newly assigned
+    if (assigned_to !== undefined && assignedToValue && assignedToValue !== beforeData.assigned_to && assignedToValue !== updated_by) {
+      await notifyBugAssigned(
+        assignedToValue,
+        parseInt(id),
+        title || updated[0].title || 'Bug',
+        updated_by
+      );
+    }
+    
     res.json({ data: updated[0] });
   } catch (error) {
-    console.error('Error updating bug:', error);
+    logger.error('Error updating bug:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -630,7 +714,7 @@ router.get('/:bugId/attachments/:attachmentId', async (req, res) => {
     // Send file
     res.sendFile(path.resolve(filePath));
   } catch (error) {
-    console.error('Error downloading attachment:', error);
+    logger.error('Error downloading attachment:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -681,7 +765,7 @@ router.get('/:id/comments', async (req, res) => {
     
     res.json({ data: rootComments });
   } catch (error) {
-    console.error('Error fetching comments:', error);
+    logger.error('Error fetching comments:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -697,11 +781,12 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
       return res.status(400).json({ error: 'Comment text is required' });
     }
     
-    // Verify bug exists
-    const [bugs] = await db.query('SELECT id FROM bugs WHERE id = ?', [id]);
+    // Verify bug exists and get details for notification
+    const [bugs] = await db.query('SELECT id, title, assigned_to, reported_by FROM bugs WHERE id = ?', [id]);
     if (bugs.length === 0) {
       return res.status(404).json({ error: 'Bug not found' });
     }
+    const bug = bugs[0];
     
     // If parent_id is provided, verify it exists and belongs to the same bug
     if (parent_id) {
@@ -733,9 +818,22 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
       WHERE bc.id = ?
     `, [result.insertId]);
     
+    // Notify relevant users about the comment/reply
+    await notifyBugComment(
+      parseInt(id),
+      result.insertId,
+      userId,
+      newComments[0].user_name || 'Someone',
+      comment_text.trim(),
+      bug.title || 'Bug',
+      parent_id || null,
+      bug.assigned_to,
+      bug.reported_by
+    );
+    
     res.status(201).json({ data: newComments[0] });
   } catch (error) {
-    console.error('Error creating comment:', error);
+    logger.error('Error creating comment:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -743,15 +841,28 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
 // Delete bug - only Team Leader and Super Admin
 router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
+    const { id } = req.params;
+    
+    // Get before data for audit log
+    const [existingBugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [id]);
+    if (existingBugs.length === 0) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+    const beforeData = existingBugs[0];
+    
     // Delete associated attachments first
-    const [attachments] = await db.query('SELECT path FROM attachments WHERE bug_id = ?', [req.params.id]);
+    const [attachments] = await db.query('SELECT path FROM attachments WHERE bug_id = ?', [id]);
     attachments.forEach((att) => {
       if (fs.existsSync(att.path)) {
         fs.unlinkSync(att.path);
       }
     });
-    await db.query('DELETE FROM attachments WHERE bug_id = ?', [req.params.id]);
-    await db.query('DELETE FROM bugs WHERE id = ?', [req.params.id]);
+    await db.query('DELETE FROM attachments WHERE bug_id = ?', [id]);
+    await db.query('DELETE FROM bugs WHERE id = ?', [id]);
+    
+    // Create audit log for bug deletion
+    await logDelete(req, 'Bugs', id, beforeData, 'Bug');
+    
     res.json({ message: 'Bug deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

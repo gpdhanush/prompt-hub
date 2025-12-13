@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Upload, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getImageUrl } from '@/lib/imageUtils';
+import { API_CONFIG } from '@/lib/config';
+import { logger } from '@/lib/logger';
 
 interface ImageUploadCropProps {
   value?: string;
@@ -17,7 +19,7 @@ interface ImageUploadCropProps {
 }
 
 export function ImageUploadCrop({ value, onChange, aspect = 1, className, disabled }: ImageUploadCropProps) {
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  const API_BASE_URL = API_CONFIG.BASE_URL;
   const [imageSrc, setImageSrc] = useState<string | null>(getImageUrl(value) || null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -136,7 +138,7 @@ export function ImageUploadCrop({ value, onChange, aspect = 1, className, disabl
           const user = JSON.parse(userStr);
           userId = user.id;
         } catch (e) {
-          console.error('Error parsing user:', e);
+          logger.error('Error parsing user:', e);
         }
       }
       
@@ -156,12 +158,12 @@ export function ImageUploadCrop({ value, onChange, aspect = 1, className, disabl
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Upload failed:', response.status, errorData);
+        logger.error('Upload failed:', response.status, errorData);
         throw new Error(errorData.error || `Upload failed with status ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('Upload successful:', data);
+      logger.debug('Upload successful:', data);
       
       // Store the file path (relative path like /uploads/profile-photos/filename.jpg)
       onChange(data.filePath);
@@ -171,7 +173,7 @@ export function ImageUploadCrop({ value, onChange, aspect = 1, className, disabl
       const fullUrl = getImageUrl(data.filePath);
       setImageSrc(fullUrl || null);
     } catch (error) {
-      console.error('Error uploading image:', error);
+      logger.error('Error uploading image:', error);
       alert(`Failed to upload image: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsUploading(false);

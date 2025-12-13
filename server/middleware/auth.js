@@ -1,4 +1,5 @@
 import { db } from '../config/database.js';
+import { logger } from '../utils/logger.js';
 
 // Authentication middleware - verifies user is logged in
 export const authenticate = async (req, res, next) => {
@@ -19,11 +20,11 @@ export const authenticate = async (req, res, next) => {
       const userId = req.headers['user-id'];
       
       if (!userId) {
-        console.log('No user-id header found in request');
+        logger.debug('No user-id header found in request');
         return res.status(401).json({ error: 'User ID not provided. Please login again.' });
       }
       
-      console.log('Authenticating user ID:', userId);
+      logger.debug('Authenticating user ID:', userId);
       
       const [users] = await db.query(`
         SELECT u.*, r.name as role
@@ -33,12 +34,12 @@ export const authenticate = async (req, res, next) => {
       `, [userId]);
       
       if (users.length === 0) {
-        console.log('User not found for ID:', userId);
+        logger.warn('User not found for ID:', userId);
         return res.status(401).json({ error: 'Invalid token. User not found.' });
       }
       
       req.user = users[0];
-      console.log('Authenticated user:', req.user.name, 'Role:', req.user.role);
+      logger.debug('Authenticated user:', req.user.name, 'Role:', req.user.role);
       return next();
     }
     
@@ -80,3 +81,55 @@ export const requireSuperAdmin = authorize('Super Admin');
 
 // Check if user can access user/employee management (Admin, Super Admin, Team Leader, or Manager)
 export const canAccessUserManagement = authorize('Admin', 'Super Admin', 'Team Leader', 'Team Lead', 'Manager');
+
+// Permission-based authorization middleware - checks if user has required permission
+export const requirePermission = (...permissionCodes) => {
+  return async (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    
+    // Super Admin always has all permissions
+    if (userRole === 'Super Admin') {
+      return next();
+    }
+    
+    try {
+      // Get user's role_id
+      const [users] = await db.query(`
+        SELECT role_id FROM users WHERE id = ?
+      `, [userId]);
+      
+      if (users.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      const roleId = users[0].role_id;
+      
+      // Check if user has any of the required permissions
+      const placeholders = permissionCodes.map(() => '?').join(',');
+      const [permissions] = await db.query(`
+        SELECT COUNT(*) as count
+        FROM permissions p
+        INNER JOIN role_permissions rp ON p.id = rp.permission_id
+        WHERE rp.role_id = ? 
+        AND rp.allowed = TRUE
+        AND p.code IN (${placeholders})
+      `, [roleId, ...permissionCodes]);
+      
+      if (permissions[0].count === 0) {
+        return res.status(403).json({ 
+          error: `Access denied. Required permission: ${permissionCodes.join(' or ')}` 
+        });
+      }
+      
+      next();
+    } catch (error) {
+      logger.error('Error checking permissions:', error);
+      return res.status(500).json({ error: 'Error checking permissions' });
+    }
+  };
+};

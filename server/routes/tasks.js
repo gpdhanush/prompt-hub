@@ -1,6 +1,9 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authorize, requirePermission } from '../middleware/auth.js';
+import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
+import { notifyTaskAssigned } from '../utils/notificationService.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -102,8 +105,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create task - Team Leader, Employee, and Super Admin
-router.post('/', authorize('Team Leader', 'Team Lead', 'Developer', 'Designer', 'Tester', 'Super Admin'), async (req, res) => {
+// Create task - check for tasks.create permission
+router.post('/', requirePermission('tasks.create'), async (req, res) => {
   try {
     const { project_id, title, description, status, priority, stage, assigned_to, developer_id, designer_id, tester_id, deadline } = req.body;
     const created_by = req.user.id; // Get from authenticated user
@@ -129,7 +132,7 @@ router.post('/', authorize('Team Leader', 'Team Lead', 'Developer', 'Designer', 
       }
     } catch (err) {
       // Columns don't exist, use assigned_to only
-      console.log('Role-specific assignment columns not found, using assigned_to only');
+      logger.debug('Role-specific assignment columns not found, using assigned_to only');
     }
     
     query += `) ${values})`;
@@ -159,18 +162,54 @@ router.post('/', authorize('Team Leader', 'Team Lead', 'Developer', 'Designer', 
       WHERE t.id = ?
     `, [result.insertId]);
     
+    // Create audit log for task creation
+    await logCreate(req, 'Tasks', result.insertId, {
+      id: result.insertId,
+      task_code: taskCode,
+      title: title,
+      project_id: project_id,
+      status: status || 'Open',
+      priority: priority || 'Med',
+      stage: stage || 'Analysis'
+    }, 'Task');
+    
+    // Notify assigned users about task assignment
+    const assignedUserIds = [];
+    if (assigned_to) assignedUserIds.push(parseInt(assigned_to));
+    if (developer_id) assignedUserIds.push(parseInt(developer_id));
+    if (designer_id) assignedUserIds.push(parseInt(designer_id));
+    if (tester_id) assignedUserIds.push(parseInt(tester_id));
+    
+    // Remove duplicates
+    const uniqueUserIds = [...new Set(assignedUserIds.filter(id => id && id !== created_by))];
+    
+    if (uniqueUserIds.length > 0) {
+      const notificationPromises = uniqueUserIds.map(userId => 
+        notifyTaskAssigned(userId, result.insertId, title, created_by)
+      );
+      await Promise.allSettled(notificationPromises);
+    }
+    
     res.status(201).json({ data: newTask[0] });
   } catch (error) {
-    console.error('Error creating task:', error);
+    logger.error('Error creating task:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Update task - Team Leader, Employee, and Super Admin
-router.put('/:id', authorize('Team Leader', 'Team Lead', 'Developer', 'Designer', 'Tester', 'Super Admin'), async (req, res) => {
+// Update task - check for tasks.edit permission
+router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
   try {
+    const { id } = req.params;
     const { title, description, status, priority, stage, assigned_to, developer_id, designer_id, tester_id, deadline } = req.body;
     const updated_by = req.user.id;
+    
+    // Get before data for audit log
+    const [existingTasks] = await db.query('SELECT * FROM tasks WHERE id = ?', [id]);
+    if (existingTasks.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    const beforeData = existingTasks[0];
     
     // Check if role-specific columns exist
     let updateQuery = `
@@ -186,11 +225,11 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Developer', 'Designer'
       }
     } catch (err) {
       // Columns don't exist, skip them
-      console.log('Role-specific assignment columns not found, updating assigned_to only');
+      logger.debug('Role-specific assignment columns not found, updating assigned_to only');
     }
     
     updateQuery += ` WHERE id = ?`;
-    params.push(req.params.id);
+    params.push(id);
     
     await db.query(updateQuery, params);
     
@@ -218,19 +257,60 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Developer', 'Designer'
       LEFT JOIN users des ON t.designer_id = des.id
       LEFT JOIN users test ON t.tester_id = test.id
       WHERE t.id = ?
-    `, [req.params.id]);
+    `, [id]);
+    
+    // Create audit log for task update
+    await logUpdate(req, 'Tasks', id, beforeData, updated[0], 'Task');
+    
+    // Notify newly assigned users about task assignment
+    const assignedUserIds = [];
+    if (assigned_to !== undefined && assigned_to && assigned_to !== beforeData.assigned_to) {
+      assignedUserIds.push(parseInt(assigned_to));
+    }
+    if (developer_id !== undefined && developer_id && developer_id !== beforeData.developer_id) {
+      assignedUserIds.push(parseInt(developer_id));
+    }
+    if (designer_id !== undefined && designer_id && designer_id !== beforeData.designer_id) {
+      assignedUserIds.push(parseInt(designer_id));
+    }
+    if (tester_id !== undefined && tester_id && tester_id !== beforeData.tester_id) {
+      assignedUserIds.push(parseInt(tester_id));
+    }
+    
+    // Remove duplicates and current user
+    const uniqueUserIds = [...new Set(assignedUserIds.filter(id => id && id !== updated_by))];
+    
+    if (uniqueUserIds.length > 0) {
+      const notificationPromises = uniqueUserIds.map(userId => 
+        notifyTaskAssigned(userId, parseInt(id), title || updated[0].title, updated_by)
+      );
+      await Promise.allSettled(notificationPromises);
+    }
     
     res.json({ data: updated[0] });
   } catch (error) {
-    console.error('Error updating task:', error);
+    logger.error('Error updating task:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Delete task - only Team Leader and Super Admin
-router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
+// Delete task - check for tasks.delete permission
+router.delete('/:id', requirePermission('tasks.delete'), async (req, res) => {
   try {
-    await db.query('DELETE FROM tasks WHERE id = ?', [req.params.id]);
+    const { id } = req.params;
+    
+    // Get before data for audit log
+    const [existingTasks] = await db.query('SELECT * FROM tasks WHERE id = ?', [id]);
+    if (existingTasks.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    const beforeData = existingTasks[0];
+    
+    await db.query('DELETE FROM tasks WHERE id = ?', [id]);
+    
+    // Create audit log for task deletion
+    await logDelete(req, 'Tasks', id, beforeData, 'Task');
+    
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

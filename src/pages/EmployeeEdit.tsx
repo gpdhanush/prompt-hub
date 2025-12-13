@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Save, Info } from "lucide-react";
+import { ArrowLeft, Save, Info, Upload, FileText, Trash2, Download, Eye, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +14,20 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ImageUploadCrop } from "@/components/ui/image-upload-crop";
 import { employeesApi, usersApi, rolesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
 import { Loader2 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { getImageUrl } from "@/lib/imageUtils";
 
 export default function EmployeeEdit() {
   const navigate = useNavigate();
@@ -250,6 +262,134 @@ export default function EmployeeEdit() {
     }
   }, [employeeData]);
 
+  // Document upload state
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadDocumentType, setUploadDocumentType] = useState("");
+  const [uploadDocumentNumber, setUploadDocumentNumber] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [deleteDocId, setDeleteDocId] = useState<number | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // Fetch documents
+  const { data: documentsData, refetch: refetchDocuments } = useQuery({
+    queryKey: ['employee-documents', id],
+    queryFn: () => employeesApi.getDocuments(Number(id)),
+    enabled: !!id,
+  });
+
+  const documents = documentsData?.data || [];
+
+  // Upload document mutation
+  const uploadDocumentMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      return employeesApi.uploadDocument(Number(id), formData);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Document uploaded successfully." });
+      refetchDocuments();
+      setShowUploadDialog(false);
+      setUploadFile(null);
+      setUploadDocumentType("");
+      setUploadDocumentNumber("");
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to upload document.",
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Delete document mutation
+  const deleteDocumentMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      return employeesApi.deleteDocument(Number(id), docId);
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Document deleted successfully." });
+      refetchDocuments();
+      setShowDeleteDialog(false);
+      setDeleteDocId(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to delete document.",
+        variant: "destructive"
+      });
+    },
+  });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+      if (!allowedTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Only images (JPEG, PNG, GIF, WebP) and PDF files are allowed.",
+          variant: "destructive"
+        });
+        return;
+      }
+      // Validate file size (10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "File size must be less than 10MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+      setUploadFile(file);
+    }
+  };
+
+  const handleUpload = () => {
+    if (!uploadFile || !uploadDocumentType) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a file and document type.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', uploadFile);
+    formData.append('document_type', uploadDocumentType);
+    if (uploadDocumentNumber) {
+      formData.append('document_number', uploadDocumentNumber);
+    }
+
+    uploadDocumentMutation.mutate(formData);
+  };
+
+  const handleDeleteClick = (docId: number) => {
+    setDeleteDocId(docId);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (deleteDocId) {
+      deleteDocumentMutation.mutate(deleteDocId);
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const getFileUrl = (filePath: string) => {
+    return getImageUrl(filePath);
+  };
+
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
       // Always include teamLeadId - convert empty string to null
@@ -259,9 +399,9 @@ export default function EmployeeEdit() {
         teamLeadIdValue = data.teamLeadId;
       }
       
-      console.log('Frontend - Preparing update data');
-      console.log('teamLeadId from form:', data.teamLeadId);
-      console.log('teamLeadIdValue to send:', teamLeadIdValue);
+      logger.debug('Frontend - Preparing update data');
+      logger.debug('teamLeadId from form:', data.teamLeadId);
+      logger.debug('teamLeadIdValue to send:', teamLeadIdValue);
       
       const updateData: any = {
         name: data.name,
@@ -296,7 +436,7 @@ export default function EmployeeEdit() {
         updateData.password = data.password;
       }
 
-      console.log('Frontend - Sending update request with data:', JSON.stringify(updateData, null, 2));
+      logger.debug('Frontend - Sending update request with data:', JSON.stringify(updateData, null, 2));
       return employeesApi.update(Number(id), updateData);
     },
     onSuccess: () => {
@@ -385,7 +525,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                   placeholder="Enter full name"
                   required
                 />
@@ -456,9 +596,15 @@ export default function EmployeeEdit() {
                 <Label htmlFor="mobile">Mobile</Label>
                 <Input
                   id="mobile"
+                  type="tel"
                   value={formData.mobile}
-                  onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                  placeholder="Enter mobile number"
+                  onChange={(e) => {
+                    // Only allow digits, max 10
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, mobile: digitsOnly });
+                  }}
+                  placeholder="Enter mobile number (10 digits)"
+                  maxLength={10}
                 />
               </div>
               <div className="grid gap-2">
@@ -746,7 +892,7 @@ export default function EmployeeEdit() {
                   <Input
                     id="bank_name"
                     value={formData.bank_name}
-                    onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, bank_name: e.target.value.toUpperCase() })}
                     placeholder="Enter bank name"
                   />
                 </div>
@@ -755,7 +901,7 @@ export default function EmployeeEdit() {
                   <Input
                     id="bank_account_number"
                     value={formData.bank_account_number}
-                    onChange={(e) => setFormData({ ...formData, bank_account_number: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, bank_account_number: e.target.value.toUpperCase() })}
                     placeholder="Enter account number"
                   />
                 </div>
@@ -764,8 +910,9 @@ export default function EmployeeEdit() {
                   <Input
                     id="ifsc_code"
                     value={formData.ifsc_code}
-                    onChange={(e) => setFormData({ ...formData, ifsc_code: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, ifsc_code: e.target.value.toUpperCase() })}
                     placeholder="Enter IFSC code"
+                    maxLength={11}
                   />
                 </div>
               </div>
@@ -786,7 +933,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="address1"
                   value={formData.address1}
-                  onChange={(e) => setFormData({ ...formData, address1: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, address1: e.target.value.toUpperCase() })}
                   placeholder="Enter address line 1"
                 />
               </div>
@@ -795,7 +942,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="address2"
                   value={formData.address2}
-                  onChange={(e) => setFormData({ ...formData, address2: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, address2: e.target.value.toUpperCase() })}
                   placeholder="Enter address line 2"
                 />
               </div>
@@ -804,7 +951,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="landmark"
                   value={formData.landmark}
-                  onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, landmark: e.target.value.toUpperCase() })}
                   placeholder="Enter landmark"
                 />
               </div>
@@ -815,7 +962,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="state"
                   value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
                   placeholder="Enter state"
                 />
               </div>
@@ -824,7 +971,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="district"
                   value={formData.district}
-                  onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, district: e.target.value.toUpperCase() })}
                   placeholder="Enter district"
                 />
               </div>
@@ -832,9 +979,15 @@ export default function EmployeeEdit() {
                 <Label htmlFor="pincode">Pincode</Label>
                 <Input
                   id="pincode"
+                  type="tel"
                   value={formData.pincode}
-                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                  placeholder="Enter pincode"
+                  onChange={(e) => {
+                    // Only allow digits, max 6
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setFormData({ ...formData, pincode: digitsOnly });
+                  }}
+                  placeholder="Enter pincode (6 digits)"
+                  maxLength={6}
                 />
               </div>
             </div>
@@ -844,7 +997,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="emergency_contact_name"
                   value={formData.emergency_contact_name}
-                  onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value.toUpperCase() })}
                   placeholder="Enter emergency contact name"
                 />
               </div>
@@ -871,9 +1024,15 @@ export default function EmployeeEdit() {
                 <Label htmlFor="emergency_contact_number">Emergency Contact Number</Label>
                 <Input
                   id="emergency_contact_number"
+                  type="tel"
                   value={formData.emergency_contact_number}
-                  onChange={(e) => setFormData({ ...formData, emergency_contact_number: e.target.value })}
-                  placeholder="Enter emergency contact number"
+                  onChange={(e) => {
+                    // Only allow digits, max 10
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, emergency_contact_number: digitsOnly });
+                  }}
+                  placeholder="Enter contact number (10 digits)"
+                  maxLength={10}
                 />
               </div>
             </div>
@@ -951,6 +1110,229 @@ export default function EmployeeEdit() {
             )}
           </CardContent>
         </Card>
+
+        {/* Documents */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Documents</CardTitle>
+                <CardDescription>Upload and manage employee documents (Images and PDFs only)</CardDescription>
+              </div>
+              {(canManage || isOwnProfile) && (
+                <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+                  <DialogTrigger asChild>
+                    <Button type="button">
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Document
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Upload Document</DialogTitle>
+                      <DialogDescription>
+                        Upload a document (Image or PDF). Maximum file size: 10MB
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="document_type">Document Type *</Label>
+                        <Select value={uploadDocumentType} onValueChange={setUploadDocumentType}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select document type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Aadhaar">Aadhaar</SelectItem>
+                            <SelectItem value="PAN">PAN</SelectItem>
+                            <SelectItem value="Bank Passbook">Bank Passbook</SelectItem>
+                            <SelectItem value="Driving License">Driving License</SelectItem>
+                            <SelectItem value="Passport">Passport</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="document_number">Document Number (Optional)</Label>
+                        <Input
+                          id="document_number"
+                          value={uploadDocumentNumber}
+                          onChange={(e) => setUploadDocumentNumber(e.target.value.toUpperCase())}
+                          placeholder="Enter document number"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="file">File *</Label>
+                        <div className="border-2 border-dashed border-border rounded-lg p-4">
+                          <Input
+                            id="file"
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={handleFileSelect}
+                            className="cursor-pointer"
+                          />
+                          {uploadFile && (
+                            <div className="mt-2 text-sm text-muted-foreground">
+                              Selected: {uploadFile.name} ({formatFileSize(uploadFile.size)})
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            setShowUploadDialog(false);
+                            setUploadFile(null);
+                            setUploadDocumentType("");
+                            setUploadDocumentNumber("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          className="flex-1"
+                          onClick={handleUpload}
+                          disabled={uploadDocumentMutation.isPending || !uploadFile || !uploadDocumentType}
+                        >
+                          {uploadDocumentMutation.isPending ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="mr-2 h-4 w-4" />
+                              Upload
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {documents.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No documents uploaded yet</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {documents.map((doc: any) => (
+                  <div
+                    key={doc.id}
+                    className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="font-medium">{doc.document_type}</div>
+                        {doc.document_number && (
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {doc.document_number}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {formatFileSize(doc.file_size || 0)}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {new Date(doc.uploaded_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      {(canManage || isOwnProfile) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteClick(doc.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const url = getFileUrl(doc.file_path);
+                          if (url) {
+                            window.open(url, '_blank');
+                          }
+                        }}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        View
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const url = getFileUrl(doc.file_path);
+                          if (url) {
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = doc.file_name;
+                            link.click();
+                          }
+                        }}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Delete Document Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the document.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDeleteDocId(null)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  confirmDelete();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteDocumentMutation.isPending}
+              >
+                {deleteDocumentMutation.isPending ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Form Actions */}
         <div className="flex justify-end gap-4">

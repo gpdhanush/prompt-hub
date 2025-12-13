@@ -47,10 +47,11 @@ import {
 import { StatusBadge, leaveStatusMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { leavesApi } from "@/lib/api";
+import { leavesApi, employeesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { DatePicker } from "@/components/ui/date-picker";
 import { getCurrentUser } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function Leaves() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,7 +69,12 @@ export default function Leaves() {
   const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   const userId = currentUser?.id;
-  const canApproveLeaves = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Team Lead';
+  
+  // Use permission-based checks for leave actions
+  const { hasPermission } = usePermissions();
+  const canAcceptLeaves = hasPermission('leaves.accept') || userRole === 'Super Admin';
+  const canRejectLeaves = hasPermission('leaves.reject') || userRole === 'Super Admin';
+  const canApproveLeaves = canAcceptLeaves || canRejectLeaves; // Can do either action
 
   const [leaveForm, setLeaveForm] = useState({
     leave_type: "",
@@ -79,6 +85,15 @@ export default function Leaves() {
 
   const queryClient = useQueryClient();
 
+  // Get current user's employee record ID
+  const { data: currentEmployeeData } = useQuery({
+    queryKey: ['current-employee', userId],
+    queryFn: () => employeesApi.getByUserId(userId!),
+    enabled: !!userId,
+  });
+
+  const currentEmployeeId = currentEmployeeData?.data?.id;
+
   // Fetch leaves
   const { data: leavesData, isLoading } = useQuery({
     queryKey: ['leaves', page],
@@ -87,6 +102,29 @@ export default function Leaves() {
 
   const leaves = leavesData?.data || [];
   const pagination = leavesData?.pagination || { total: 0, totalPages: 0 };
+  
+  // Helper function to check if current user can approve/reject a leave
+  const canApproveRejectLeave = (leave: any) => {
+    // If user doesn't have permissions, they can't approve/reject
+    if (!canApproveLeaves) return false;
+    
+    // If leave belongs to current user (TL creating leave for themselves), hide buttons
+    if (currentEmployeeId && leave.employee_record_id && currentEmployeeId === leave.employee_record_id) {
+      return false;
+    }
+    
+    // For Team Lead leaves, only their reporting person or Super Admin can approve/reject
+    const isTeamLeadLeave = leave.employee_role === 'Team Leader' || leave.employee_role === 'Team Lead';
+    if (isTeamLeadLeave && userRole !== 'Super Admin') {
+      // Check if current user is the reporting person (team lead) of the leave requester
+      if (currentEmployeeId && leave.team_lead_id && currentEmployeeId === leave.team_lead_id) {
+        return true; // Current user is the reporting person
+      }
+      return false; // Not the reporting person
+    }
+    
+    return true; // Regular leave or Super Admin
+  };
 
   // Create leave mutation
   const createMutation = useMutation({
@@ -432,26 +470,30 @@ export default function Leaves() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {canApproveLeaves && l.status === "Pending" && (
+                          {l.status === "Pending" && canApproveRejectLeave(l) && (
                             <>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-status-success hover:text-status-success"
-                                onClick={() => handleApprove(l)}
-                                disabled={approveRejectMutation.isPending}
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-status-error hover:text-status-error"
-                                onClick={() => handleReject(l)}
-                                disabled={approveRejectMutation.isPending}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                              {canAcceptLeaves && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-status-success hover:text-status-success"
+                                  onClick={() => handleApprove(l)}
+                                  disabled={approveRejectMutation.isPending}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {canRejectLeaves && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-status-error hover:text-status-error"
+                                  onClick={() => handleReject(l)}
+                                  disabled={approveRejectMutation.isPending}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
                             </>
                           )}
                           <DropdownMenu>

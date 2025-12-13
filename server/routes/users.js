@@ -1,6 +1,9 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate, canManageUsers, requireSuperAdmin, canAccessUserManagement } from '../middleware/auth.js';
+import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
+import { notifyUserUpdated } from '../utils/notificationService.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -44,17 +47,20 @@ router.use(canAccessUserManagement);
 // Get all users with pagination
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '' } = req.query;
+    // Parse and validate query parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100); // Max 100 per page
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const offset = (page - 1) * limit;
     
     // Get current user's role
     const currentUserRole = req.user?.role || '';
     const isSuperAdmin = currentUserRole === 'Super Admin';
     
-    console.log('=== GET USERS REQUEST ===');
-    console.log('Current user ID:', req.user?.id);
-    console.log('Current user role:', currentUserRole);
-    console.log('Is Super Admin:', isSuperAdmin);
+    logger.debug('=== GET USERS REQUEST ===');
+    logger.debug('Current user ID:', req.user?.id);
+    logger.debug('Current user role:', currentUserRole);
+    logger.debug('Is Super Admin:', isSuperAdmin);
     
     let query = `
       SELECT 
@@ -65,11 +71,14 @@ router.get('/', async (req, res) => {
         u.status,
         u.last_login,
         u.created_at,
+        u.mfa_enabled,
+        e.profile_photo_url,
         r.name as role,
         p.name as position
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       LEFT JOIN positions p ON u.position_id = p.id
+      LEFT JOIN employees e ON u.id = e.user_id
       WHERE 1=1
     `;
     
@@ -78,9 +87,9 @@ router.get('/', async (req, res) => {
     // If not Super Admin, exclude Super Admin users from results
     if (!isSuperAdmin) {
       query += ` AND r.name != 'Super Admin'`;
-      console.log('Filtering out Super Admin users for non-Super Admin user');
+      logger.debug('Filtering out Super Admin users for non-Super Admin user');
     } else {
-      console.log('Super Admin user - showing all users including other Super Admins');
+      logger.debug('Super Admin user - showing all users including other Super Admins');
     }
     
     if (search) {
@@ -89,12 +98,12 @@ router.get('/', async (req, res) => {
     }
     
     query += ` ORDER BY u.created_at DESC LIMIT ? OFFSET ?`;
-    params.push(parseInt(limit), parseInt(offset));
+    params.push(limit, offset);
     
     const [users] = await db.query(query, params);
     
-    console.log(`Found ${users.length} users`);
-    console.log('User roles in results:', users.map(u => `${u.name} (${u.role})`).join(', '));
+    logger.debug(`Found ${users.length} users`);
+    logger.debug('User roles in results:', users.map(u => `${u.name} (${u.role})`).join(', '));
     
     // Get total count
     let countQuery = `
@@ -121,13 +130,14 @@ router.get('/', async (req, res) => {
     res.json({
       data: users,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page,
+        limit,
         total,
         totalPages: Math.ceil(total / limit)
       }
     });
   } catch (error) {
+    logger.error('Error fetching users:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -162,8 +172,8 @@ router.get('/:id', async (req, res) => {
 // Team Lead and Manager can only create Developer, Designer, and Tester roles
 router.post('/', canManageUsers, async (req, res) => {
   try {
-    console.log('=== CREATE USER REQUEST ===');
-    console.log('Full request body:', JSON.stringify(req.body, null, 2));
+    logger.debug('=== CREATE USER REQUEST ===');
+    logger.debug('Full request body:', JSON.stringify(req.body, null, 2));
     
     const { name, email, password, role, position, mobile, status = 'Active', team_lead_id } = req.body;
     
@@ -217,10 +227,10 @@ router.post('/', canManageUsers, async (req, res) => {
     }
     
     // Debug: Log the role mapping
-    console.log('Received role:', role, 'Type:', typeof role);
-    console.log('Normalized role:', normalizedRole);
-    console.log('Role mapping lookup:', normalizedRole, '->', roleMapping[normalizedRole]);
-    console.log('Mapped to:', dbRoleName);
+    logger.debug('Received role:', role, 'Type:', typeof role);
+    logger.debug('Normalized role:', normalizedRole);
+    logger.debug('Role mapping lookup:', normalizedRole, '->', roleMapping[normalizedRole]);
+    logger.debug('Mapped to:', dbRoleName);
     
     // Get role_id - try case-insensitive search if exact match fails
     let [roles] = await db.query('SELECT id FROM roles WHERE name = ?', [dbRoleName]);
@@ -308,10 +318,10 @@ router.post('/', canManageUsers, async (req, res) => {
         
         // Create employee record for Team Lead (no team_lead_id since they are the lead)
         await db.query(`
-          INSERT INTO employees (user_id, emp_code, is_team_lead, employee_status)
-          VALUES (?, ?, true, 'Active')
+          INSERT INTO employees (user_id, emp_code, employee_status)
+          VALUES (?, ?, 'Active')
         `, [newUserId, empCode]);
-        console.log(`Created employee record for Team Lead user_id: ${newUserId}, emp_code: ${empCode}`);
+        logger.debug(`Created employee record for Team Lead user_id: ${newUserId}, emp_code: ${empCode}`);
       }
     }
     // If Developer, Designer, or Tester role and team_lead_id provided, create/update employee record
@@ -326,17 +336,17 @@ router.post('/', canManageUsers, async (req, res) => {
       
       // If Team Lead doesn't have employee record, create one
       if (!teamLeadEmployeeId) {
-        console.log(`Team Lead user_id ${team_lead_id} doesn't have employee record, creating one...`);
+        logger.debug(`Team Lead user_id ${team_lead_id} doesn't have employee record, creating one...`);
         const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
         const empCode = `EMP-TL-${String(empCount[0].count + 1).padStart(4, '0')}`;
         
         const [newTeamLeadEmp] = await db.query(`
-          INSERT INTO employees (user_id, emp_code, is_team_lead, employee_status)
-          VALUES (?, ?, true, 'Active')
+          INSERT INTO employees (user_id, emp_code, employee_status)
+          VALUES (?, ?, 'Active')
         `, [team_lead_id, empCode]);
         
         teamLeadEmployeeId = newTeamLeadEmp.insertId;
-        console.log(`Created employee record for Team Lead with employee_id: ${teamLeadEmployeeId}`);
+        logger.debug(`Created employee record for Team Lead with employee_id: ${teamLeadEmployeeId}`);
       }
       
       if (existingEmployee.length > 0) {
@@ -366,6 +376,15 @@ router.post('/', canManageUsers, async (req, res) => {
       WHERE u.id = ?
     `, [result.insertId]);
     
+    // Create audit log for user creation
+    await logCreate(req, 'Users', result.insertId, {
+      id: result.insertId,
+      name: name,
+      email: email,
+      role: dbRoleName,
+      status: status || 'Active'
+    }, 'User');
+    
     res.status(201).json({ data: newUser[0] });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -381,6 +400,24 @@ router.put('/:id', canManageUsers, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, password, role, position, mobile, status } = req.body;
+    
+    // Get before data for audit log
+    const [existingUsers] = await db.query(`
+      SELECT 
+        u.*,
+        r.name as role,
+        p.name as position
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
+      WHERE u.id = ?
+    `, [id]);
+    
+    if (existingUsers.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const beforeData = existingUsers[0];
     
     // Get role_id if role is provided
     let roleId = null;
@@ -504,6 +541,23 @@ router.put('/:id', canManageUsers, async (req, res) => {
       WHERE u.id = ?
     `, [id]);
     
+    // Create audit log for user update
+    await logUpdate(req, 'Users', id, beforeData, updatedUser[0], 'User');
+    
+    // Send notification to user if updated by Super Admin or Team Lead
+    // Only notify if the user being updated is not the same as the updater
+    if (req.user.id !== parseInt(id) && (req.user.role === 'Super Admin' || req.user.role === 'Team Leader' || req.user.role === 'Team Lead')) {
+      // Track what changed
+      const changes = {};
+      if (name && name !== beforeData.name) changes.name = { from: beforeData.name, to: name };
+      if (email && email !== beforeData.email) changes.email = { from: beforeData.email, to: email };
+      if (mobile !== undefined && mobile !== beforeData.mobile) changes.mobile = { from: beforeData.mobile, to: mobile };
+      if (status && status !== beforeData.status) changes.status = { from: beforeData.status, to: status };
+      
+      // Notify user about the update
+      await notifyUserUpdated(parseInt(id), req.user.id, changes);
+    }
+    
     res.json({ data: updatedUser[0] });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -531,6 +585,7 @@ router.delete('/:id', canManageUsers, async (req, res) => {
     }
     
     const userToDelete = users[0];
+    const beforeData = userToDelete; // Store before data for audit log
     
     // Prevent deletion of Super Admin users
     if (userToDelete.role === 'Super Admin') {
@@ -553,6 +608,9 @@ router.delete('/:id', canManageUsers, async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+    
+    // Create audit log for user deletion
+    await logDelete(req, 'Users', id, beforeData, 'User');
     
     res.json({ message: 'User deleted successfully' });
   } catch (error) {

@@ -39,7 +39,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { getProfilePhotoUrl } from "@/lib/imageUtils";
+import { getProfilePhotoUrl, getImageUrl } from "@/lib/imageUtils";
 import {
   Dialog,
   DialogContent,
@@ -60,7 +60,15 @@ export default function EmployeeProfile() {
     enabled: !!id,
   });
 
+  // Fetch documents
+  const { data: documentsData } = useQuery({
+    queryKey: ['employee-documents', id],
+    queryFn: () => employeesApi.getDocuments(Number(id)),
+    enabled: !!id,
+  });
+
   const employee = data?.data;
+  const documents = documentsData?.data || [];
 
   // Format date helper
   const formatDate = (dateString: string | null | undefined) => {
@@ -153,11 +161,6 @@ export default function EmployeeProfile() {
                     <User className="h-3.5 w-3.5" />
                     Reports to: {employee.team_lead_name}
                   </div>
-                )}
-                {employee.is_team_lead && (
-                  <StatusBadge variant="info" className="text-xs">
-                    Team Lead
-                  </StatusBadge>
                 )}
               </div>
             </div>
@@ -482,94 +485,119 @@ export default function EmployeeProfile() {
               <CardDescription>View and manage your uploaded documents</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="space-y-4">
-                {["Aadhaar", "PAN", "Bank Passbook"].map((docType) => {
-                  // TODO: Fetch documents from API when document storage is implemented
-                  const existingDoc = null;
-                  return (
-                    <div
-                      key={docType}
-                      className="flex items-center justify-between rounded-xl border-2 border-border p-5 hover:border-primary/40 hover:shadow-md transition-all bg-card"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
-                          <FileText className="h-7 w-7 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-lg">{docType}</p>
-                          {existingDoc ? (
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-sm text-muted-foreground">
-                                {existingDoc.fileName}
+              {documents.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No documents uploaded yet</p>
+                  <p className="text-sm mt-2">Documents will appear here once uploaded</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {documents.map((doc: any) => {
+                    const formatFileSize = (bytes: number) => {
+                      if (bytes === 0) return '0 Bytes';
+                      const k = 1024;
+                      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                      const i = Math.floor(Math.log(bytes) / Math.log(k));
+                      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+                    };
+
+                    const getFileUrl = (filePath: string) => {
+                      return getImageUrl(filePath);
+                    };
+
+                    const isImage = doc.mime_type?.startsWith('image/');
+                    const fileUrl = getFileUrl(doc.file_path);
+
+                    return (
+                      <div
+                        key={doc.id}
+                        className="flex items-start justify-between rounded-xl border-2 border-border p-5 hover:border-primary/40 hover:shadow-md transition-all bg-card"
+                      >
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex-shrink-0">
+                            {isImage ? (
+                              <FileText className="h-7 w-7 text-primary" />
+                            ) : (
+                              <FileText className="h-7 w-7 text-primary" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-lg">{doc.document_type}</p>
+                            {doc.document_number && (
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {doc.document_number}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <span className="text-xs text-muted-foreground">
+                                {doc.file_name}
                               </span>
-                              {existingDoc.verified ? (
-                                <StatusBadge variant="success" className="text-xs">
-                                  <CheckCircle className="mr-1 h-3 w-3" />
-                                  Verified
-                                </StatusBadge>
-                              ) : (
-                                <StatusBadge variant="warning" className="text-xs">
-                                  <XCircle className="mr-1 h-3 w-3" />
-                                  Pending
-                                </StatusBadge>
-                              )}
+                              <span className="text-xs text-muted-foreground">
+                                • {formatFileSize(doc.file_size || 0)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                • {new Date(doc.uploaded_at).toLocaleDateString()}
+                              </span>
                             </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">Not uploaded</p>
-                          )}
+                            {doc.verified ? (
+                              <StatusBadge variant="success" className="text-xs mt-2">
+                                <CheckCircle className="mr-1 h-3 w-3" />
+                                Verified
+                              </StatusBadge>
+                            ) : (
+                              <StatusBadge variant="warning" className="text-xs mt-2">
+                                <XCircle className="mr-1 h-3 w-3" />
+                                Pending Verification
+                              </StatusBadge>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shadow-sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (fileUrl) {
+                                window.open(fileUrl, '_blank');
+                              }
+                            }}
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            View
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shadow-sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (fileUrl) {
+                                const link = document.createElement('a');
+                                link.href = fileUrl;
+                                link.download = doc.file_name;
+                                link.target = '_blank';
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }
+                            }}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        {existingDoc && (
-                          <>
-                            <Button variant="outline" size="sm" className="shadow-sm">
-                              <Download className="mr-2 h-4 w-4" />
-                              Download
-                            </Button>
-                            <Button variant="outline" size="sm" className="shadow-sm hover:bg-destructive hover:text-destructive-foreground">
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Remove
-                            </Button>
-                          </>
-                        )}
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button size="sm" className="shadow-sm">
-                              <Upload className="mr-2 h-4 w-4" />
-                              {existingDoc ? "Replace" : "Upload"}
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Upload {docType}</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
-                                <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                                <Input
-                                  type="file"
-                                  accept=".pdf,.jpg,.jpeg,.png"
-                                  className="hidden"
-                                  id={`upload-${docType}`}
-                                  disabled
-                                />
-                                <Label htmlFor={`upload-${docType}`} className="cursor-not-allowed opacity-50">
-                                  <Button variant="outline" type="button" className="w-full" disabled>
-                                    Select File
-                                  </Button>
-                                </Label>
-                                <p className="text-xs text-muted-foreground mt-2">
-                                  Max size: 10MB. Formats: PDF, JPG, PNG
-                                </p>
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

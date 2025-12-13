@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate, authorize } from '../middleware/auth.js';
+import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 
 const router = express.Router();
 
@@ -43,6 +44,14 @@ router.post('/', authorize('Super Admin'), async (req, res) => {
     `, [name, description || null]);
     
     const [newPosition] = await db.query('SELECT * FROM positions WHERE id = ?', [result.insertId]);
+    
+    // Create audit log for position creation
+    await logCreate(req, 'Positions', result.insertId, {
+      id: result.insertId,
+      name: name,
+      description: description
+    }, 'Position');
+    
     res.status(201).json({ data: newPosition[0] });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -58,11 +67,12 @@ router.put('/:id', authorize('Super Admin'), async (req, res) => {
     const { id } = req.params;
     const { name, description } = req.body;
     
-    // Check if position exists
-    const [existing] = await db.query('SELECT id FROM positions WHERE id = ?', [id]);
+    // Check if position exists and get before data
+    const [existing] = await db.query('SELECT * FROM positions WHERE id = ?', [id]);
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Position not found' });
     }
+    const beforeData = existing[0];
     
     await db.query(`
       UPDATE positions 
@@ -73,6 +83,10 @@ router.put('/:id', authorize('Super Admin'), async (req, res) => {
     `, [name, description, id]);
     
     const [updated] = await db.query('SELECT * FROM positions WHERE id = ?', [id]);
+    
+    // Create audit log for position update
+    await logUpdate(req, 'Positions', id, beforeData, updated[0], 'Position');
+    
     res.json({ data: updated[0] });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -87,11 +101,12 @@ router.delete('/:id', authorize('Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Check if position exists
-    const [existing] = await db.query('SELECT id FROM positions WHERE id = ?', [id]);
+    // Check if position exists and get before data
+    const [existing] = await db.query('SELECT * FROM positions WHERE id = ?', [id]);
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Position not found' });
     }
+    const beforeData = existing[0];
     
     // Check if position is being used by any users
     const [users] = await db.query('SELECT COUNT(*) as count FROM users WHERE position_id = ?', [id]);
@@ -102,6 +117,10 @@ router.delete('/:id', authorize('Super Admin'), async (req, res) => {
     }
     
     await db.query('DELETE FROM positions WHERE id = ?', [id]);
+    
+    // Create audit log for position deletion
+    await logDelete(req, 'Positions', id, beforeData, 'Position');
+    
     res.json({ message: 'Position deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -53,6 +53,7 @@ import { tasksApi, projectsApi, usersApi } from "@/lib/api";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 type Task = {
   id: number;
@@ -113,12 +114,11 @@ export default function Tasks() {
   const userRole = currentUser?.role || '';
   const currentUserId = currentUser?.id;
   
-  // Permissions: Super Admin and Team Lead have full CRUD access
-  // Developer, Designer, Tester can create and update tasks (but not delete)
-  // Admin can only view (no create/edit/delete)
-  const canCreateTask = (userRole === 'Team Lead' || userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester' || userRole === 'Super Admin');
-  const canEditTask = (userRole === 'Team Lead' || userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester' || userRole === 'Super Admin');
-  const canDeleteTask = (userRole === 'Team Lead' || userRole === 'Super Admin');
+  // Use permission-based checks instead of hardcoded roles
+  const { hasPermission } = usePermissions();
+  const canCreateTask = hasPermission('tasks.create');
+  const canEditTask = hasPermission('tasks.edit');
+  const canDeleteTask = hasPermission('tasks.delete');
 
   // Fetch tasks from API
   const { data, isLoading, error } = useQuery({

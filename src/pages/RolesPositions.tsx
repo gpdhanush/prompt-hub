@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Shield } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Shield, Briefcase, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +50,7 @@ import { rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getCurrentUser } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 type Role = {
   id: number;
@@ -107,8 +108,15 @@ export default function RolesPositions() {
   const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   
-  // Only Super Admin can access this page
-  if (userRole !== 'Super Admin') {
+  // Use permission-based check - Super Admin always has all permissions
+  // Note: Roles management is system-level, so we check if user is Super Admin
+  // (Super Admin always has all permissions via usePermissions hook)
+  const { hasPermission } = usePermissions();
+  // Since roles don't have their own permissions, we check if user is Super Admin
+  // Super Admin always returns true for hasPermission, so we can use a simple check
+  const canAccessRoles = userRole === 'Super Admin';
+  
+  if (!canAccessRoles) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -360,7 +368,7 @@ export default function RolesPositions() {
         .map((r: any) => r.id);
       setPositionForm(prev => ({ ...prev, role_ids: mappedRoleIds }));
     } catch (error) {
-      console.error('Failed to fetch role mappings:', error);
+      logger.error('Failed to fetch role mappings:', error);
     }
     
     setShowPositionEditDialog(true);
@@ -465,7 +473,7 @@ export default function RolesPositions() {
             <Shield className="h-8 w-8 text-primary" />
             Roles & Positions
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-1">
             Manage roles and positions for the organization
           </p>
         </div>
@@ -490,7 +498,7 @@ export default function RolesPositions() {
             {activeTab === 'roles' && (
               <Dialog open={showRoleAddDialog} onOpenChange={setShowRoleAddDialog}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md">
                     <Plus className="mr-2 h-4 w-4" />
                     New Role
                   </Button>
@@ -566,7 +574,7 @@ export default function RolesPositions() {
             {activeTab === 'positions' && (
               <Dialog open={showPositionAddDialog} onOpenChange={setShowPositionAddDialog}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md">
                     <Plus className="mr-2 h-4 w-4" />
                     New Position
                   </Button>
@@ -661,135 +669,161 @@ export default function RolesPositions() {
         </div>
 
         <TabsContent value="roles">
-          <Card className="glass-card">
+          <Card className="glass-card shadow-lg border-0 bg-gradient-to-br from-background via-background to-muted/20">
             <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Role Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Reporting Person</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rolesLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        Loading roles...
-                      </TableCell>
+              <div className="rounded-lg border bg-card overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Role Name</TableHead>
+                      <TableHead className="font-semibold">Description</TableHead>
+                      <TableHead className="font-semibold">Reporting Person</TableHead>
+                      <TableHead className="text-right font-semibold">Actions</TableHead>
                     </TableRow>
-                  ) : filteredRoles.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        {searchQuery ? 'No roles found matching your search.' : 'No roles found. Create your first role to get started.'}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredRoles.map((role: Role) => (
-                      <TableRow key={role.id}>
-                        <TableCell className="font-medium">{role.name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {role.description || '-'}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {role.reporting_person_role_name || 'None (Top Level)'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleManagePositions(role)}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                Manage Positions
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleEditRole(role)}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              {role.name !== 'Super Admin' && (
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => handleDeleteRole(role)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                  </TableHeader>
+                  <TableBody>
+                    {rolesLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-12">
+                          <div className="flex flex-col items-center gap-2">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                            <p className="text-muted-foreground">Loading roles...</p>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : filteredRoles.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-12">
+                          <div className="flex flex-col items-center gap-2">
+                            <Shield className="h-12 w-12 text-muted-foreground/50" />
+                            <p className="text-muted-foreground font-medium">
+                              {searchQuery ? 'No roles found matching your search.' : 'No roles found. Create your first role to get started.'}
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredRoles.map((role: Role) => (
+                        <TableRow key={role.id} className="hover:bg-muted/50 transition-colors">
+                          <TableCell className="font-medium font-semibold">{role.name}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {role.description || '-'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {role.reporting_person_role_name ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                                {role.reporting_person_role_name}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/70">None (Top Level)</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleManagePositions(role)}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  Manage Positions
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleEditRole(role)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                {role.name !== 'Super Admin' && (
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => handleDeleteRole(role)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="positions">
-          <Card className="glass-card">
+          <Card className="glass-card shadow-lg border-0 bg-gradient-to-br from-background via-background to-muted/20">
             <CardContent className="pt-6">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Position Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {positionsLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                        Loading positions...
-                      </TableCell>
+              <div className="rounded-lg border bg-card overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Position Name</TableHead>
+                      <TableHead className="font-semibold">Description</TableHead>
+                      <TableHead className="text-right font-semibold">Actions</TableHead>
                     </TableRow>
-                  ) : filteredPositions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                        {searchQuery ? 'No positions found matching your search.' : 'No positions found. Create your first position to get started.'}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredPositions.map((position: Position) => (
-                      <TableRow key={position.id}>
-                        <TableCell className="font-medium">{position.name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {position.description || '-'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEditPosition(position)}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleDeletePosition(position)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                  </TableHeader>
+                  <TableBody>
+                    {positionsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center py-12">
+                          <div className="flex flex-col items-center gap-2">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                            <p className="text-muted-foreground">Loading positions...</p>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : filteredPositions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center py-12">
+                          <div className="flex flex-col items-center gap-2">
+                            <Briefcase className="h-12 w-12 text-muted-foreground/50" />
+                            <p className="text-muted-foreground font-medium">
+                              {searchQuery ? 'No positions found matching your search.' : 'No positions found. Create your first position to get started.'}
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredPositions.map((position: Position) => (
+                        <TableRow key={position.id} className="hover:bg-muted/50 transition-colors">
+                          <TableCell className="font-medium font-semibold">{position.name}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {position.description || '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleEditPosition(position)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => handleDeletePosition(position)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

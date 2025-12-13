@@ -281,7 +281,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                   placeholder="Enter full name"
                   required
                 />
@@ -353,9 +353,15 @@ export default function EmployeeCreate() {
                 <Label htmlFor="mobile">Mobile</Label>
                 <Input
                   id="mobile"
+                  type="tel"
                   value={formData.mobile}
-                  onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                  placeholder="Enter mobile number"
+                  onChange={(e) => {
+                    // Only allow digits, max 10
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, mobile: digitsOnly });
+                  }}
+                  placeholder="Enter mobile number (10 digits)"
+                  maxLength={10}
                 />
               </div>
               <div className="grid gap-2">
@@ -551,7 +557,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="bank_name"
                   value={formData.bank_name}
-                  onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, bank_name: e.target.value.toUpperCase() })}
                   placeholder="Enter bank name"
                 />
               </div>
@@ -560,7 +566,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="bank_account_number"
                   value={formData.bank_account_number}
-                  onChange={(e) => setFormData({ ...formData, bank_account_number: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, bank_account_number: e.target.value.toUpperCase() })}
                   placeholder="Enter account number"
                 />
               </div>
@@ -569,8 +575,9 @@ export default function EmployeeCreate() {
                 <Input
                   id="ifsc_code"
                   value={formData.ifsc_code}
-                  onChange={(e) => setFormData({ ...formData, ifsc_code: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, ifsc_code: e.target.value.toUpperCase() })}
                   placeholder="Enter IFSC code"
+                  maxLength={11}
                 />
               </div>
             </div>
@@ -590,7 +597,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="address1"
                   value={formData.address1}
-                  onChange={(e) => setFormData({ ...formData, address1: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, address1: e.target.value.toUpperCase() })}
                   placeholder="Enter address line 1"
                 />
               </div>
@@ -599,7 +606,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="address2"
                   value={formData.address2}
-                  onChange={(e) => setFormData({ ...formData, address2: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, address2: e.target.value.toUpperCase() })}
                   placeholder="Enter address line 2"
                 />
               </div>
@@ -608,7 +615,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="landmark"
                   value={formData.landmark}
-                  onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, landmark: e.target.value.toUpperCase() })}
                   placeholder="Enter landmark"
                 />
               </div>
@@ -619,7 +626,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="state"
                   value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
                   placeholder="Enter state"
                 />
               </div>
@@ -628,7 +635,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="district"
                   value={formData.district}
-                  onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, district: e.target.value.toUpperCase() })}
                   placeholder="Enter district"
                 />
               </div>
@@ -636,9 +643,15 @@ export default function EmployeeCreate() {
                 <Label htmlFor="pincode">Pincode</Label>
                 <Input
                   id="pincode"
+                  type="tel"
                   value={formData.pincode}
-                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                  placeholder="Enter pincode"
+                  onChange={(e) => {
+                    // Only allow digits, max 6
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setFormData({ ...formData, pincode: digitsOnly });
+                  }}
+                  placeholder="Enter pincode (6 digits)"
+                  maxLength={6}
                 />
               </div>
             </div>
@@ -648,7 +661,7 @@ export default function EmployeeCreate() {
                 <Input
                   id="emergency_contact_name"
                   value={formData.emergency_contact_name}
-                  onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value.toUpperCase() })}
                   placeholder="Enter emergency contact name"
                 />
               </div>
@@ -675,8 +688,15 @@ export default function EmployeeCreate() {
                 <Label htmlFor="emergency_contact_number">Emergency Contact Number</Label>
                 <Input
                   id="emergency_contact_number"
+                  type="tel"
                   value={formData.emergency_contact_number}
-                  onChange={(e) => setFormData({ ...formData, emergency_contact_number: e.target.value })}
+                  onChange={(e) => {
+                    // Only allow digits, max 10
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, emergency_contact_number: digitsOnly });
+                  }}
+                  placeholder="Enter contact number (10 digits)"
+                  maxLength={10}
                   placeholder="Enter emergency contact number"
                 />
               </div>

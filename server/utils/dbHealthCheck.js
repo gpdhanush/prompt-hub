@@ -4,6 +4,7 @@
  */
 
 import { db } from '../config/database.js';
+import { logger } from './logger.js';
 
 /**
  * Check if a table exists in the database
@@ -20,7 +21,7 @@ export async function tableExists(tableName) {
     `, [tableName]);
     return result[0].count > 0;
   } catch (error) {
-    console.error(`Error checking table existence for ${tableName}:`, error);
+    logger.error(`Error checking table existence for ${tableName}:`, error);
     return false;
   }
 }
@@ -42,7 +43,7 @@ export async function columnExists(tableName, columnName) {
     `, [tableName, columnName]);
     return result[0].count > 0;
   } catch (error) {
-    console.error(`Error checking column existence for ${tableName}.${columnName}:`, error);
+    logger.error(`Error checking column existence for ${tableName}.${columnName}:`, error);
     return false;
   }
 }
@@ -52,7 +53,7 @@ export async function columnExists(tableName, columnName) {
  * Checks for required tables and provides migration guidance
  */
 export async function performHealthCheck() {
-  console.log('\n🔍 Performing database health check...\n');
+  logger.info('\n🔍 Performing database health check...\n');
   
   const requiredTables = [
     'users',
@@ -76,9 +77,9 @@ export async function performHealthCheck() {
     const exists = await tableExists(table);
     if (!exists) {
       missingRequired.push(table);
-      console.error(`❌ Required table missing: ${table}`);
+      logger.error(`❌ Required table missing: ${table}`);
     } else {
-      console.log(`✅ Table exists: ${table}`);
+      logger.debug(`✅ Table exists: ${table}`);
     }
   }
   
@@ -87,29 +88,29 @@ export async function performHealthCheck() {
     const exists = await tableExists(table);
     if (!exists) {
       missingOptional.push(table);
-      console.warn(`⚠️  Optional table missing: ${table}`);
-      console.warn(`   Impact: Role-position mapping will not work. Run migration: database/add_role_positions_mapping.sql`);
+      logger.warn(`⚠️  Optional table missing: ${table}`);
+      logger.warn(`   Impact: Role-position mapping will not work. Run migration: database/add_role_positions_mapping.sql`);
     } else {
-      console.log(`✅ Optional table exists: ${table}`);
+      logger.debug(`✅ Optional table exists: ${table}`);
     }
   }
   
   // Summary
-  console.log('\n📊 Health Check Summary:');
+  logger.info('\n📊 Health Check Summary:');
   if (missingRequired.length === 0 && missingOptional.length === 0) {
-    console.log('✅ All tables present - Database is healthy!\n');
+    logger.info('✅ All tables present - Database is healthy!\n');
     return { healthy: true, missingRequired: [], missingOptional: [] };
   }
   
   if (missingRequired.length > 0) {
-    console.error(`❌ Missing ${missingRequired.length} required table(s): ${missingRequired.join(', ')}`);
-    console.error('   Action: Run database migration scripts immediately!\n');
+    logger.error(`❌ Missing ${missingRequired.length} required table(s): ${missingRequired.join(', ')}`);
+    logger.error('   Action: Run database migration scripts immediately!\n');
     return { healthy: false, missingRequired, missingOptional };
   }
   
   if (missingOptional.length > 0) {
-    console.warn(`⚠️  Missing ${missingOptional.length} optional table(s): ${missingOptional.join(', ')}`);
-    console.warn('   Action: System will work but with limited functionality. Run migration when ready.\n');
+    logger.warn(`⚠️  Missing ${missingOptional.length} optional table(s): ${missingOptional.join(', ')}`);
+    logger.warn('   Action: System will work but with limited functionality. Run migration when ready.\n');
     return { healthy: true, missingRequired: [], missingOptional };
   }
   

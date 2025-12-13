@@ -64,16 +64,12 @@ type Employee = {
   team_lead_name?: string;
   status?: string;
   employee_status?: string;
-  hire_date?: string;
+  date_of_joining?: string;
   date_of_birth?: string;
   gender?: string;
-  date_of_joining?: string;
-  is_team_lead?: boolean;
   bank_name?: string;
   bank_account_number?: string;
   ifsc_code?: string;
-  routing_number?: string;
-  pf_esi_applicable?: boolean;
   pf_uan_number?: string;
   government_id_number?: string;
   address?: string;
@@ -337,12 +333,14 @@ export default function Employees() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={getProfilePhotoUrl(emp.profile_photo_url || null)} />
-                            <AvatarFallback className="text-xs">
-                              {emp.name.split(" ").map((n) => n[0]).join("")}
-                            </AvatarFallback>
-                          </Avatar>
+                          {emp.profile_photo_url && String(emp.profile_photo_url).trim() !== '' && (
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={getProfilePhotoUrl(emp.profile_photo_url)} />
+                              <AvatarFallback className="text-xs">
+                                {emp.name.split(" ").map((n) => n[0]).join("")}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
                           <span className="font-medium">{emp.name}</span>
                         </div>
                       </TableCell>

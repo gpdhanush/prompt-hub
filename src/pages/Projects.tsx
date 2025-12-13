@@ -34,6 +34,7 @@ import { Progress } from "@/components/ui/progress";
 import { projectsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 type Project = {
   id: number;
@@ -67,11 +68,11 @@ export default function Projects() {
   const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
   
-  // Permissions: Super Admin and Team Lead have full CRUD access
-  // Admin can only view (no create/edit/delete)
-  const canCreateProject = userRole === 'Team Lead' || userRole === 'Super Admin';
-  const canEditProject = userRole === 'Team Lead' || userRole === 'Super Admin';
-  const canDeleteProject = userRole === 'Team Lead' || userRole === 'Super Admin';
+  // Use permission-based checks instead of hardcoded roles
+  const { hasPermission } = usePermissions();
+  const canCreateProject = hasPermission('projects.create');
+  const canEditProject = hasPermission('projects.edit');
+  const canDeleteProject = hasPermission('projects.delete');
 
   // Fetch projects from API
   const { data, isLoading, error } = useQuery({

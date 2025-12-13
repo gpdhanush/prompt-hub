@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate, authorize } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -38,7 +39,7 @@ router.get('/role/:roleId', authorize('Super Admin', 'Admin', 'Team Leader', 'Te
     } catch (joinError) {
       // If role_positions table doesn't exist, fallback to all positions
       if (joinError.code === 'ER_NO_SUCH_TABLE' || joinError.message.includes('role_positions')) {
-        console.warn('role_positions table not found, returning all positions');
+        logger.warn('role_positions table not found, returning all positions');
         const [allPositions] = await db.query('SELECT * FROM positions ORDER BY name ASC');
         positions = allPositions.map((p) => ({ ...p, is_mapped: 0 }));
       } else {
@@ -48,7 +49,7 @@ router.get('/role/:roleId', authorize('Super Admin', 'Admin', 'Team Leader', 'Te
     
     res.json({ data: positions });
   } catch (error) {
-    console.error('Error fetching role positions:', error);
+    logger.error('Error fetching role positions:', error);
     // Fallback: return all positions if query fails
     try {
       const [allPositions] = await db.query('SELECT * FROM positions ORDER BY name ASC');
@@ -150,7 +151,7 @@ router.put('/role/:roleId', authorize('Super Admin'), async (req, res) => {
       throw error;
     }
   } catch (error) {
-    console.error('Error updating role position mappings:', error);
+    logger.error('Error updating role position mappings:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -225,7 +226,7 @@ router.put('/position/:positionId', authorize('Super Admin'), async (req, res) =
       throw error;
     }
   } catch (error) {
-    console.error('Error updating position role mappings:', error);
+    logger.error('Error updating position role mappings:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -16,6 +16,7 @@ import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Separator } from "@/components/ui/separator";
 import { projectsApi, usersApi, employeesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/ui/status-badge";
 
@@ -196,41 +197,41 @@ export default function ProjectCreate() {
         formData.append('file_type', fileItem.type);
         if (fileItem.category) formData.append('file_category', fileItem.category);
         if (fileItem.description) formData.append('description', fileItem.description);
-        promises.push(projectsApi.uploadFile(projectId, formData).catch(err => console.error('File upload error:', err)));
+        promises.push(projectsApi.uploadFile(projectId, formData).catch(err => logger.error('File upload error:', err)));
       }
       
       // Create comments
       for (const comment of data.comments || []) {
         if (comment.comment.trim()) {
-          promises.push(projectsApi.createComment(projectId, comment).catch(err => console.error('Comment error:', err)));
+          promises.push(projectsApi.createComment(projectId, comment).catch(err => logger.error('Comment error:', err)));
         }
       }
       
       // Create change requests
       for (const cr of data.change_requests || []) {
         if (cr.title.trim()) {
-          promises.push(projectsApi.createChangeRequest(projectId, cr).catch(err => console.error('Change request error:', err)));
+          promises.push(projectsApi.createChangeRequest(projectId, cr).catch(err => logger.error('Change request error:', err)));
         }
       }
       
       // Create call notes
       for (const note of data.call_notes || []) {
         if (note.call_date && note.notes.trim()) {
-          promises.push(projectsApi.createCallNote(projectId, note).catch(err => console.error('Call note error:', err)));
+          promises.push(projectsApi.createCallNote(projectId, note).catch(err => logger.error('Call note error:', err)));
         }
       }
       
       // Create credentials
       for (const cred of data.credentials || []) {
         if (cred.service_name.trim()) {
-          promises.push(projectsApi.createCredential(projectId, cred).catch(err => console.error('Credential error:', err)));
+          promises.push(projectsApi.createCredential(projectId, cred).catch(err => logger.error('Credential error:', err)));
         }
       }
       
       // Create daily status entries
       for (const status of data.daily_status || []) {
         if (status.work_date && (status.hours_worked || status.minutes_worked)) {
-          promises.push(projectsApi.createDailyStatus(projectId, status).catch(err => console.error('Daily status error:', err)));
+          promises.push(projectsApi.createDailyStatus(projectId, status).catch(err => logger.error('Daily status error:', err)));
         }
       }
       

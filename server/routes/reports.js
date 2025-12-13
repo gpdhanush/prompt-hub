@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -67,7 +68,7 @@ router.get('/tasks', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching task metrics:', error);
+    logger.error('Error fetching task metrics:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -135,7 +136,7 @@ router.get('/bugs', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching bug metrics:', error);
+    logger.error('Error fetching bug metrics:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -217,7 +218,7 @@ router.get('/leaderboard', async (req, res) => {
     
     res.json({ data: leaderboardWithRank });
   } catch (error) {
-    console.error('Error fetching leaderboard:', error);
+    logger.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -262,7 +263,7 @@ router.get('/projects', async (req, res) => {
     
     res.json({ data: stats });
   } catch (error) {
-    console.error('Error fetching project stats:', error);
+    logger.error('Error fetching project stats:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -339,7 +340,7 @@ router.get('/top-performer', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching top performer:', error);
+    logger.error('Error fetching top performer:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -382,7 +383,7 @@ router.get('/dashboard', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
+    logger.error('Error fetching dashboard stats:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -38,7 +39,7 @@ async function ensureSettingsTable() {
       `);
     }
   } catch (error) {
-    console.error('Error ensuring settings table:', error);
+    logger.error('Error ensuring settings table:', error);
     throw error;
   }
 }
@@ -71,11 +72,11 @@ router.get('/', async (req, res) => {
         const [settings] = await db.query('SELECT * FROM settings LIMIT 1');
         return res.json({ data: settings[0] || { currency_symbol: '$' } });
       } catch (createError) {
-        console.error('Error creating settings table:', createError);
+        logger.error('Error creating settings table:', createError);
         return res.json({ data: { currency_symbol: '$' } });
       }
     }
-    console.error('Error fetching settings:', error);
+    logger.error('Error fetching settings:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -145,11 +146,11 @@ router.patch('/', async (req, res) => {
         const [updated] = await db.query('SELECT * FROM settings LIMIT 1');
         return res.json({ data: updated[0] || { currency_symbol: currency_symbol || '$' } });
       } catch (createError) {
-        console.error('Error creating settings table:', createError);
+        logger.error('Error creating settings table:', createError);
         return res.status(500).json({ error: 'Failed to create settings table: ' + createError.message });
       }
     }
-    console.error('Error updating settings:', error);
+    logger.error('Error updating settings:', error);
     res.status(500).json({ error: error.message });
   }
 });

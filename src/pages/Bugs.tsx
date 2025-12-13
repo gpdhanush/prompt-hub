@@ -65,6 +65,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi, tasksApi, usersApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
+import { logger } from "@/lib/logger";
 
 export default function Bugs() {
   const navigate = useNavigate();
@@ -83,7 +85,7 @@ export default function Bugs() {
     taskId: undefined as string | undefined,
     title: "",
     description: "",
-    severity: "Minor",
+    severity: "Low",
     status: "Open",
     assigned_to: "",
     stepsToReproduce: "",
@@ -97,14 +99,13 @@ export default function Bugs() {
   const userRole = currentUser?.role || '';
   const currentUserId = currentUser?.id;
   
-  // Permissions: Super Admin and Team Lead have full CRUD access
-  // Tester, Admin, Team Lead, Developer, Designer, Super Admin can create, update, and view bugs
-  // Developer, Designer, and Tester can only update status (limited permission)
-  // Only Super Admin and Team Lead can delete bugs
-  const canCreateBug = (userRole === 'Tester' || userRole === 'Admin' || userRole === 'Team Lead' || userRole === 'Developer' || userRole === 'Designer' || userRole === 'Super Admin');
-  const canEditBug = (userRole === 'Tester' || userRole === 'Admin' || userRole === 'Team Lead' || userRole === 'Developer' || userRole === 'Designer' || userRole === 'Super Admin');
-  const canUpdateStatus = (userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester'); // Limited to status-only updates
-  const canDeleteBug = (userRole === 'Team Lead' || userRole === 'Super Admin');
+  // Use permission-based checks instead of hardcoded roles
+  const { hasPermission } = usePermissions();
+  const canCreateBug = hasPermission('bugs.create');
+  const canEditBug = hasPermission('bugs.edit');
+  const canDeleteBug = hasPermission('bugs.delete');
+  // Note: canUpdateStatus is role-specific and may need separate permission if needed
+  const canUpdateStatus = hasPermission('bugs.edit'); // Using edit permission for status updates
 
   // Fetch bugs from API
   const { data, isLoading, error } = useQuery({
@@ -147,7 +148,7 @@ export default function Bugs() {
         taskId: undefined,
         title: "",
         description: "",
-        severity: "Minor",
+        severity: "Low",
         status: "Open",
         assigned_to: "",
         stepsToReproduce: "",
@@ -157,7 +158,7 @@ export default function Bugs() {
       setAttachments([]);
     },
     onError: (error: any) => {
-      console.error('Error creating bug:', error);
+      logger.error('Error creating bug:', error);
       if (error.status === 401) {
         toast({ 
           title: "Authentication Required", 
@@ -195,7 +196,7 @@ export default function Bugs() {
         taskId: undefined,
         title: "",
         description: "",
-        severity: "Minor",
+        severity: "Low",
         status: "Open",
         assigned_to: "",
         stepsToReproduce: "",
@@ -268,7 +269,7 @@ export default function Bugs() {
       taskId: bug.task_id?.toString(),
       title: bugTitle,
       description: bugDescription,
-      severity: bug.severity || "Minor",
+      severity: bug.severity || "Low",
       status: bug.status || "Open",
       assigned_to: bug.assigned_to?.toString() || "",
       stepsToReproduce: bug.steps_to_reproduce || "",
@@ -340,7 +341,7 @@ export default function Bugs() {
       ? parseInt(bugForm.assigned_to) 
       : null;
     
-    console.log('Updating bug:', {
+    logger.debug('Updating bug:', {
       id: selectedBug.id,
       assigned_to: bugForm.assigned_to,
       assignedToValue: assignedToValue,
@@ -624,9 +625,10 @@ export default function Bugs() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Minor">Minor</SelectItem>
-                        <SelectItem value="Major">Major</SelectItem>
                         <SelectItem value="Critical">Critical</SelectItem>
+                        <SelectItem value="High">High</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="Low">Low</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -742,7 +744,7 @@ export default function Bugs() {
                         taskId: undefined,
                         title: "",
                         description: "",
-                        severity: "Minor",
+                        severity: "Low",
                         status: "Open",
                         assigned_to: "",
                         stepsToReproduce: "",
@@ -901,7 +903,7 @@ export default function Bugs() {
                     </TableCell>
                   <TableCell>
                       <StatusBadge variant={bugSeverityMap[bug.severity] || 'default'}>
-                        {bug.severity || 'Minor'}
+                        {bug.severity || 'Low'}
                     </StatusBadge>
                   </TableCell>
                   <TableCell>
@@ -970,7 +972,7 @@ export default function Bugs() {
                 <div className="grid gap-2">
                   <Label className="text-muted-foreground">Severity</Label>
                   <StatusBadge variant={bugSeverityMap[selectedBug.severity] || 'default'}>
-                    {selectedBug.severity || 'Minor'}
+                    {selectedBug.severity || 'Low'}
                   </StatusBadge>
                 </div>
                 <div className="grid gap-2">

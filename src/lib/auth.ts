@@ -4,6 +4,7 @@
  */
 
 import { getItemSync, secureStorageWithCache } from './secureStorage';
+import { logger } from './logger';
 
 /**
  * Gets the current authenticated user from secure storage
@@ -17,7 +18,7 @@ export function getCurrentUser(): any | null {
   try {
     return JSON.parse(userStr);
   } catch (error) {
-    console.error('Error parsing user data:', error);
+    logger.error('Error parsing user data:', error);
     return null;
   }
 }
@@ -34,7 +35,7 @@ export async function getCurrentUserAsync(): Promise<any | null> {
   try {
     return JSON.parse(userStr);
   } catch (error) {
-    console.error('Error parsing user data:', error);
+    logger.error('Error parsing user data:', error);
     return null;
   }
 }

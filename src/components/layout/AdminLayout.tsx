@@ -5,12 +5,40 @@ import { AdminHeader } from "./AdminHeader";
 import { isAuthenticated, getCurrentUserAsync, getAuthTokenAsync } from "@/lib/auth";
 import { initializeSecureStorage } from "@/lib/secureStorage";
 import { Loader2 } from "lucide-react";
+import { useFCM } from "@/hooks/useFCM";
+import { logger } from "@/lib/logger";
 
 export function AdminLayout() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuth, setIsAuth] = useState(false);
+  
+  // Initialize FCM for push notifications (only for authenticated users)
+  const { permission, requestPermission, isRegistered } = useFCM();
 
   useEffect(() => {
+    // Register service worker for push notifications
+    const registerServiceWorker = async () => {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+            scope: '/',
+          });
+          logger.info('✅ Service Worker registered:', registration.scope);
+          
+          // Wait for service worker to be ready
+          await navigator.serviceWorker.ready;
+          logger.info('✅ Service Worker ready');
+        } catch (error: any) {
+          logger.error('❌ Service Worker registration failed:', error);
+          logger.error('Error details:', error.message);
+        }
+      } else {
+        logger.warn('⚠️  Service Workers are not supported in this browser');
+      }
+    };
+
+    registerServiceWorker();
+
     // Initialize secure storage and check authentication
     const checkAuth = async () => {
       try {
@@ -23,7 +51,7 @@ export function AdminLayout() {
         
         setIsAuth(!!(token && user));
       } catch (error) {
-        console.error('Authentication check failed:', error);
+        logger.error('Authentication check failed:', error);
         setIsAuth(false);
       } finally {
         setIsLoading(false);
