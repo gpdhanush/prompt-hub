@@ -151,6 +151,8 @@ export default function Users() {
     enabled: userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester', // Fetch when Developer, Designer, or Tester role is selected
   });
 
+  // Get all roles - Super Admin can see ALL roles in Users page (for editing existing users)
+  // Note: Role restriction (Team Lead, Developer only) applies ONLY to Employee Create page, not here
   const roles = rolesData?.data || [];
   const allPositions = positionsData?.data || [];
   const rolePositions = rolePositionsData?.data || [];
@@ -568,6 +570,8 @@ export default function Users() {
                         if (role.name === 'Super Admin' && currentUser?.role !== 'Super Admin') {
                           return null;
                         }
+                        // Super Admin can assign ANY role when editing users in Users page
+                        // (Restriction to Team Lead/Developer only applies when creating NEW employees)
                         return (
                           <SelectItem key={role.id} value={roleNameToValue(role.name)}>
                             {role.name}
@@ -1062,6 +1066,8 @@ export default function Users() {
                         if (role.name === 'Super Admin' && currentUser?.role !== 'Super Admin') {
                           return null;
                         }
+                        // Super Admin can assign ANY role when editing users in Users page
+                        // (Restriction to Team Lead/Developer only applies when creating NEW employees)
                         return (
                           <SelectItem key={role.id} value={roleNameToValue(role.name)}>
                             {role.name}

@@ -577,15 +577,41 @@ router.post('/', async (req, res) => {
     const processedEmergencyRelation = toUpperCase(emergency_contact_relation);
     const processedEmergencyNumber = emergency_contact_number ? extractDigits(emergency_contact_number) : emergency_contact_number;
     
-    // Check if current user can only create specific roles (Level 1 users can only create Level 2 roles)
+    // Check if current user can only create specific roles
     const currentUserRole = req.user?.role;
     const currentUserId = req.user?.id;
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    
+    // Super Admin restriction: Can only create Level 1 roles (and Developer as exception)
+    // This uses the level from the roles table (set in Roles & Positions page)
+    if (isUserSuperAdmin || currentUserRole === 'Super Admin') {
+      if (roleId) {
+        // Get role level from database
+        const [roleData] = await db.query('SELECT name, level FROM roles WHERE id = ?', [roleId]);
+        if (roleData.length > 0) {
+          const roleLevel = roleData[0].level;
+          const roleName = roleData[0].name;
+          
+          // Super Admin can create:
+          // 1. Level 1 roles (Managers/Admins)
+          // 2. Developer role (Level 2 exception)
+          const isLevel1 = roleLevel === 1;
+          const isDeveloper = roleName === 'Developer';
+          
+          if (!isLevel1 && !isDeveloper) {
+            return res.status(403).json({ 
+              error: `Super Admin can only create employees with Level 1 roles (Managers/Admins) or Developer. Selected role "${roleName}" has level ${roleLevel || 'NULL'}.` 
+            });
+          }
+        }
+      }
+    }
     
     // Get manager roles and check if current user is a manager (Level 1)
     const managerRoles = await getManagerRoles();
     const isManager = managerRoles.includes(currentUserRole);
     
-    if (isManager && currentUserId) {
+    if (isManager && currentUserId && !isUserSuperAdmin) {
       // Get roles that Level 2 users typically have (employee roles)
       const level2Roles = await getRolesByLevel(2);
       

@@ -40,6 +40,22 @@ import ProfileSetup from "./pages/ProfileSetup";
 import NotFound from "./pages/NotFound";
 import MFASetup from "./pages/MFASetup";
 import MFAVerify from "./pages/MFAVerify";
+import ITAssetDashboard from "./pages/ITAssetDashboard";
+import Assets from "./pages/Assets";
+import AssetCreate from "./pages/AssetCreate";
+import AssetView from "./pages/AssetView";
+import AssetEdit from "./pages/AssetEdit";
+import AssetAssignments from "./pages/AssetAssignments";
+import AssignAsset from "./pages/AssignAsset";
+import ReturnAsset from "./pages/ReturnAsset";
+import AssetTickets from "./pages/AssetTickets";
+import AssetMaintenance from "./pages/AssetMaintenance";
+import AssetInventory from "./pages/AssetInventory";
+import AssetReports from "./pages/AssetReports";
+import AssetApprovals from "./pages/AssetApprovals";
+import AssetSettings from "./pages/AssetSettings";
+import MyITAssets from "./pages/MyITAssets";
+import RaiseTicket from "./pages/RaiseTicket";
 import { useEffect, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
@@ -338,6 +354,136 @@ const AppContent = () => {
                 element={
                   <ProtectedRoute allowedRoles={['Super Admin']}>
                     <Permissions />
+                  </ProtectedRoute>
+                } 
+              />
+              {/* IT Asset Management Routes - Admin Only */}
+              <Route 
+                path="/it-assets/dashboard" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <ITAssetDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/assets" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <Assets />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/assets/new" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetCreate />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/assets/:id" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetView />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/assets/:id/edit" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetEdit />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/assignments" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetAssignments />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/assignments/new" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssignAsset />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/assignments/:id/return" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <ReturnAsset />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/tickets" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetTickets />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/maintenance" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetMaintenance />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/inventory" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetInventory />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/reports" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetReports />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/approvals" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetApprovals />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/it-assets/settings" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
+                    <AssetSettings />
+                  </ProtectedRoute>
+                } 
+              />
+              {/* Employee IT Assets View - All users except Super Admin */}
+              <Route 
+                path="/my-it-assets" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
+                    <MyITAssets />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/my-it-assets/raise-request" 
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
+                    <RaiseTicket />
                   </ProtectedRoute>
                 } 
               />

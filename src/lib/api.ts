@@ -904,3 +904,89 @@ export const permissionsApi = {
       method: 'DELETE',
     }),
 };
+
+// IT Asset Management API
+export const assetsApi = {
+  // Categories
+  getCategories: () =>
+    request<{ data: any[] }>('/assets/categories'),
+  createCategory: (data: any) =>
+    request<{ data: any; message: string }>('/assets/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  
+  // Assets
+  getAll: (params?: { page?: number; limit?: number; status?: string; category_id?: number; search?: string; assigned_only?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.category_id) queryParams.append('category_id', params.category_id.toString());
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.assigned_only) queryParams.append('assigned_only', params.assigned_only);
+    const query = queryParams.toString();
+    return request<{ data: any[]; total: number; page: number; limit: number }>(`/assets${query ? `?${query}` : ''}`);
+  },
+  getById: (id: number) =>
+    request<{ data: any }>(`/assets/${id}`),
+  create: (data: any) =>
+    request<{ data: any; message: string }>('/assets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: number, data: any) =>
+    request<{ message: string }>(`/assets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  
+  // Assignments
+  getAssignments: (params?: { page?: number; limit?: number; status?: string; employee_id?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.employee_id) queryParams.append('employee_id', params.employee_id.toString());
+    const query = queryParams.toString();
+    return request<{ data: any[]; total: number; page: number; limit: number }>(`/assets/assignments/list${query ? `?${query}` : ''}`);
+  },
+  assignAsset: (data: any) =>
+    request<{ data: any; message: string }>('/assets/assign', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  returnAsset: (id: number, data: any) =>
+    request<{ message: string }>(`/assets/assignments/${id}/return`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  
+  // Tickets
+  getTickets: (params?: { page?: number; limit?: number; status?: string; ticket_type?: string; my_tickets?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.ticket_type) queryParams.append('ticket_type', params.ticket_type);
+    if (params?.my_tickets) queryParams.append('my_tickets', params.my_tickets);
+    const query = queryParams.toString();
+    return request<{ data: any[]; total: number; page: number; limit: number }>(`/assets/tickets/list${query ? `?${query}` : ''}`);
+  },
+  createTicket: (data: any) =>
+    request<{ data: any; message: string }>('/assets/tickets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getTicketById: (id: number) =>
+    request<{ data: any }>(`/assets/tickets/${id}`),
+  updateTicket: (id: number, data: any) =>
+    request<{ message: string }>(`/assets/tickets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  
+  // Dashboard
+  getDashboardStats: () =>
+    request<{ data: any }>('/assets/dashboard/stats'),
+};

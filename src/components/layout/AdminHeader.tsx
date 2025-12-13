@@ -172,9 +172,6 @@ export function AdminHeader() {
               </Avatar>
               <div className="hidden flex-col items-start md:flex">
                 <span className="text-sm font-medium">{userName}</span>
-                <StatusBadge variant="success" className="mt-0.5 text-[10px] px-1.5 py-0">
-                  Online
-                </StatusBadge>
               </div>
             </Button>
           </DropdownMenuTrigger>

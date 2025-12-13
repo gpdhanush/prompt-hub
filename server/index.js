@@ -27,6 +27,7 @@ import rolePositionsRoutes from './routes/rolePositions.js';
 import permissionsRoutes from './routes/permissions.js';
 import fcmRoutes from './routes/fcm.js';
 import mfaRoutes from './routes/mfa.js';
+import assetsRoutes from './routes/assets.js';
 import { performHealthCheck } from './utils/dbHealthCheck.js';
 import { initializeFirebase } from './utils/fcmService.js';
 import { reportFatalError, createErrorContext } from './utils/errorReporting.js';
@@ -120,6 +121,7 @@ app.use('/api/fcm', fcmRoutes);
 app.use('/api/mfa', mfaRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/assets', assetsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

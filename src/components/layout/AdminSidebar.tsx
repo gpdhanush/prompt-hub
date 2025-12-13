@@ -15,6 +15,15 @@ import {
   Shield,
   KeyRound,
   FileText,
+  Laptop,
+  Package,
+  ClipboardList,
+  Wrench,
+  Warehouse,
+  FileBarChart,
+  CheckCircle,
+  Settings,
+  Ticket,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +40,6 @@ const allMenuItems = [
   { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
   { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
   // Main Management
-  { name: "Users", href: "/users", icon: Users, section: "main" },
   { name: "Employees", href: "/employees", icon: UserCog, section: "main" },
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
   { name: "Tasks", href: "/tasks", icon: CheckSquare, section: "main" },
@@ -39,6 +47,18 @@ const allMenuItems = [
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
   { name: "Reports", href: "/reports", icon: BarChart3, section: "main" },
+  // IT Asset Management - Admin only (full menu)
+  { name: "IT Asset Dashboard", href: "/it-assets/dashboard", icon: LayoutDashboard, section: "it-assets" },
+  { name: "Assets", href: "/it-assets/assets", icon: Package, section: "it-assets" },
+  { name: "Assignments", href: "/it-assets/assignments", icon: ClipboardList, section: "it-assets" },
+  { name: "Tickets", href: "/it-assets/tickets", icon: Ticket, section: "it-assets" },
+  { name: "Maintenance", href: "/it-assets/maintenance", icon: Wrench, section: "it-assets" },
+  { name: "Inventory", href: "/it-assets/inventory", icon: Warehouse, section: "it-assets" },
+  { name: "Asset Reports", href: "/it-assets/reports", icon: FileBarChart, section: "it-assets" },
+  { name: "Approvals", href: "/it-assets/approvals", icon: CheckCircle, section: "it-assets" },
+  { name: "Asset Settings", href: "/it-assets/settings", icon: Settings, section: "it-assets" },
+  // Employee IT Assets View (simplified)
+  { name: "My IT Assets", href: "/my-it-assets", icon: Laptop, section: "employee-assets" },
 ];
 
 export function AdminSidebar() {
@@ -72,6 +92,13 @@ export function AdminSidebar() {
   const canAccessRolesPermissions = isSuperAdmin;
   // Audit Logs - Super Admin and Admin only
   const canAccessAuditLogs = isSuperAdmin || userRole === 'Admin';
+  
+  // IT Asset Management - Admin only (level 2 users)
+  const isAdmin = userRole === 'Admin' || isSuperAdmin;
+  const canAccessITAssets = isAdmin;
+  
+  // Employee IT Assets - All users except Super Admin (employees see their own assets)
+  const canAccessMyITAssets = !isSuperAdmin;
 
   const isActive = (href: string) => location.pathname === href;
 
@@ -145,6 +172,10 @@ export function AdminSidebar() {
             if (item.href === '/roles-permissions' && !canAccessRolesPermissions) return false;
             // Audit Logs - Super Admin and Admin only
             if (item.href === '/audit-logs' && !canAccessAuditLogs) return false;
+            // IT Asset Management - Admin only
+            if (item.section === 'it-assets' && !canAccessITAssets) return false;
+            // My IT Assets - All users except Super Admin
+            if (item.section === 'employee-assets' && !canAccessMyITAssets) return false;
             return true;
           })
           .map((item, index, filteredItems) => {
@@ -154,6 +185,8 @@ export function AdminSidebar() {
             const sectionLabels: Record<string, string> = {
               main: "Management",
               admin: "Administration",
+              "it-assets": "IT Asset Management",
+              "employee-assets": "My Assets",
             };
 
             return (

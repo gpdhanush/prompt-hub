@@ -147,7 +147,17 @@ export default function EmployeeCreate() {
     return managerNames.includes(r.name);
   }).map((r: any) => r.name);
   
-  const availableRoles = isTeamLeader
+  // Super Admin can only create Level 1 roles (and Developer as exception)
+  // Uses level from roles table (set in Roles & Positions page)
+  const availableRoles = isSuperAdmin
+    ? allRoles.filter((role: any) => {
+        // Allow Level 1 roles (Managers/Admins)
+        const isLevel1 = role.level === 1;
+        // Allow Developer as exception (even if Level 2)
+        const isDeveloper = role.name === 'Developer';
+        return isLevel1 || isDeveloper;
+      })
+    : isTeamLeader
     ? allRoles.filter((role: any) => 
         role.name !== superAdminRoleName && 
         !managerRoles.includes(role.name)
