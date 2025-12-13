@@ -1,6 +1,7 @@
 import { secureStorageWithCache, getItemSync } from './secureStorage';
 import { API_CONFIG } from './config';
 import { logger } from './logger';
+import { forceLogout } from './auth';
 
 const API_BASE_URL = API_CONFIG.BASE_URL;
 
@@ -82,18 +83,23 @@ async function request<T>(
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: response.statusText }));
       
-      // Handle 401 errors gracefully - don't auto-logout on temporary backend issues
+      // Handle 401 errors - clear cache, logout, and navigate to login
       if (response.status === 401) {
-        // Only logout if it's a clear authentication error, not a temporary backend issue
         const errorMessage = error.error || error.message || '';
         
-        // Check if it's a real auth error or just backend restart/issue
+        // Check if it's an authentication error that requires logout
         if (errorMessage.includes('Invalid token') || 
+            errorMessage.includes('User not found') ||
             errorMessage.includes('expired') || 
-            errorMessage.includes('Authentication required')) {
-          // This is a real auth error - might need to handle differently
-          // But don't auto-logout - let the user continue working
-          logger.warn('Authentication error detected, but not logging out automatically:', errorMessage);
+            errorMessage.includes('Authentication required') ||
+            errorMessage.includes('Please login')) {
+          // This is a real auth error - logout the user
+          logger.warn('Authentication error detected, logging out user:', errorMessage);
+          // Force logout will clear cache and navigate to login
+          // Page will reload, so we don't need to throw error
+          await forceLogout(errorMessage);
+          // Return a rejected promise - navigation will happen via window.location
+          return Promise.reject(new ApiError(401, 'Session expired. Please login again.'));
         }
       }
       
@@ -208,6 +214,26 @@ export const employeesApi = {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        
+        // Handle 401 errors - clear cache, logout, and navigate to login
+        if (response.status === 401) {
+          const errorMessage = errorData.error || errorData.message || '';
+          
+          // Check if it's an authentication error that requires logout
+          if (errorMessage.includes('Invalid token') || 
+              errorMessage.includes('User not found') ||
+              errorMessage.includes('expired') || 
+              errorMessage.includes('Authentication required') ||
+              errorMessage.includes('Please login')) {
+            // This is a real auth error - logout the user
+            logger.warn('Authentication error detected, logging out user:', errorMessage);
+            // Force logout will clear cache and navigate to login
+            await forceLogout(errorMessage);
+            // Return a rejected promise - navigation will happen via window.location
+            return Promise.reject(new ApiError(401, 'Session expired. Please login again.'));
+          }
+        }
+        
         throw new ApiError(response.status, errorData.error || 'Request failed');
       }
       
@@ -294,6 +320,26 @@ export const projectsApi = {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        
+        // Handle 401 errors - clear cache, logout, and navigate to login
+        if (response.status === 401) {
+          const errorMessage = errorData.error || errorData.message || '';
+          
+          // Check if it's an authentication error that requires logout
+          if (errorMessage.includes('Invalid token') || 
+              errorMessage.includes('User not found') ||
+              errorMessage.includes('expired') || 
+              errorMessage.includes('Authentication required') ||
+              errorMessage.includes('Please login')) {
+            // This is a real auth error - logout the user
+            logger.warn('Authentication error detected, logging out user:', errorMessage);
+            // Force logout will clear cache and navigate to login
+            await forceLogout(errorMessage);
+            // Return a rejected promise - navigation will happen via window.location
+            return Promise.reject(new ApiError(401, 'Session expired. Please login again.'));
+          }
+        }
+        
         throw new ApiError(response.status, errorData.error || 'Request failed');
       }
       
@@ -467,6 +513,26 @@ export const bugsApi = {
         } catch (e) {
           errorData = { error: response.statusText };
         }
+        
+        // Handle 401 errors - clear cache, logout, and navigate to login
+        if (response.status === 401) {
+          const errorMessage = errorData.error || errorData.message || '';
+          
+          // Check if it's an authentication error that requires logout
+          if (errorMessage.includes('Invalid token') || 
+              errorMessage.includes('User not found') ||
+              errorMessage.includes('expired') || 
+              errorMessage.includes('Authentication required') ||
+              errorMessage.includes('Please login')) {
+            // This is a real auth error - logout the user
+            logger.warn('Authentication error detected, logging out user:', errorMessage);
+            // Force logout will clear cache and navigate to login
+            await forceLogout(errorMessage);
+            // Return a rejected promise - navigation will happen via window.location
+            return Promise.reject(new ApiError(401, 'Session expired. Please login again.'));
+          }
+        }
+        
         logger.error('Bug creation error:', errorData);
         throw new ApiError(response.status, errorData.error || errorData.message || 'Request failed');
       }

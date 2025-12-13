@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Save, Info, Upload, FileText, Trash2, Download, Eye, X } from "lucide-react";
+import { ArrowLeft, Save, Info, Upload, FileText, Trash2, Download, Eye, EyeOff, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ImageUploadCrop } from "@/components/ui/image-upload-crop";
-import { employeesApi, usersApi, rolesApi, positionsApi } from "@/lib/api";
+import { employeesApi, usersApi, rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
 import { Loader2 } from "lucide-react";
@@ -40,6 +40,8 @@ export default function EmployeeEdit() {
   const isTeamLeader = currentUser?.role === 'Team Leader' || currentUser?.role === 'Team Lead';
   const canManage = ['Admin', 'Super Admin', 'Team Lead', 'Manager'].includes(currentUser?.role);
 
+  const [showPassword, setShowPassword] = useState(false);
+  
   const [formData, setFormData] = useState({
     // Basic user info
     name: "",
@@ -109,7 +111,42 @@ export default function EmployeeEdit() {
 
   const allUsers = usersData?.data || [];
   const allRoles = rolesData?.data || [];
-  const availablePositions = positionsData?.data || [];
+  const allPositions = positionsData?.data || [];
+  
+  // Fetch role-position mappings when a role is selected
+  const selectedRole = allRoles.find((r: any) => r.name === formData.role);
+  const { data: rolePositionsData } = useQuery({
+    queryKey: ['role-positions', selectedRole?.id],
+    queryFn: () => rolePositionsApi.getByRole(selectedRole!.id),
+    enabled: !!selectedRole?.id,
+  });
+
+  const rolePositions = rolePositionsData?.data || [];
+  
+  // Filter positions based on selected role
+  let availablePositions = allPositions;
+  if (formData.role && selectedRole && rolePositions.length > 0) {
+    // Filter to only show positions that are mapped to the selected role
+    const mappedPositions = rolePositions.filter((rp: any) => {
+      const isMapped = rp.is_mapped;
+      return isMapped === 1 || isMapped === true || isMapped === '1';
+    });
+    
+    if (mappedPositions.length > 0) {
+      // Map to full position objects from allPositions to ensure we have complete data
+      availablePositions = mappedPositions.map((rp: any) => {
+        const fullPosition = allPositions.find((p: any) => p.id === rp.id);
+        return fullPosition || rp;
+      }).filter((p: any) => p !== undefined && p !== null);
+    } else {
+      // No positions mapped to this role, show empty array
+      availablePositions = [];
+    }
+  } else if (formData.role && selectedRole && rolePositions.length === 0) {
+    // API returned empty array - might mean no mappings exist
+    // Fallback: show all positions (backward compatibility)
+    availablePositions = allPositions;
+  }
   
   // Filter out Super Admin users if current user is not Super Admin
   // Get Super Admin role name from database
@@ -648,13 +685,23 @@ export default function EmployeeEdit() {
                     </DialogContent>
                   </Dialog>
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Enter new password (optional)"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Enter new password (optional)"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="mobile">Mobile</Label>
@@ -727,7 +774,9 @@ export default function EmployeeEdit() {
                     <Label htmlFor="role">User Role</Label>
                     <Select
                       value={formData.role}
-                      onValueChange={(value) => setFormData({ ...formData, role: value })}
+                      onValueChange={(value) => {
+                        setFormData({ ...formData, role: value, position: "" }); // Clear position when role changes
+                      }}
                       disabled={!canManage}
                     >
                       <SelectTrigger>
@@ -769,7 +818,7 @@ export default function EmployeeEdit() {
                             </SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="" disabled>No positions available</SelectItem>
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">No positions available</div>
                         )}
                       </SelectContent>
                     </Select>

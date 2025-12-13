@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AdminLayout } from "./components/layout/AdminLayout";
 import { LoadingProvider, useLoading } from "./contexts/LoadingContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -40,13 +40,20 @@ import ProfileSetup from "./pages/ProfileSetup";
 import NotFound from "./pages/NotFound";
 import MFASetup from "./pages/MFASetup";
 import MFAVerify from "./pages/MFAVerify";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
 import { registerLoadingCallback } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useQueryClient } from "@tanstack/react-query";
+import { clearAuth } from "@/lib/auth";
 
 const queryClient = new QueryClient();
+
+// Expose QueryClient globally for logout function
+if (typeof window !== 'undefined') {
+  (window as any).__REACT_QUERY_CLIENT__ = queryClient;
+}
 
 // Protected Route Component - checks user role or permission before allowing access
 function ProtectedRoute({ 
@@ -58,6 +65,9 @@ function ProtectedRoute({
   allowedRoles?: string[];
   requiredPermission?: string;
 }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const logoutInProgress = useRef(false);
   const userStr = getItemSync('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const userRole = currentUser?.role || '';
@@ -76,14 +86,46 @@ function ProtectedRoute({
   }
 
   useEffect(() => {
-    if (!isLoading && !hasAccess) {
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to access this page.",
-        variant: "destructive",
-      });
+    if (!isLoading && !hasAccess && !logoutInProgress.current) {
+      // Prevent multiple simultaneous logout calls
+      logoutInProgress.current = true;
+      
+      // Clear cache, logout, and navigate to login
+      const handleAccessDenied = async () => {
+        try {
+          // Show toast notification
+          toast({
+            title: "Access Denied",
+            description: "You don't have permission to access this page. You will be logged out.",
+            variant: "destructive",
+          });
+
+          // Clear authentication data from secure storage
+          await clearAuth();
+          
+          // Clear auth-related items from localStorage (fallback for non-encrypted storage)
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('remember_me');
+          
+          // Clear session storage
+          sessionStorage.clear();
+          
+          // Clear all React Query cache
+          queryClient.clear();
+          
+          // Navigate to login page
+          navigate('/login', { replace: true });
+        } catch (error) {
+          logger.error('Error during access denied logout:', error);
+          // Still navigate to login even if there's an error
+          navigate('/login', { replace: true });
+        }
+      };
+
+      handleAccessDenied();
     }
-  }, [hasAccess, isLoading]);
+  }, [hasAccess, isLoading, navigate, queryClient]);
 
   if (isLoading) {
     return (
@@ -96,7 +138,14 @@ function ProtectedRoute({
   }
 
   if (!hasAccess) {
-    return <Navigate to="/dashboard" replace />;
+    // Show loading state while logout is in progress
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p className="text-muted-foreground">Redirecting to login...</p>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;

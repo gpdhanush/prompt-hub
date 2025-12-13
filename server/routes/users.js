@@ -226,9 +226,9 @@ router.post('/', canManageUsers, async (req, res) => {
       });
     }
     
-    // Team Lead and Manager can only create Developer, Designer, and Tester roles
+    // Team Leader, Team Lead, and Manager can only create Developer, Designer, and Tester roles
     const currentUserRole = req.user.role;
-    if ((currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+    if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
         !['Developer', 'Designer', 'Tester'].includes(dbRoleName)) {
       return res.status(403).json({ 
         error: `${currentUserRole} can only create employees with Developer, Designer, or Tester roles` 
@@ -272,34 +272,37 @@ router.post('/', canManageUsers, async (req, res) => {
     const [roleInfo] = await db.query('SELECT reporting_person_role_id FROM roles WHERE id = ?', [roleId]);
     const reportingPersonRoleId = roleInfo[0]?.reporting_person_role_id || null;
     
-    // Get position_id if provided - validate position hierarchy
-    let positionId = null;
-    if (position) {
-      // Map frontend position values to database position names
-      const positionMapping = {
-        'developer': 'Developer',
-        'senior-dev': 'Senior Developer',
-        'tech-lead': 'Team Lead',
-        'pm': 'Project Manager',
-        'qa': 'QA Engineer'
-      };
-      
-      const dbPositionName = positionMapping[position] || position;
-      const [positions] = await db.query('SELECT id FROM positions WHERE name = ?', [dbPositionName]);
-      if (positions.length > 0) {
-        positionId = positions[0].id;
-      } else {
-        // If position doesn't exist, return error (don't auto-create)
-        return res.status(400).json({ error: `Position "${dbPositionName}" not found. Please select a valid position.` });
+    // Validate role level - check if creator can create user with this role
+    // This validation is based on level (Level 1 can create Level 2, etc.)
+    const creatorUserId = req.user?.id;
+    if (creatorUserId && roleId) {
+      // Get position_id if provided
+      let positionId = null;
+      if (position) {
+        // Map frontend position values to database position names
+        const positionMapping = {
+          'developer': 'Developer',
+          'senior-dev': 'Senior Developer',
+          'tech-lead': 'Team Lead',
+          'pm': 'Project Manager',
+          'qa': 'QA Engineer'
+        };
+        
+        const dbPositionName = positionMapping[position] || position;
+        const [positions] = await db.query('SELECT id FROM positions WHERE name = ?', [dbPositionName]);
+        if (positions.length > 0) {
+          positionId = positions[0].id;
+        } else {
+          // If position doesn't exist, return error (don't auto-create)
+          return res.status(400).json({ error: `Position "${dbPositionName}" not found. Please select a valid position.` });
+        }
       }
       
-      // Validate position hierarchy - check if creator can create user with this position
-      const creatorUserId = req.user?.id;
-      if (creatorUserId && positionId) {
-        const validation = await validateUserCreation(creatorUserId, positionId);
-        if (!validation.valid) {
-          return res.status(403).json({ error: validation.error });
-        }
+      // Always validate role level (even if position is not provided)
+      // Level 1 users (Team Leader, Manager) can create Level 2 users (Developer, Designer, Tester)
+      const validation = await validateUserCreation(creatorUserId, roleId, positionId);
+      if (!validation.valid) {
+        return res.status(403).json({ error: validation.error });
       }
     }
     
@@ -337,9 +340,9 @@ router.post('/', canManageUsers, async (req, res) => {
       const [existingEmployee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [newUserId]);
       
       if (existingEmployee.length === 0) {
-        // Generate employee code for Team Lead
+        // Generate employee code for Team Lead (format: NTPL0001, NTPL0002, etc.)
         const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
-        const empCode = `EMP-TL-${String(empCount[0].count + 1).padStart(4, '0')}`;
+        const empCode = `NTPL${String(empCount[0].count + 1).padStart(4, '0')}`;
         
         // Create employee record for Team Lead (no team_lead_id since they are the lead)
         await db.query(`
@@ -363,7 +366,7 @@ router.post('/', canManageUsers, async (req, res) => {
       if (!teamLeadEmployeeId) {
         logger.debug(`Team Lead user_id ${team_lead_id} doesn't have employee record, creating one...`);
         const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
-        const empCode = `EMP-TL-${String(empCount[0].count + 1).padStart(4, '0')}`;
+        const empCode = `NTPL${String(empCount[0].count + 1).padStart(4, '0')}`;
         
         const [newTeamLeadEmp] = await db.query(`
           INSERT INTO employees (user_id, emp_code, employee_status)
@@ -379,9 +382,9 @@ router.post('/', canManageUsers, async (req, res) => {
         await db.query('UPDATE employees SET team_lead_id = ? WHERE user_id = ?', [teamLeadEmployeeId, newUserId]);
       } else {
         // Create new employee record
-        // Generate employee code
+        // Generate employee code (format: NTPL0001, NTPL0002, etc.)
         const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
-        const empCode = `EMP-${String(empCount[0].count + 1).padStart(4, '0')}`;
+        const empCode = `NTPL${String(empCount[0].count + 1).padStart(4, '0')}`;
         
         await db.query(`
           INSERT INTO employees (user_id, emp_code, team_lead_id)
@@ -521,8 +524,29 @@ router.put('/:id', canManageUsers, async (req, res) => {
       if (positions.length > 0) {
         positionId = positions[0].id;
       } else {
-        // If position doesn't exist, create it
-        const [newPosition] = await db.query('INSERT INTO positions (name) VALUES (?)', [dbPositionName]);
+        // If position doesn't exist, create it with proper hierarchy
+        // Default to Level 2 and auto-assign parent
+        let parentId = null;
+        
+        // Try to find Team Lead first, then any Level 1 position
+        const [teamLead] = await db.query(
+          'SELECT id FROM positions WHERE level = 1 AND name IN ("Team Lead", "Team Leader") LIMIT 1'
+        );
+        if (teamLead.length > 0) {
+          parentId = teamLead[0].id;
+        } else {
+          // Fallback to any Level 1 position
+          const [level1Position] = await db.query('SELECT id FROM positions WHERE level = 1 LIMIT 1');
+          if (level1Position.length > 0) {
+            parentId = level1Position[0].id;
+          }
+        }
+        
+        // Create position with level 2 and parent_id
+        const [newPosition] = await db.query(
+          'INSERT INTO positions (name, level, parent_id) VALUES (?, 2, ?)',
+          [dbPositionName, parentId]
+        );
         positionId = newPosition.insertId;
       }
     }

@@ -106,7 +106,9 @@ export default function BugCreate() {
   });
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    // Convert special values to empty strings for backend compatibility
+    const normalizedValue = (value === "none" || value === "unassigned" || value === "all") ? "" : value;
+    setFormData((prev) => ({ ...prev, [field]: normalizedValue }));
     
     // Clear task_id if project changes
     if (field === 'project_id') {
@@ -279,14 +281,14 @@ export default function BugCreate() {
                 <div className="grid gap-2">
                   <Label htmlFor="project_id">Project</Label>
                   <Select
-                    value={formData.project_id}
+                    value={formData.project_id || "none"}
                     onValueChange={(value) => handleInputChange("project_id", value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select project" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {projects.map((project: any) => (
                         <SelectItem key={project.id} value={project.id.toString()}>
                           {project.name}
@@ -298,7 +300,7 @@ export default function BugCreate() {
                 <div className="grid gap-2">
                   <Label htmlFor="task_id">Task (Optional)</Label>
                   <Select
-                    value={formData.task_id}
+                    value={formData.task_id || "none"}
                     onValueChange={(value) => handleInputChange("task_id", value)}
                     disabled={!formData.project_id}
                   >
@@ -306,7 +308,7 @@ export default function BugCreate() {
                       <SelectValue placeholder="Select task" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {filteredTasks.map((task: any) => (
                         <SelectItem key={task.id} value={task.id.toString()}>
                           {task.title || task.task_code || `Task #${task.id}`}
@@ -408,14 +410,14 @@ export default function BugCreate() {
                 <div className="grid gap-2">
                   <Label htmlFor="resolution_type">Resolution Type</Label>
                   <Select
-                    value={formData.resolution_type}
+                    value={formData.resolution_type || "none"}
                     onValueChange={(value) => handleInputChange("resolution_type", value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select resolution" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       <SelectItem value="Fixed">Fixed</SelectItem>
                       <SelectItem value="Duplicate">Duplicate</SelectItem>
                       <SelectItem value="Not a Bug">Not a Bug</SelectItem>
@@ -441,14 +443,14 @@ export default function BugCreate() {
               <div className="grid gap-2">
                 <Label htmlFor="assigned_to">Assigned To</Label>
                 <Select
-                  value={formData.assigned_to}
+                  value={formData.assigned_to || "unassigned"}
                   onValueChange={(value) => handleInputChange("assigned_to", value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select assignee" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Unassigned</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
                     {assignableUsers.map((user: any) => (
                       <SelectItem key={user.id} value={user.id.toString()}>
                         {user.name} ({user.role})
@@ -460,7 +462,7 @@ export default function BugCreate() {
               <div className="grid gap-2">
                 <Label htmlFor="team_lead_id">Team Lead</Label>
                 <Select
-                  value={formData.team_lead_id}
+                  value={formData.team_lead_id || "none"}
                   onValueChange={(value) => handleInputChange("team_lead_id", value)}
                 >
                   <SelectTrigger>
@@ -545,7 +547,7 @@ export default function BugCreate() {
               <div className="grid gap-2">
                 <Label htmlFor="device">Device</Label>
                 <Select
-                  value={formData.device}
+                  value={formData.device || "none"}
                   onValueChange={(value) => handleInputChange("device", value)}
                 >
                   <SelectTrigger>

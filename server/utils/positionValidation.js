@@ -14,9 +14,9 @@ import { getSuperAdminRole, isSuperAdmin } from './roleHelpers.js';
  */
 export async function getCreatorLevel(creatorUserId) {
   try {
-    // First check if user exists and get their role
+    // First check if user exists and get their role with role level
     const [userRole] = await db.query(`
-      SELECT r.name as role_name, u.position_id
+      SELECT r.name as role_name, r.level as role_level, u.position_id, u.role_id
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?
@@ -27,6 +27,7 @@ export async function getCreatorLevel(creatorUserId) {
     }
     
     const roleName = userRole[0].role_name;
+    const roleLevel = userRole[0].role_level;
     const positionId = userRole[0].position_id;
     
     // Check if user is Super Admin (from database, not hardcoded)
@@ -40,9 +41,33 @@ export async function getCreatorLevel(creatorUserId) {
       };
     }
     
-    // If user has a position, get its level
+    // PRIORITY 1: Use role level if available (roles table has level column)
+    // This is the primary source of truth since roles define the hierarchy
+    if (roleLevel !== null && roleLevel !== undefined) {
+      logger.debug(`Using role level for ${roleName}: ${roleLevel}`);
+      
+      // Get position name for return value
+      let positionName = roleName || 'Unknown';
+      if (positionId) {
+        try {
+          const [position] = await db.query('SELECT name FROM positions WHERE id = ?', [positionId]);
+          if (position.length > 0) {
+            positionName = position[0].name;
+          }
+        } catch (e) {
+          // Ignore position lookup errors
+        }
+      }
+      
+      return {
+        level: roleLevel,
+        positionId: positionId,
+        positionName: positionName
+      };
+    }
+    
+    // PRIORITY 2: Fallback to position level if role level is not available
     if (positionId) {
-      // Check if level column exists (migration might not be run)
       try {
         const [position] = await db.query(`
           SELECT id, name, level, parent_id
@@ -50,56 +75,44 @@ export async function getCreatorLevel(creatorUserId) {
           WHERE id = ?
         `, [positionId]);
         
-        if (position.length > 0) {
-          // If level column doesn't exist, it will be null/undefined
-          const level = position[0].level;
-          
-          // If level is null/undefined, migration hasn't been run - use role-based fallback
-          if (level === null || level === undefined) {
-            logger.warn('Position level column not found. Migration may not be run. Using role-based fallback.');
-            // Fallback: Get manager roles from database to determine level
-            const { getManagerRoles } = await import('./roleHelpers.js');
-            const managerRoles = await getManagerRoles();
-            const fallbackLevel = managerRoles.includes(roleName) ? 1 : 2;
-            return {
-              level: fallbackLevel,
-              positionId: positionId,
-              positionName: position[0].name || 'Unknown'
-            };
-          }
-          
+        if (position.length > 0 && position[0].level !== null && position[0].level !== undefined) {
+          logger.debug(`Using position level for ${roleName}: ${position[0].level}`);
           return {
-            level: level,
+            level: position[0].level,
             positionId: positionId,
             positionName: position[0].name
           };
         }
       } catch (dbError) {
-        // If column doesn't exist, use role-based fallback
-        if (dbError.code === 'ER_BAD_FIELD_ERROR') {
-          logger.warn('Position level column not found. Using role-based fallback.');
-          const { getManagerRoles } = await import('./roleHelpers.js');
-          const managerRoles = await getManagerRoles();
-          const fallbackLevel = managerRoles.includes(roleName) ? 1 : 2;
-          return {
-            level: fallbackLevel,
-            positionId: positionId,
-            positionName: 'Unknown'
-          };
+        // If column doesn't exist, continue to fallback
+        if (dbError.code !== 'ER_BAD_FIELD_ERROR') {
+          throw dbError;
         }
-        throw dbError;
       }
     }
     
-    // User has no position assigned - use role-based fallback
-    logger.warn(`User ${creatorUserId} has no position assigned. Using role-based fallback.`);
+    // PRIORITY 3: Final fallback - use role name to determine level
+    logger.warn(`User ${creatorUserId} (${roleName}) has no role level or position level. Using role-based fallback.`);
     const { getManagerRoles } = await import('./roleHelpers.js');
     const managerRoles = await getManagerRoles();
     const fallbackLevel = managerRoles.includes(roleName) ? 1 : 2;
+    
+    let positionName = roleName || 'Unknown';
+    if (positionId) {
+      try {
+        const [position] = await db.query('SELECT name FROM positions WHERE id = ?', [positionId]);
+        if (position.length > 0) {
+          positionName = position[0].name;
+        }
+      } catch (e) {
+        // Ignore position lookup errors
+      }
+    }
+    
     return {
       level: fallbackLevel,
-      positionId: null,
-      positionName: roleName || 'Unknown'
+      positionId: positionId,
+      positionName: positionName
     };
   } catch (error) {
     logger.error('Error getting creator level:', error);
@@ -177,28 +190,55 @@ export async function getPositionDetails(positionId) {
 }
 
 /**
- * Validate if creator can create a user with the given position
+ * Validate if creator can create a user with the given role
  * @param {number} creatorUserId - The ID of the user creating the new user
- * @param {number} newUserPositionId - The position ID for the new user
+ * @param {number} newUserRoleId - The role ID for the new user
+ * @param {number} newUserPositionId - Optional position ID for the new user (for backward compatibility)
  * @returns {Promise<{valid: boolean, error?: string}>}
  */
-export async function validateUserCreation(creatorUserId, newUserPositionId) {
+export async function validateUserCreation(creatorUserId, newUserRoleId, newUserPositionId = null) {
   try {
     // Get creator's level
     const creatorInfo = await getCreatorLevel(creatorUserId);
     const creatorLevel = creatorInfo.level;
     
-    logger.debug('=== POSITION VALIDATION ===');
+    logger.debug('=== ROLE VALIDATION ===');
     logger.debug('Creator Level:', creatorLevel);
     logger.debug('Creator Position:', creatorInfo.positionName);
     
-    // Get new user's position details
-    const newPosition = await getPositionDetails(newUserPositionId);
-    const newUserLevel = newPosition.level;
+    // Get new user's role level (primary validation - roles have level column)
+    const [roleInfo] = await db.query(`
+      SELECT id, name, level 
+      FROM roles 
+      WHERE id = ?
+    `, [newUserRoleId]);
     
-    logger.debug('New User Position:', newPosition.name);
+    if (roleInfo.length === 0) {
+      return {
+        valid: false,
+        error: 'Role not found'
+      };
+    }
+    
+    const newUserRole = roleInfo[0];
+    let newUserLevel = newUserRole.level;
+    
+    // If role level is null, fallback to position level (for backward compatibility)
+    if (newUserLevel === null || newUserLevel === undefined) {
+      logger.debug('Role level is null, falling back to position level');
+      if (newUserPositionId) {
+        const newPosition = await getPositionDetails(newUserPositionId);
+        newUserLevel = newPosition.level;
+        logger.debug('Using position level:', newUserLevel);
+      } else {
+        // If no position and no role level, default to level 2 (employee)
+        newUserLevel = 2;
+        logger.debug('No position provided, defaulting to level 2');
+      }
+    }
+    
+    logger.debug('New User Role:', newUserRole.name);
     logger.debug('New User Level:', newUserLevel);
-    logger.debug('New User Parent ID:', newPosition.parentId);
     
     // Validation Rules
     if (creatorLevel === 0) {
@@ -208,7 +248,7 @@ export async function validateUserCreation(creatorUserId, newUserPositionId) {
         const roleName = superAdminRole ? superAdminRole.name : 'Super Admin';
         return {
           valid: false,
-          error: `${roleName} can only create Level 1 users (Managers/Admins). Selected position is not Level 1.`
+          error: `${roleName} can only create Level 1 users (Managers/Admins). Selected role "${newUserRole.name}" is not Level 1.`
         };
       }
       logger.debug('✅ Super Admin can create Level 1 user');
@@ -217,26 +257,11 @@ export async function validateUserCreation(creatorUserId, newUserPositionId) {
       if (newUserLevel !== 2) {
         return {
           valid: false,
-          error: 'You can only create your employees (Level 2 users). Selected position is not Level 2.'
+          error: `You can only create your employees (Level 2 users). Selected role "${newUserRole.name}" is not Level 2.`
         };
       }
       
-      // Additional check: Ensure new user's position parent matches creator's position
-      if (newPosition.parentId !== creatorInfo.positionId) {
-        // Get parent position name for better error message
-        const [parentPosition] = await db.query(`
-          SELECT name FROM positions WHERE id = ?
-        `, [newPosition.parentId]);
-        
-        const parentName = parentPosition.length > 0 ? parentPosition[0].name : 'Unknown';
-        
-        return {
-          valid: false,
-          error: `You can only create employees under your position. The selected position "${newPosition.name}" reports to "${parentName}", not to your position "${creatorInfo.positionName}".`
-        };
-      }
-      
-      logger.debug('✅ Level 1 user can create Level 2 employee under their position');
+      logger.debug('✅ Level 1 user can create Level 2 employee');
     } else if (creatorLevel === 2) {
       // Level 2 users cannot create anyone
       return {

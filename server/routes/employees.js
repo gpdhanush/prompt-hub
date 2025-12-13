@@ -9,7 +9,7 @@ import { encryptBankDetails, decryptBankDetails, encryptDocumentNumber, decryptD
 import { logCreate, logUpdate, logDelete, getClientIp, getUserAgent } from '../utils/auditLogger.js';
 import { logger } from '../utils/logger.js';
 import { validateUserCreation, getAvailablePositions } from '../utils/positionValidation.js';
-import { getManagerRoles, getSuperAdminRole, isSuperAdmin, getAllRoles } from '../utils/roleHelpers.js';
+import { getManagerRoles, getSuperAdminRole, isSuperAdmin, getAllRoles, getRolesByLevel } from '../utils/roleHelpers.js';
 
 const router = express.Router();
 
@@ -473,25 +473,35 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: `Position "${dbPositionName}" not found. Please select a valid position.` });
       }
       
-      // Validate position hierarchy - check if creator can create user with this position
-      // Only validate if migration has been run (level column exists)
-      const creatorUserId = req.user?.id;
-      if (creatorUserId && positionId) {
-        try {
-          const validation = await validateUserCreation(creatorUserId, positionId);
-          if (!validation.valid) {
-            return res.status(403).json({ error: validation.error });
-          }
-        } catch (validationError) {
-          // If validation fails due to missing columns, log warning but allow creation
-          // This handles the case where migration hasn't been run yet
-          if (validationError.message && validationError.message.includes('ER_BAD_FIELD_ERROR')) {
-            logger.warn('Position hierarchy validation skipped - migration may not be run:', validationError.message);
-            // Allow creation to proceed without validation
-          } else {
-            // For other validation errors, return the error
-            return res.status(403).json({ error: validationError.message || 'Position validation failed' });
-          }
+    }
+    
+    // Get roleId early for validation (since positions are display-only, we validate based on role level)
+    let roleId = null;
+    if (dbRoleName) {
+      const [roles] = await db.query('SELECT id FROM roles WHERE name = ?', [dbRoleName]);
+      if (roles.length > 0) {
+        roleId = roles[0].id;
+      }
+    }
+    
+    // Validate role level - check if creator can create user with this role
+    // Since positions are display-only, we validate based on role level
+    const creatorUserId = req.user?.id;
+    if (creatorUserId && roleId) {
+      try {
+        const validation = await validateUserCreation(creatorUserId, roleId, positionId);
+        if (!validation.valid) {
+          return res.status(403).json({ error: validation.error });
+        }
+      } catch (validationError) {
+        // If validation fails due to missing columns, log warning but allow creation
+        // This handles the case where migration hasn't been run yet
+        if (validationError.message && validationError.message.includes('ER_BAD_FIELD_ERROR')) {
+          logger.warn('Role level validation skipped - migration may not be run:', validationError.message);
+          // Allow creation to proceed without validation
+        } else {
+          // For other validation errors, return the error
+          return res.status(403).json({ error: validationError.message || 'Role validation failed' });
         }
       }
     }
@@ -594,18 +604,26 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: `Email "${email}" already exists. Please use a different email address.` });
     }
     
+    // Auto-generate employee code if not provided (format: NTPL0001, NTPL0002, etc.)
+    let finalEmpCode = empCode;
+    if (!finalEmpCode || finalEmpCode.trim() === '') {
+      const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
+      const nextNumber = (empCount[0].count + 1).toString().padStart(4, '0');
+      finalEmpCode = `NTPL${nextNumber}`;
+    }
+    
     // Check for duplicate employee code before creating employee
-    if (empCode) {
-      const [existingEmployees] = await db.query('SELECT id FROM employees WHERE emp_code = ?', [empCode]);
+    if (finalEmpCode) {
+      const [existingEmployees] = await db.query('SELECT id FROM employees WHERE emp_code = ?', [finalEmpCode]);
       if (existingEmployees.length > 0) {
-        return res.status(400).json({ error: `Employee code "${empCode}" already exists. Please use a different employee code.` });
+        return res.status(400).json({ error: `Employee code "${finalEmpCode}" already exists. Please use a different employee code.` });
       }
     }
     
-    // First create user
-    const [roles] = await db.query('SELECT id, reporting_person_role_id FROM roles WHERE name = ?', [dbRoleName]);
-    const roleId = roles[0]?.id || 4; // Default to Developer
-    const reportingPersonRoleId = roles[0]?.reporting_person_role_id || null;
+    // Get role details (roleId already fetched above for validation, but get reporting_person_role_id here)
+    const [roleDetails] = await db.query('SELECT id, reporting_person_role_id FROM roles WHERE name = ?', [dbRoleName]);
+    const finalRoleId = roleId || roleDetails[0]?.id || 4; // Use roleId from validation or default to Developer
+    const reportingPersonRoleId = roleDetails[0]?.reporting_person_role_id || null;
     
     // Auto-set teamLeadId based on role hierarchy if not provided
     if ((!teamLeadId || teamLeadId === '' || teamLeadId === 'none') && reportingPersonRoleId) {
@@ -640,7 +658,7 @@ router.post('/', async (req, res) => {
       [userResult] = await db.query(`
         INSERT INTO users (name, email, mobile, password_hash, role_id, position_id, status)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [processedName, email, processedMobile, passwordHash, roleId, positionId, userStatus]);
+      `, [processedName, email, processedMobile, passwordHash, finalRoleId, positionId, userStatus]);
     } catch (userError) {
       if (userError.code === 'ER_DUP_ENTRY') {
         // Check which field caused the duplicate
@@ -709,15 +727,9 @@ router.post('/', async (req, res) => {
           const isSuperAdminRole = superAdminRole && teamLeadRole === superAdminRole.name;
           
           if (isManagerRole || isSuperAdminRole) {
-            // Generate employee code based on role
+            // Generate employee code (format: NTPL0001, NTPL0002, etc.)
             const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
-            let empCodePrefix = 'EMP-TL';
-            if (isSuperAdminRole) {
-              empCodePrefix = 'EMP-SA';
-            } else if (teamLeadRole === 'Admin' || teamLeadRole.includes('Admin')) {
-              empCodePrefix = 'EMP-AD';
-            }
-            const empCodeForTL = `${empCodePrefix}-${String(empCount[0].count + 1).padStart(4, '0')}`;
+            const empCodeForTL = `NTPL${String(empCount[0].count + 1).padStart(4, '0')}`;
             
             const [newEmpResult] = await db.query(`
               INSERT INTO employees (user_id, emp_code, employee_status)
@@ -751,7 +763,7 @@ router.post('/', async (req, res) => {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      userResult.insertId, empCode, teamLeadEmployeeId,
+      userResult.insertId, finalEmpCode, teamLeadEmployeeId,
       formatDateForDB(date_of_birth), gender || null, formatDateForDB(date_of_joining), employee_status || 'Active',
       processedBankName || null, processedBankAccount || null, processedIfsc || null,
       processedAddress1 || null, processedAddress2 || null, processedLandmark || null, processedState || null, processedDistrict || null, processedPincode || null,
@@ -859,6 +871,7 @@ router.put('/:id', async (req, res) => {
         u.email,
         u.mobile,
         u.status as user_status,
+        u.role_id,
         r.name as role
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
@@ -946,12 +959,16 @@ router.put('/:id', async (req, res) => {
         if (positions.length > 0) {
           const newPositionId = positions[0].id;
           
-          // Validate position hierarchy if changing position
+          // Validate role level if changing position (positions are display-only, validate based on role)
+          // Get the current employee's role_id from the query result
           const creatorUserId = req.user?.id;
-          if (creatorUserId) {
-            const validation = await validateUserCreation(creatorUserId, newPositionId);
-            if (!validation.valid) {
-              return res.status(403).json({ error: validation.error });
+          if (creatorUserId && employees.length > 0) {
+            const currentRoleId = employees[0].role_id || null;
+            if (currentRoleId) {
+              const validation = await validateUserCreation(creatorUserId, currentRoleId, newPositionId);
+              if (!validation.valid) {
+                return res.status(403).json({ error: validation.error });
+              }
             }
           }
           
@@ -1099,15 +1116,9 @@ router.put('/:id', async (req, res) => {
               const isSuperAdminRole = superAdminRole && teamLeadRole === superAdminRole.name;
               
               if (isManagerRole || isSuperAdminRole) {
-                // Generate employee code based on role
+                // Generate employee code (format: NTPL0001, NTPL0002, etc.)
                 const [empCount] = await db.query('SELECT COUNT(*) as count FROM employees');
-                let empCodePrefix = 'EMP-TL';
-                if (isSuperAdminRole) {
-                  empCodePrefix = 'EMP-SA';
-                } else if (teamLeadRole === 'Admin' || teamLeadRole.includes('Admin')) {
-                  empCodePrefix = 'EMP-AD';
-                }
-                const empCode = `${empCodePrefix}-${String(empCount[0].count + 1).padStart(4, '0')}`;
+                const empCode = `NTPL${String(empCount[0].count + 1).padStart(4, '0')}`;
                 
                 // Create employee record
                 const [newEmpResult] = await db.query(`

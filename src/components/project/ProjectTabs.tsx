@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Upload, Trash2, Download, Eye, Clock, Calendar, Key, MessageSquare, FileText, AlertCircle, CheckCircle2, X, Save, Image as ImageIcon, File, FileType, Presentation, FileSpreadsheet, Video, Music, Archive } from "lucide-react";
+import { Plus, Upload, Trash2, Download, Eye, EyeOff, Clock, Calendar, Key, MessageSquare, FileText, AlertCircle, CheckCircle2, X, Save, Image as ImageIcon, File, FileType, Presentation, FileSpreadsheet, Video, Music, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -316,6 +316,8 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
   });
 
   // Credential form
+  const [showCredentialPassword, setShowCredentialPassword] = useState(false);
+  const [showCredentialApiKey, setShowCredentialApiKey] = useState(false);
   const [credentialForm, setCredentialForm] = useState({
     credential_type: "Login",
     service_name: "",
@@ -766,12 +768,22 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
                 </div>
                 <div className="grid gap-2">
                   <Label>Password</Label>
-                  <Input
-                    type="password"
-                    value={credentialForm.password}
-                    onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
-                    placeholder="Enter password"
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showCredentialPassword ? "text" : "password"}
+                      value={credentialForm.password}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
+                      placeholder="Enter password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCredentialPassword(!showCredentialPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showCredentialPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="grid gap-2">
@@ -784,12 +796,22 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
               </div>
               <div className="grid gap-2">
                 <Label>API Key</Label>
-                <Input
-                  type="password"
-                  value={credentialForm.api_key}
-                  onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
-                  placeholder="Enter API key"
-                />
+                <div className="relative">
+                  <Input
+                    type={showCredentialApiKey ? "text" : "password"}
+                    value={credentialForm.api_key}
+                    onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
+                    placeholder="Enter API key"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCredentialApiKey(!showCredentialApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showCredentialApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label>Notes</Label>

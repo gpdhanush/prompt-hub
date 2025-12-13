@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -9,38 +9,28 @@ import {
   Bug,
   Calendar,
   Receipt,
-  Settings,
-  Bell,
   BarChart3,
-  LogOut,
   ChevronLeft,
   ChevronRight,
   Shield,
-  UserCircle,
   KeyRound,
   FileText,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { getCurrentUser, clearAuth } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 
 // All menu items in one list - organized by sections
 const allMenuItems = [
+  // Dashboard - Separate, no section label
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, section: null },
+  // Administration (Super Admin only)
+  { name: "Audit Logs", href: "/audit-logs", icon: FileText, section: "admin" },
+  { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
+  { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
   // Main Management
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, section: "main" },
   { name: "Users", href: "/users", icon: Users, section: "main" },
   { name: "Employees", href: "/employees", icon: UserCog, section: "main" },
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
@@ -49,23 +39,11 @@ const allMenuItems = [
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
   { name: "Reports", href: "/reports", icon: BarChart3, section: "main" },
-  // Profile
-  { name: "Profile Setup", href: "/profile-setup", icon: UserCircle, section: "profile" },
-  // Administration (Super Admin only)
-  { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
-  { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
-  // System
-  { name: "Audit Logs", href: "/audit-logs", icon: FileText, section: "system" },
-  { name: "Notifications", href: "/notifications", icon: Bell, section: "system" },
-  { name: "Settings", href: "/settings", icon: Settings, section: "system" },
 ];
 
 export function AdminSidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   
   // Get current user info to filter menu items
   const currentUser = getCurrentUser();
@@ -96,17 +74,6 @@ export function AdminSidebar() {
   const canAccessAuditLogs = isSuperAdmin || userRole === 'Admin';
 
   const isActive = (href: string) => location.pathname === href;
-
-  const handleLogout = async () => {
-    // Clear authentication data from secure storage
-    await clearAuth();
-    
-    // Clear all React Query cache
-    queryClient.clear();
-    
-    // Redirect to login
-    navigate('/login');
-  };
 
   const NavItem = ({ item }: { item: typeof allMenuItems[0] }) => (
     <NavLink
@@ -181,14 +148,12 @@ export function AdminSidebar() {
             return true;
           })
           .map((item, index, filteredItems) => {
-            // Show section headers
+            // Show section headers (skip for items with null section)
             const prevItem = index > 0 ? filteredItems[index - 1] : null;
-            const showSectionHeader = !prevItem || prevItem.section !== item.section;
+            const showSectionHeader = item.section !== null && (!prevItem || prevItem.section !== item.section);
             const sectionLabels: Record<string, string> = {
               main: "Management",
-              profile: "Profile",
               admin: "Administration",
-              system: "System",
             };
 
             return (
@@ -204,41 +169,6 @@ export function AdminSidebar() {
           })}
       </nav>
 
-      {/* Logout Button - Fixed at bottom */}
-      <div className="border-t border-sidebar-border p-3">
-        <button
-          onClick={() => setShowLogoutDialog(true)}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-destructive transition-all duration-200 hover:bg-destructive/10"
-          )}
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>Logout</span>}
-        </button>
-      </div>
-
-      {/* Logout Confirmation Dialog */}
-      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to logout? You will need to login again to access the system.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowLogoutDialog(false)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleLogout}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Logout
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </aside>
   );
 }

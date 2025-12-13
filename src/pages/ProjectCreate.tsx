@@ -93,6 +93,8 @@ export default function ProjectCreate() {
 
   const [showCredentialForm, setShowCredentialForm] = useState(false);
   const [credentialForm, setCredentialForm] = useState({ credential_type: 'Login', service_name: '', username: '', password: '', url: '', api_key: '', notes: '' });
+  const [showCredentialPassword, setShowCredentialPassword] = useState(false);
+  const [showCredentialApiKey, setShowCredentialApiKey] = useState(false);
 
   const [showDailyStatusForm, setShowDailyStatusForm] = useState(false);
   const [dailyStatusForm, setDailyStatusForm] = useState({ work_date: new Date().toISOString().split('T')[0], hours_worked: '', minutes_worked: '', work_description: '', tasks_completed: '', blockers: '' });
@@ -1473,12 +1475,22 @@ export default function ProjectCreate() {
                   </div>
                   <div className="grid gap-2">
                     <Label>Password</Label>
-                    <Input
-                      type="password"
-                      value={credentialForm.password}
-                      onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
-                      placeholder="Enter password"
-                    />
+                    <div className="relative">
+                      <Input
+                        type={showCredentialPassword ? "text" : "password"}
+                        value={credentialForm.password}
+                        onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
+                        placeholder="Enter password"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCredentialPassword(!showCredentialPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showCredentialPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="grid gap-2">
@@ -1491,12 +1503,22 @@ export default function ProjectCreate() {
                 </div>
                 <div className="grid gap-2">
                   <Label>API Key</Label>
-                  <Input
-                    type="password"
-                    value={credentialForm.api_key}
-                    onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
-                    placeholder="Enter API key"
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showCredentialApiKey ? "text" : "password"}
+                      value={credentialForm.api_key}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
+                      placeholder="Enter API key"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCredentialApiKey(!showCredentialApiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showCredentialApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="grid gap-2">
                   <Label>Notes</Label>

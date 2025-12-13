@@ -348,14 +348,14 @@ export default function AuditLogs() {
               <div className="grid gap-2">
                 <Label>Action</Label>
                 <Select
-                  value={filters.action}
-                  onValueChange={(value) => setFilters({ ...filters, action: value })}
+                  value={filters.action || "all"}
+                  onValueChange={(value) => setFilters({ ...filters, action: value === "all" ? "" : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="All actions" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All actions</SelectItem>
+                    <SelectItem value="all">All actions</SelectItem>
                     {filterOptions?.actions.map((action) => (
                       <SelectItem key={action} value={action}>
                         {action}
@@ -367,14 +367,14 @@ export default function AuditLogs() {
               <div className="grid gap-2">
                 <Label>Module</Label>
                 <Select
-                  value={filters.module}
-                  onValueChange={(value) => setFilters({ ...filters, module: value })}
+                  value={filters.module || "all"}
+                  onValueChange={(value) => setFilters({ ...filters, module: value === "all" ? "" : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="All modules" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All modules</SelectItem>
+                    <SelectItem value="all">All modules</SelectItem>
                     {filterOptions?.modules.map((module) => (
                       <SelectItem key={module} value={module}>
                         {module}
@@ -386,14 +386,14 @@ export default function AuditLogs() {
               <div className="grid gap-2">
                 <Label>User</Label>
                 <Select
-                  value={filters.userId}
-                  onValueChange={(value) => setFilters({ ...filters, userId: value })}
+                  value={filters.userId || "all"}
+                  onValueChange={(value) => setFilters({ ...filters, userId: value === "all" ? "" : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="All users" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All users</SelectItem>
+                    <SelectItem value="all">All users</SelectItem>
                     {filterOptions?.users.map((user) => (
                       <SelectItem key={user.id} value={user.id.toString()}>
                         {user.name} ({user.email})

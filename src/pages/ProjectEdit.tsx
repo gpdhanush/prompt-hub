@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, X, FileText, MessageSquare, AlertCircle, Phone, Key, Clock, Save, Download, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Plus, X, FileText, MessageSquare, AlertCircle, Phone, Key, Clock, Save, Download, Image as ImageIcon, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,6 +92,8 @@ export default function ProjectEdit() {
 
   const [showCredentialForm, setShowCredentialForm] = useState(false);
   const [credentialForm, setCredentialForm] = useState({ credential_type: 'Login', service_name: '', username: '', password: '', url: '', api_key: '', notes: '' });
+  const [showCredentialPassword, setShowCredentialPassword] = useState(false);
+  const [showCredentialApiKey, setShowCredentialApiKey] = useState(false);
 
   const [showDailyStatusForm, setShowDailyStatusForm] = useState(false);
   const [dailyStatusForm, setDailyStatusForm] = useState({ work_date: new Date().toISOString().split('T')[0], hours_worked: '', minutes_worked: '', work_description: '', tasks_completed: '', blockers: '' });
@@ -1491,44 +1493,44 @@ export default function ProjectEdit() {
           </CardHeader>
           <CardContent className="space-y-4">
             {formData.credentials.length > 0 && (
-              <div className="space-y-2">
-                {formData.credentials.map((cred, index) => (
-                  <div key={index} className="p-3 border rounded">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <div className="font-medium">{cred.service_name}</div>
-                        <div className="text-xs text-muted-foreground">{cred.credential_type}</div>
-                        {cred.url && <div className="text-xs text-muted-foreground">{cred.url}</div>}
+                <div className="space-y-2">
+                  {formData.credentials.map((cred, index) => (
+                    <div key={index} className="p-3 border rounded">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <div className="font-medium">{cred.service_name}</div>
+                          <div className="text-xs text-muted-foreground">{cred.credential_type}</div>
+                          {cred.url && <div className="text-xs text-muted-foreground">{cred.url}</div>}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const newCreds = [...formData.credentials];
+                            newCreds.splice(index, 1);
+                            setFormData({ ...formData, credentials: newCreds });
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          const newCreds = [...formData.credentials];
-                          newCreds.splice(index, 1);
-                          setFormData({ ...formData, credentials: newCreds });
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {!showCredentialForm ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowCredentialForm(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add Credential
-              </Button>
-            ) : (
-              <div className="grid gap-4 border-t pt-4">
+                  ))}
+                </div>
+              )}
+              
+              {!showCredentialForm ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowCredentialForm(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Credential
+                </Button>
+              ) : (
+                <div className="grid gap-4 border-t pt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label>Credential Type</Label>
@@ -1569,12 +1571,22 @@ export default function ProjectEdit() {
                   </div>
                   <div className="grid gap-2">
                     <Label>Password</Label>
-                    <Input
-                      type="password"
-                      value={credentialForm.password}
-                      onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
-                      placeholder="Enter password"
-                    />
+                    <div className="relative">
+                      <Input
+                        type={showCredentialPassword ? "text" : "password"}
+                        value={credentialForm.password}
+                        onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
+                        placeholder="Enter password"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCredentialPassword(!showCredentialPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showCredentialPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="grid gap-2">
@@ -1587,12 +1599,22 @@ export default function ProjectEdit() {
                 </div>
                 <div className="grid gap-2">
                   <Label>API Key</Label>
-                  <Input
-                    type="password"
-                    value={credentialForm.api_key}
-                    onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
-                    placeholder="Enter API key"
-                  />
+                  <div className="relative">
+                    <Input
+                      type={showCredentialApiKey ? "text" : "password"}
+                      value={credentialForm.api_key}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
+                      placeholder="Enter API key"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCredentialApiKey(!showCredentialApiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showCredentialApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="grid gap-2">
                   <Label>Notes</Label>

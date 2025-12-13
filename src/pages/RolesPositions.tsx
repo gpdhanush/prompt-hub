@@ -58,6 +58,7 @@ type Role = {
   description?: string;
   reporting_person_role_id?: number;
   reporting_person_role_name?: string;
+  level?: number | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -66,6 +67,8 @@ type Position = {
   id: number;
   name: string;
   description?: string;
+  level?: number | null;
+  parent_id?: number | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -84,6 +87,7 @@ export default function RolesPositions() {
     name: "",
     description: "",
     reporting_person_role_id: "",
+    level: "" as string | number,
   });
   
   // Positions state
@@ -188,7 +192,7 @@ export default function RolesPositions() {
       queryClient.invalidateQueries({ queryKey: ['roles'] });
       toast({ title: "Success", description: "Role created successfully." });
       setShowRoleAddDialog(false);
-      setRoleForm({ name: "", description: "", reporting_person_role_id: "" });
+      setRoleForm({ name: "", description: "", reporting_person_role_id: "", level: "" });
     },
     onError: (error: any) => {
       toast({
@@ -206,7 +210,7 @@ export default function RolesPositions() {
       toast({ title: "Success", description: "Role updated successfully." });
       setShowRoleEditDialog(false);
       setSelectedRole(null);
-      setRoleForm({ name: "", description: "", reporting_person_role_id: "" });
+      setRoleForm({ name: "", description: "", reporting_person_role_id: "", level: "" });
     },
     onError: (error: any) => {
       toast({
@@ -267,6 +271,7 @@ export default function RolesPositions() {
       name: roleForm.name,
       description: roleForm.description,
       reporting_person_role_id: roleForm.reporting_person_role_id && roleForm.reporting_person_role_id !== "" ? parseInt(roleForm.reporting_person_role_id) : null,
+      level: roleForm.level && roleForm.level !== "" ? parseInt(roleForm.level as string) : null,
     });
   };
 
@@ -276,6 +281,7 @@ export default function RolesPositions() {
       name: role.name,
       description: role.description || "",
       reporting_person_role_id: role.reporting_person_role_id?.toString() || "",
+      level: role.level?.toString() || "",
     });
     setShowRoleEditDialog(true);
   };
@@ -295,6 +301,7 @@ export default function RolesPositions() {
         name: roleForm.name,
         description: roleForm.description,
         reporting_person_role_id: roleForm.reporting_person_role_id && roleForm.reporting_person_role_id !== "" ? parseInt(roleForm.reporting_person_role_id) : null,
+        level: roleForm.level && roleForm.level !== "" ? parseInt(roleForm.level as string) : null,
       },
     });
   };
@@ -323,7 +330,7 @@ export default function RolesPositions() {
     
     setIsCreatingPosition(true);
     try {
-      // First create the position
+      // First create the position (positions are for display only - no hierarchy required)
       const result = await positionsApi.create({
         name: positionForm.name,
         description: positionForm.description,
@@ -368,7 +375,7 @@ export default function RolesPositions() {
         .map((r: any) => r.id);
       setPositionForm(prev => ({ ...prev, role_ids: mappedRoleIds }));
     } catch (error) {
-      logger.error('Failed to fetch role mappings:', error);
+      console.error('Failed to fetch role mappings:', error);
     }
     
     setShowPositionEditDialog(true);
@@ -386,7 +393,7 @@ export default function RolesPositions() {
     
     setIsUpdatingPosition(true);
     try {
-      // First update the position
+      // First update the position (positions are for display only - no hierarchy required)
       await positionsApi.update(selectedPosition.id, {
         name: positionForm.name,
         description: positionForm.description,
@@ -531,6 +538,22 @@ export default function RolesPositions() {
                       />
                     </div>
                     <div className="grid gap-2">
+                      <Label htmlFor="role-level">User Type Level</Label>
+                      <Select
+                        value={roleForm.level?.toString() || undefined}
+                        onValueChange={(value) => setRoleForm({ ...roleForm, level: value === "none" ? "" : value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select level (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None (e.g., Super Admin)</SelectItem>
+                          <SelectItem value="1">Level 1 (Managers)</SelectItem>
+                          <SelectItem value="2">Level 2 (Employees)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
                       <Label htmlFor="role-reporting-person">Reporting Person Role</Label>
                       <Select
                         value={roleForm.reporting_person_role_id || undefined}
@@ -554,7 +577,7 @@ export default function RolesPositions() {
                         className="flex-1"
                         onClick={() => {
                           setShowRoleAddDialog(false);
-                          setRoleForm({ name: "", description: "", reporting_person_role_id: "" });
+                          setRoleForm({ name: "", description: "", reporting_person_role_id: "", level: "" });
                         }}
                       >
                         Cancel
@@ -677,6 +700,7 @@ export default function RolesPositions() {
                     <TableRow className="bg-muted/50">
                       <TableHead className="font-semibold">Role Name</TableHead>
                       <TableHead className="font-semibold">Description</TableHead>
+                      <TableHead className="font-semibold">Level</TableHead>
                       <TableHead className="font-semibold">Reporting Person</TableHead>
                       <TableHead className="text-right font-semibold">Actions</TableHead>
                     </TableRow>
@@ -684,7 +708,7 @@ export default function RolesPositions() {
                   <TableBody>
                     {rolesLoading ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-12">
+                        <TableCell colSpan={5} className="text-center py-12">
                           <div className="flex flex-col items-center gap-2">
                             <Loader2 className="h-6 w-6 animate-spin text-primary" />
                             <p className="text-muted-foreground">Loading roles...</p>
@@ -693,7 +717,7 @@ export default function RolesPositions() {
                       </TableRow>
                     ) : filteredRoles.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-12">
+                        <TableCell colSpan={5} className="text-center py-12">
                           <div className="flex flex-col items-center gap-2">
                             <Shield className="h-12 w-12 text-muted-foreground/50" />
                             <p className="text-muted-foreground font-medium">
@@ -708,6 +732,15 @@ export default function RolesPositions() {
                           <TableCell className="font-medium font-semibold">{role.name}</TableCell>
                           <TableCell className="text-muted-foreground">
                             {role.description || '-'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {role.level !== null && role.level !== undefined ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                Level {role.level}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/70">-</span>
+                            )}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {role.reporting_person_role_name ? (
@@ -857,6 +890,22 @@ export default function RolesPositions() {
               />
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="edit-role-level">User Type Level</Label>
+              <Select
+                value={roleForm.level?.toString() || undefined}
+                onValueChange={(value) => setRoleForm({ ...roleForm, level: value === "none" ? "" : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select level (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (e.g., Super Admin)</SelectItem>
+                  <SelectItem value="1">Level 1 (Managers)</SelectItem>
+                  <SelectItem value="2">Level 2 (Employees)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="edit-role-reporting-person">Reporting Person Role</Label>
               <Select
                 value={roleForm.reporting_person_role_id || undefined}
@@ -881,7 +930,7 @@ export default function RolesPositions() {
                 onClick={() => {
                   setShowRoleEditDialog(false);
                   setSelectedRole(null);
-                  setRoleForm({ name: "", description: "", reporting_person_role_id: "" });
+                  setRoleForm({ name: "", description: "", reporting_person_role_id: "", level: "" });
                 }}
               >
                 Cancel

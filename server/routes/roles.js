@@ -47,10 +47,18 @@ router.get('/:id', authorize('Super Admin', 'Admin', 'Team Leader', 'Team Lead')
 // Create role - Super Admin only
 router.post('/', authorize('Super Admin'), async (req, res) => {
   try {
-    const { name, description, reporting_person_role_id } = req.body;
+    const { name, description, reporting_person_role_id, level } = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Role name is required' });
+    }
+    
+    // Validate level if provided
+    if (level !== undefined && level !== null) {
+      const levelNum = parseInt(level);
+      if (isNaN(levelNum) || (levelNum !== 1 && levelNum !== 2)) {
+        return res.status(400).json({ error: 'Level must be 1 or 2' });
+      }
     }
     
     // Check if role name already exists
@@ -60,9 +68,9 @@ router.post('/', authorize('Super Admin'), async (req, res) => {
     }
     
     const [result] = await db.query(`
-      INSERT INTO roles (name, description, reporting_person_role_id)
-      VALUES (?, ?, ?)
-    `, [name, description || null, reporting_person_role_id || null]);
+      INSERT INTO roles (name, description, reporting_person_role_id, level)
+      VALUES (?, ?, ?, ?)
+    `, [name, description || null, reporting_person_role_id || null, level || null]);
     
     const [newRole] = await db.query(`
       SELECT 
@@ -93,7 +101,15 @@ router.post('/', authorize('Super Admin'), async (req, res) => {
 router.put('/:id', authorize('Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, reporting_person_role_id } = req.body;
+    const { name, description, reporting_person_role_id, level } = req.body;
+    
+    // Validate level if provided
+    if (level !== undefined && level !== null && level !== '') {
+      const levelNum = parseInt(level);
+      if (isNaN(levelNum) || (levelNum !== 1 && levelNum !== 2)) {
+        return res.status(400).json({ error: 'Level must be 1 or 2' });
+      }
+    }
     
     // Check if role exists and get before data
     const [existing] = await db.query(`
@@ -122,14 +138,35 @@ router.put('/:id', authorize('Super Admin'), async (req, res) => {
       return res.status(400).json({ error: 'Role cannot report to itself' });
     }
     
+    // Build update query dynamically based on provided fields
+    const updates = [];
+    const params = [];
+    
+    if (name) {
+      updates.push('name = ?');
+      params.push(name);
+    }
+    if (description !== undefined) {
+      updates.push('description = ?');
+      params.push(description || null);
+    }
+    if (reporting_person_role_id !== undefined) {
+      updates.push('reporting_person_role_id = ?');
+      params.push(reporting_person_role_id || null);
+    }
+    if (level !== undefined) {
+      updates.push('level = ?');
+      params.push(level === '' || level === null ? null : parseInt(level));
+    }
+    
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+    
     await db.query(`
       UPDATE roles 
-      SET name = COALESCE(?, name),
-          description = COALESCE(?, description),
-          reporting_person_role_id = ?,
-          updated_at = CURRENT_TIMESTAMP
+      SET ${updates.join(', ')}
       WHERE id = ?
-    `, [name, description, reporting_person_role_id || null, id]);
+    `, params);
     
     const [updated] = await db.query(`
       SELECT 

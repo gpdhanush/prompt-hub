@@ -124,33 +124,29 @@ router.post('/', authorize('Super Admin'), async (req, res) => {
       return res.status(400).json({ error: 'Position name is required' });
     }
     
-    // Validate level (0, 1, or 2)
-    const positionLevel = level !== undefined ? parseInt(level) : 2; // Default to 2
-    if (positionLevel < 0 || positionLevel > 2) {
+    // Positions are for display purposes only - no hierarchy validation required
+    // Level defaults to 2 if not provided (since column is NOT NULL)
+    const positionLevel = level !== undefined && level !== null && level !== '' ? parseInt(level) : 2;
+    const finalParentId = parent_id !== undefined && parent_id !== null && parent_id !== '' ? parseInt(parent_id) : null;
+    
+    // Validate level if provided (must be 0, 1, or 2)
+    if (isNaN(positionLevel) || positionLevel < 0 || positionLevel > 2) {
       return res.status(400).json({ error: 'Level must be 0, 1, or 2' });
     }
     
-    // Validate parent_id if provided
-    if (parent_id) {
-      const [parent] = await db.query('SELECT id, level FROM positions WHERE id = ?', [parent_id]);
+    // Validate parent_id if provided (just check if it exists, no hierarchy validation)
+    if (finalParentId !== null) {
+      const [parent] = await db.query('SELECT id FROM positions WHERE id = ?', [finalParentId]);
       if (parent.length === 0) {
         return res.status(400).json({ error: 'Parent position not found' });
       }
-      // Ensure parent level is one less than child level
-      if (parent[0].level !== positionLevel - 1) {
-        return res.status(400).json({ 
-          error: `Invalid hierarchy: Level ${positionLevel} position cannot have Level ${parent[0].level} as parent. Parent must be Level ${positionLevel - 1}.` 
-        });
-      }
-    } else if (positionLevel > 0) {
-      // Level 1 and 2 positions should have a parent
-      return res.status(400).json({ error: `Level ${positionLevel} positions must have a parent position` });
     }
     
+    // Insert position - level defaults to 2 if not provided (for display-only positions)
     const [result] = await db.query(`
       INSERT INTO positions (name, description, level, parent_id)
       VALUES (?, ?, ?, ?)
-    `, [name, description || null, positionLevel, parent_id || null]);
+    `, [name, description || null, positionLevel, finalParentId]);
     
     const [newPosition] = await db.query('SELECT * FROM positions WHERE id = ?', [result.insertId]);
     
@@ -183,49 +179,31 @@ router.put('/:id', authorize('Super Admin'), async (req, res) => {
     }
     const beforeData = existing[0];
     
-    // Validate level if provided
+    // Positions are for display purposes only - no hierarchy validation required
+    // Level defaults to existing value or 2 if not provided (since column is NOT NULL)
     let positionLevel = existing[0].level; // Keep existing if not provided
-    if (level !== undefined) {
+    if (level !== undefined && level !== null && level !== '') {
       positionLevel = parseInt(level);
-      if (positionLevel < 0 || positionLevel > 2) {
+      if (isNaN(positionLevel) || positionLevel < 0 || positionLevel > 2) {
         return res.status(400).json({ error: 'Level must be 0, 1, or 2' });
       }
     }
     
-    // Validate parent_id if provided
+    // Validate parent_id if provided (just check if it exists, no hierarchy validation)
     let finalParentId = existing[0].parent_id; // Keep existing if not provided
     if (parent_id !== undefined) {
       if (parent_id === null || parent_id === '') {
         finalParentId = null;
       } else {
-        const [parent] = await db.query('SELECT id, level FROM positions WHERE id = ?', [parent_id]);
+        const [parent] = await db.query('SELECT id FROM positions WHERE id = ?', [parent_id]);
         if (parent.length === 0) {
           return res.status(400).json({ error: 'Parent position not found' });
         }
-        // Ensure parent level is one less than child level
-        if (parent[0].level !== positionLevel - 1) {
-          return res.status(400).json({ 
-            error: `Invalid hierarchy: Level ${positionLevel} position cannot have Level ${parent[0].level} as parent. Parent must be Level ${positionLevel - 1}.` 
-          });
+        // Prevent self-reference
+        if (parseInt(parent_id) === parseInt(id)) {
+          return res.status(400).json({ error: 'Position cannot be its own parent' });
         }
-        finalParentId = parent_id;
-      }
-    }
-    
-    // Prevent circular references (position cannot be its own parent or ancestor)
-    if (finalParentId) {
-      const [ancestors] = await db.query(`
-        WITH RECURSIVE ancestors AS (
-          SELECT id, parent_id FROM positions WHERE id = ?
-          UNION ALL
-          SELECT p.id, p.parent_id FROM positions p
-          INNER JOIN ancestors a ON p.id = a.parent_id
-        )
-        SELECT id FROM ancestors WHERE id = ?
-      `, [finalParentId, id]);
-      
-      if (ancestors.length > 0) {
-        return res.status(400).json({ error: 'Cannot set parent: This would create a circular reference in the hierarchy' });
+        finalParentId = parseInt(parent_id);
       }
     }
     

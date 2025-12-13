@@ -71,3 +71,41 @@ export async function clearAuth(): Promise<void> {
   await secureStorageWithCache.removeItem('user');
   await secureStorageWithCache.removeItem('remember_me');
 }
+
+/**
+ * Global logout function that can be called from anywhere (including non-React contexts)
+ * Clears cache, auth data, and navigates to login page
+ */
+export async function forceLogout(reason?: string): Promise<void> {
+  try {
+    logger.warn('Force logout triggered', reason ? `Reason: ${reason}` : '');
+    
+    // Clear authentication data from secure storage
+    await clearAuth();
+    
+    // Clear auth-related items from localStorage (fallback for non-encrypted storage)
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('remember_me');
+    
+    // Clear session storage
+    sessionStorage.clear();
+    
+    // Clear React Query cache if available (via window object)
+    // This will be handled by components that use QueryClient
+    if (typeof window !== 'undefined' && (window as any).__REACT_QUERY_CLIENT__) {
+      (window as any).__REACT_QUERY_CLIENT__.clear();
+    }
+    
+    // Navigate to login page
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+  } catch (error) {
+    logger.error('Error during force logout:', error);
+    // Still navigate to login even if there's an error
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, User, Mail, Phone, Briefcase, Shield, Clock } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, EyeOff, User, Mail, Phone, Briefcase, Shield, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -92,6 +92,7 @@ export default function Users() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [userForm, setUserForm] = useState({
     name: "",
     email: "",
@@ -303,7 +304,7 @@ export default function Users() {
       } else if (error.status === 403) {
         toast({ 
           title: "Access Denied", 
-          description: "You don't have permission to create users. Only Admins can create users.",
+          description: error.message || "You don't have permission to create users. Only Level 1 users (Managers/Team Leaders) can create Level 2 users (Developers/Designers/Testers).",
           variant: "destructive",
         });
       } else {
@@ -524,13 +525,23 @@ export default function Users() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="password">Password</Label>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  placeholder="Enter password"
-                  value={userForm.password}
-                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                />
+                <div className="relative">
+                  <Input 
+                    id="password" 
+                    type={showPassword ? "text" : "password"} 
+                    placeholder="Enter password"
+                    value={userForm.password}
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -1014,13 +1025,23 @@ export default function Users() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-password">Password</Label>
-              <Input 
-                id="edit-password" 
-                type="password" 
-                placeholder="Leave blank to keep current password"
-                value={userForm.password}
-                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-              />
+              <div className="relative">
+                <Input 
+                  id="edit-password" 
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="Leave blank to keep current password"
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
