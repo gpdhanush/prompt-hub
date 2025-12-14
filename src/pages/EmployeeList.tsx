@@ -29,12 +29,14 @@ export default function EmployeeList() {
   const navigate = useNavigate();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchInput, setSearchInput] = useState("");
-  const debouncedSearchQuery = useDebounce(searchInput, 300);
+  const debouncedSearchQuery = useDebounce(searchInput, 800);
 
   // Fetch all employees - no pagination, get all, include super admins
+  // Only search if query is at least 3 characters or empty (to show all)
   const { data, isLoading, error } = useQuery({
     queryKey: ['employees-list', debouncedSearchQuery],
     queryFn: () => employeesApi.getAll({ page: 1, limit: 1000, search: debouncedSearchQuery, include_all: 'true' }),
+    enabled: debouncedSearchQuery.length === 0 || debouncedSearchQuery.length >= 3,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });

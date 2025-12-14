@@ -1,5 +1,9 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import https from 'https';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { db } from './config/database.js';
@@ -73,14 +77,71 @@ const PORT = SERVER_CONFIG.PORT;
 // This allows req.ip to work correctly when behind a reverse proxy
 app.set('trust proxy', true);
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Security Middleware - Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Adjust for production
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Adjust if needed for file uploads
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow cross-origin resources
+}));
+
+// CORS Configuration
+app.use(cors({
+  origin: CORS_CONFIG.ORIGIN === '*' ? true : CORS_CONFIG.ORIGIN.split(','),
+  credentials: CORS_CONFIG.CREDENTIALS,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+// Global Rate Limiting
+const globalRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/health' || req.path === '/api/test-db';
+  }
+});
+
+// Apply rate limiting to all API routes
+app.use('/api', globalRateLimiter);
+
+// Stricter rate limiting for auth routes
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 login attempts per windowMs
+  message: {
+    error: 'Too many authentication attempts, please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true // Don't count successful requests
+});
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files from uploads directory
 // Files are stored in server/uploads/profile-photos (based on employees.js multer config)
-import fs from 'fs';
 const uploadsPath = path.join(__dirname, 'uploads');
 logger.debug('📁 Static files directory:', uploadsPath);
 
@@ -108,7 +169,8 @@ app.get('/api/test-db', async (req, res) => {
 });
 
 // API Routes
-app.use('/api/auth', authRoutes);
+// Apply auth rate limiter to auth routes
+app.use('/api/auth', authRateLimiter, authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/employees', employeesRoutes);
 app.use('/api/projects', projectsRoutes);
@@ -161,43 +223,104 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found', path: req.path });
 });
 
-const server = app.listen(PORT, async () => {
-  logger.info(`✅ Server running on port ${PORT}`);
-  
-  // Perform database health check on startup
-  try {
-    await performHealthCheck();
-  } catch (error) {
-    logger.error('❌ Health check failed:', error);
-    logger.error('⚠️  Server started but database may have issues');
-  }
-});
+// Start server (HTTP or HTTPS based on configuration)
+(async () => {
+  // Check if HTTPS is enabled
+  const useHttps = process.env.HTTPS_ENABLED === 'true';
+  const sslCertPath = process.env.SSL_CERT_PATH;
+  const sslKeyPath = process.env.SSL_KEY_PATH;
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    logger.error(`❌ Port ${PORT} is already in use.`);
-    logger.error(`   Please either:`);
-    logger.error(`   1. Kill the process using port ${PORT}: lsof -ti:${PORT} | xargs kill -9`);
-    logger.error(`   2. Change the PORT in your .env file`);
-    process.exit(1);
+  let server;
+
+  if (useHttps && sslCertPath && sslKeyPath) {
+    try {
+      // Read SSL certificates
+      const cert = fs.readFileSync(sslCertPath, 'utf8');
+      const key = fs.readFileSync(sslKeyPath, 'utf8');
+      
+      const httpsOptions = {
+        key,
+        cert
+      };
+
+      server = https.createServer(httpsOptions, app);
+      logger.info(`🔒 HTTPS enabled - SSL certificates loaded`);
+    } catch (error) {
+      logger.error('❌ Failed to load SSL certificates:', error.message);
+      logger.warn('⚠️  Falling back to HTTP');
+      server = app;
+    }
   } else {
-    throw err;
+    server = app;
+    if (SERVER_CONFIG.NODE_ENV === 'production') {
+      logger.warn('⚠️  HTTPS is not enabled. Consider enabling HTTPS in production.');
+    }
   }
-});
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, closing server...');
-  server.close(async () => {
-    await db.end();
-    process.exit(0);
+  server.listen(PORT, async () => {
+    const protocol = useHttps && server !== app ? 'https' : 'http';
+    logger.info(`✅ Server running on ${protocol}://localhost:${PORT}`);
+    
+    // Perform database health check on startup
+    try {
+      await performHealthCheck();
+      
+      // Initialize refresh token cleanup job (run every 24 hours)
+      const { cleanupExpiredTokens } = await import('./utils/refreshTokenService.js');
+      setInterval(async () => {
+        try {
+          const deleted = await cleanupExpiredTokens();
+          if (deleted > 0) {
+            logger.info(`🧹 Cleaned up ${deleted} expired refresh tokens`);
+          }
+        } catch (error) {
+          logger.error('Error cleaning up expired tokens:', error);
+        }
+      }, 24 * 60 * 60 * 1000); // 24 hours
+      
+      // Run cleanup once on startup
+      try {
+        const deleted = await cleanupExpiredTokens();
+        if (deleted > 0) {
+          logger.info(`🧹 Cleaned up ${deleted} expired refresh tokens on startup`);
+        }
+      } catch (error) {
+        logger.error('Error cleaning up expired tokens on startup:', error);
+      }
+    } catch (error) {
+      logger.error('❌ Health check failed:', error);
+      logger.error('⚠️  Server started but database may have issues');
+    }
   });
-});
 
-process.on('SIGINT', async () => {
-  logger.info('\nSIGINT received, closing server...');
-  server.close(async () => {
-    await db.end();
-    process.exit(0);
+  // Handle server errors
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error(`❌ Port ${PORT} is already in use.`);
+      logger.error(`   Please either:`);
+      logger.error(`   1. Kill the process using port ${PORT}: lsof -ti:${PORT} | xargs kill -9`);
+      logger.error(`   2. Change the PORT in your .env file`);
+      process.exit(1);
+    } else {
+      throw err;
+    }
   });
-});
+
+  // Graceful shutdown
+  process.on('SIGTERM', async () => {
+    logger.info('SIGTERM received, closing server...');
+    server.close(async () => {
+      await db.end();
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', async () => {
+    logger.info('\nSIGINT received, closing server...');
+    server.close(async () => {
+      await db.end();
+      process.exit(0);
+    });
+  });
+})();
+

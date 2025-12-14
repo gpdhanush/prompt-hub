@@ -1,53 +1,75 @@
 import { db } from '../config/database.js';
 import { logger } from '../utils/logger.js';
+import { verifyAccessToken } from '../utils/jwt.js';
 
-// Authentication middleware - verifies user is logged in
+// Authentication middleware - verifies user is logged in using JWT access token
 export const authenticate = async (req, res, next) => {
   try {
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required. Please login.' });
+      return res.status(401).json({ 
+        error: 'Authentication required. Please login.',
+        code: 'NO_TOKEN'
+      });
     }
     
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     
-    // For now, we'll use a simple token check
-    // In production, verify JWT token here
-    if (token === 'mock-jwt-token') {
-      // Get user ID from header (sent by frontend)
-      const userId = req.headers['user-id'];
-      
-      if (!userId) {
-        logger.debug('No user-id header found in request');
-        return res.status(401).json({ error: 'User ID not provided. Please login again.' });
+    // Verify JWT access token
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch (error) {
+      if (error.message === 'Access token expired') {
+        return res.status(401).json({ 
+          error: 'Access token expired. Please refresh your token.',
+          code: 'TOKEN_EXPIRED'
+        });
       }
-      
-      logger.debug('Authenticating user ID:', userId);
-      
-      const [users] = await db.query(`
-        SELECT u.*, r.name as role
-        FROM users u
-        LEFT JOIN roles r ON u.role_id = r.id
-        WHERE u.id = ?
-      `, [userId]);
-      
-      if (users.length === 0) {
-        logger.warn('User not found for ID:', userId);
-        return res.status(401).json({ error: 'Invalid token. User not found.' });
-      }
-      
-      req.user = users[0];
-      logger.debug('Authenticated user:', req.user.name, 'Role:', req.user.role);
-      return next();
+      logger.warn('Invalid access token:', error.message);
+      return res.status(401).json({ 
+        error: 'Invalid or expired token. Please login again.',
+        code: 'INVALID_TOKEN'
+      });
     }
     
-    // TODO: Verify JWT token in production
-    // For now, reject if not mock token
-    return res.status(401).json({ error: 'Invalid or expired token. Please login again.' });
+    // Get user from database
+    const userId = decoded.userId || decoded.id;
+    if (!userId) {
+      return res.status(401).json({ 
+        error: 'Invalid token payload. Please login again.',
+        code: 'INVALID_TOKEN_PAYLOAD'
+      });
+    }
+    
+    logger.debug('Authenticating user ID:', userId);
+    
+    const [users] = await db.query(`
+      SELECT u.*, r.name as role
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = ? AND u.status = 'Active'
+    `, [userId]);
+    
+    if (users.length === 0) {
+      logger.warn('User not found or inactive for ID:', userId);
+      return res.status(401).json({ 
+        error: 'Invalid token. User not found or inactive.',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+    
+    req.user = users[0];
+    logger.debug('Authenticated user:', req.user.name, 'Role:', req.user.role);
+    return next();
   } catch (error) {
-    return res.status(500).json({ error: 'Authentication error: ' + error.message });
+    logger.error('Authentication error:', error);
+    return res.status(500).json({ 
+      error: 'Authentication error: ' + error.message,
+      code: 'AUTH_ERROR'
+    });
   }
 };
 

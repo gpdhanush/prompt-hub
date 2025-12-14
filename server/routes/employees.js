@@ -1248,10 +1248,14 @@ router.put('/:id', async (req, res) => {
         u.mobile,
         u.status as user_status,
         u.role_id,
-        r.name as role
+        u.position_id,
+        r.name as role,
+        r.level as role_level,
+        p.level as position_level
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
       LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
       WHERE e.id = ?
     `, [id]);
     if (employees.length === 0) {
@@ -1260,17 +1264,69 @@ router.put('/:id', async (req, res) => {
     const userId = employees[0].user_id;
     const beforeData = employees[0]; // Store before data for audit log
     
-    // Check if user can update (either admin/team lead or updating own profile)
+    // Get target employee's level (role_level > position_level > default 2)
+    const targetRoleLevel = employees[0].role_level;
+    const targetPositionLevel = employees[0].position_level;
+    const targetEmployeeLevel = targetRoleLevel !== null && targetRoleLevel !== undefined
+      ? targetRoleLevel
+      : (targetPositionLevel !== null && targetPositionLevel !== undefined
+        ? targetPositionLevel
+        : 2);
+    
+    // Get current user's level
     const currentUserId = req.user?.id;
     const currentUserRole = req.user?.role;
+    const currentUserRoleId = req.user?.role_id;
+    const currentUserPositionId = req.user?.position_id;
+    
+    // Get current user's level from database
+    let currentUserLevel = 2; // default
+    if (currentUserRoleId || currentUserPositionId) {
+      const [currentUserData] = await db.query(`
+        SELECT 
+          r.level as role_level,
+          p.level as position_level
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        LEFT JOIN positions p ON u.position_id = p.id
+        WHERE u.id = ?
+      `, [currentUserId]);
+      
+      if (currentUserData.length > 0) {
+        const roleLevel = currentUserData[0].role_level;
+        const positionLevel = currentUserData[0].position_level;
+        currentUserLevel = roleLevel !== null && roleLevel !== undefined
+          ? roleLevel
+          : (positionLevel !== null && positionLevel !== undefined
+            ? positionLevel
+            : 2);
+      }
+    }
+    
     const managerRoles = await getManagerRoles();
     const superAdminRole = await getSuperAdminRole();
     const allManagerRoles = [...managerRoles, 'Manager'];
     const canManage = allManagerRoles.includes(currentUserRole) || (superAdminRole && currentUserRole === superAdminRole.name);
     const isOwnProfile = currentUserId === userId;
     
-    if (!canManage && !isOwnProfile) {
-      return res.status(403).json({ error: 'You can only update your own profile' });
+    // Level 1 employees can edit Level 2 employees
+    const isLevel1EditingLevel2 = currentUserLevel === 1 && targetEmployeeLevel === 2;
+    
+    // Combined permission check: canManage OR isLevel1EditingLevel2 (for field-level permissions)
+    const canEditEmployee = canManage || isLevel1EditingLevel2;
+    
+    logger.debug('=== PERMISSION CHECK ===');
+    logger.debug('Current User ID:', currentUserId);
+    logger.debug('Current User Level:', currentUserLevel);
+    logger.debug('Target Employee ID:', userId);
+    logger.debug('Target Employee Level:', targetEmployeeLevel);
+    logger.debug('Can Manage:', canManage);
+    logger.debug('Is Own Profile:', isOwnProfile);
+    logger.debug('Is Level 1 Editing Level 2:', isLevel1EditingLevel2);
+    logger.debug('Can Edit Employee:', canEditEmployee);
+    
+    if (!canManage && !isOwnProfile && !isLevel1EditingLevel2) {
+      return res.status(403).json({ error: 'You can only update your own profile or Level 2 employees (if you are Level 1)' });
     }
     
     // Validation
@@ -1360,8 +1416,8 @@ router.put('/:id', async (req, res) => {
       }
     }
     
-    // Update user status if employee_status is provided (only admins can do this)
-    if (employee_status && canManage) {
+    // Update user status if employee_status is provided (admins or Level 1 editing Level 2 can do this)
+    if (employee_status && canEditEmployee) {
       const userStatus = employee_status === 'Inactive' ? 'Inactive' : 'Active';
       await db.query('UPDATE users SET status = ? WHERE id = ?', [userStatus, userId]);
     }
@@ -1388,8 +1444,8 @@ router.put('/:id', async (req, res) => {
     // Update employee - only admins can update most fields, users can update limited fields
     const empUpdates = [];
     const empParams = [];
-    
-    if (canManage) {
+
+    if (canEditEmployee) {
       // Admins can update all fields
       if (empCode !== undefined) { empUpdates.push('emp_code = ?'); empParams.push(empCode); }
       if (status !== undefined) { empUpdates.push('status = ?'); empParams.push(status); }

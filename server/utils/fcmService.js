@@ -96,6 +96,7 @@ export async function sendPushNotification(fcmToken, notification, data = {}) {
           icon: notification.icon || '/favicon.ico',
           badge: notification.badge || '/favicon.ico',
           image: notification.imageUrl,
+          sound: 'default',
         },
         fcmOptions: {
           link: notification.link || '/',
@@ -168,6 +169,7 @@ export async function sendMulticastNotification(fcmTokens, notification, data = 
           body: notification.body || notification.message || '',
           icon: notification.icon || '/favicon.ico',
           badge: notification.badge || '/favicon.ico',
+          sound: 'default',
         },
         fcmOptions: {
           link: notification.link || '/',

@@ -1,6 +1,9 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { logger } from '../utils/logger.js';
+import { generateAccessToken, generateRefreshToken } from '../utils/jwt.js';
+import { storeRefreshToken } from '../utils/refreshTokenService.js';
+import crypto from 'crypto';
 
 // Dynamic imports for optional packages
 let speakeasy, QRCode;
@@ -311,18 +314,55 @@ router.post('/verify', mfaVerificationLimiter, mfaUserRateLimiter, async (req, r
     const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
     await recordMfaSuccess(userId, ipAddress);
     
-    // Generate final auth token (in production, use JWT)
-    const token = 'mock-jwt-token'; // Replace with actual JWT
+    // Update last login
+    await db.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [userId]);
+    
+    // Generate JWT tokens
+    // Access token: 15 minutes (configurable via user's session_timeout or default)
+    const accessTokenExpiry = user.session_timeout || 15;
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      roleId: user.role_id
+    }, accessTokenExpiry);
+    
+    // Refresh token: 30 days
+    const { token: refreshToken, tokenId } = generateRefreshToken(user.id, 30);
+    
+    // Hash refresh token before storing
+    const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    
+    // Calculate expiration date (30 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+    
+    // Store refresh token in database
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    
+    await storeRefreshToken(
+      user.id,
+      tokenId,
+      refreshTokenHash,
+      expiresAt,
+      ipAddress,
+      userAgent
+    );
+    
+    logger.info(`User ${user.email} logged in successfully after MFA verification`);
     
     res.json({
       success: true,
-      token,
+      token: accessToken, // Backward compatibility
+      accessToken,
+      refreshToken,
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
       },
+      expiresIn: accessTokenExpiry * 60 // seconds
     });
   } catch (error) {
     logger.error('Error verifying MFA:', error);

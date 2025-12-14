@@ -32,7 +32,6 @@ import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { projectsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
@@ -111,18 +110,6 @@ export default function Projects() {
     p.status === 'On Hold'
   ).length;
 
-  // Calculate progress (mock for now - can be enhanced with actual task completion data)
-  const calculateProgress = (project: Project) => {
-    // This is a placeholder - in real app, calculate from tasks
-    if (project.status === 'Completed') return 100;
-    if (project.status === 'Planning') return 10;
-    if (project.status === 'In Progress') return 30;
-    if (project.status === 'Testing') return 70;
-    if (project.status === 'Pre-Prod') return 85;
-    if (project.status === 'Production') return 95;
-    if (project.status === 'On Hold') return 0;
-    return 0;
-  };
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A";
@@ -256,17 +243,17 @@ export default function Projects() {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">All Projects</CardTitle>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search projects..."
-                className="pl-9"
-                value={searchQuery}
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search projects..."
+                  className="pl-9"
+                  value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setPage(1);
                 }}
-              />
+                />
             </div>
           </div>
         </CardHeader>
@@ -278,7 +265,6 @@ export default function Projects() {
                 <TableHead>Name</TableHead>
                 <TableHead>Team Lead</TableHead>
                 <TableHead>Timeline</TableHead>
-                <TableHead>Progress</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -286,25 +272,24 @@ export default function Projects() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Loading projects...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-destructive">
+                  <TableCell colSpan={6} className="text-center py-8 text-destructive">
                     Error loading projects. Please check your database connection.
                   </TableCell>
                 </TableRow>
               ) : filteredProjects.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     {searchQuery ? 'No projects found matching your search.' : 'No projects found. Create your first project to get started.'}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredProjects.map((project: Project) => {
-                  const progress = calculateProgress(project);
                   return (
                 <TableRow 
                   key={project.id}
@@ -312,7 +297,7 @@ export default function Projects() {
                   onClick={() => handleView(project)}
                 >
                   <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
-                    {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
+                        {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
                   </TableCell>
                   <TableCell className="font-medium">{project.name}</TableCell>
                       <TableCell className="text-muted-foreground">
@@ -320,12 +305,6 @@ export default function Projects() {
                       </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                         {formatDate(project.start_date)} - {formatDate(project.end_date)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                          <Progress value={progress} className="h-2 w-20" />
-                          <span className="text-xs text-muted-foreground">{progress}%</span>
-                    </div>
                   </TableCell>
                   <TableCell>
                     <StatusBadge variant={projectStatusMap[project.status] || "neutral"}>

@@ -38,7 +38,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -56,7 +55,6 @@ export default function EmployeeProfile() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("personal");
 
   // Get current user info to check permissions
   const currentUser = getCurrentUser();
@@ -213,36 +211,9 @@ export default function EmployeeProfile() {
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-muted/50 w-full justify-start overflow-x-auto h-12">
-          <TabsTrigger value="personal" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <User className="h-4 w-4" />
-            Personal Info
-          </TabsTrigger>
-          <TabsTrigger value="employment" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Briefcase className="h-4 w-4" />
-            Employment
-          </TabsTrigger>
-          <TabsTrigger value="address" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Home className="h-4 w-4" />
-            Address
-          </TabsTrigger>
-          <TabsTrigger value="bank" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Wallet className="h-4 w-4" />
-            Bank Details
-          </TabsTrigger>
-          <TabsTrigger value="leaves" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <CalendarDays className="h-4 w-4" />
-            Leaves
-          </TabsTrigger>
-          <TabsTrigger value="documents" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <FileCheck className="h-4 w-4" />
-            Documents
-          </TabsTrigger>
-        </TabsList>
-
+      <div className="space-y-6">
         {/* Personal Information */}
-        <TabsContent value="personal" className="space-y-6">
+        <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Contact Information */}
             <Card className="shadow-lg border-0 bg-gradient-to-br from-primary/5 via-background to-primary/5">
@@ -346,10 +317,10 @@ export default function EmployeeProfile() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </div>
 
         {/* Employment Information */}
-        <TabsContent value="employment" className="space-y-6">
+        <div className="space-y-6">
           <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-500/5 via-background to-blue-500/5">
             <CardHeader className="border-b bg-gradient-to-r from-blue-500/10 to-transparent">
               <CardTitle className="flex items-center gap-2">
@@ -400,11 +371,10 @@ export default function EmployeeProfile() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-
+        </div>
 
         {/* Address */}
-        <TabsContent value="address" className="space-y-6">
+        <div className="space-y-6">
           <Card className="shadow-lg border-0 bg-gradient-to-br from-green-500/5 via-background to-green-500/5">
             <CardHeader className="border-b bg-gradient-to-r from-green-500/10 to-transparent">
               <CardTitle className="flex items-center gap-2">
@@ -463,10 +433,10 @@ export default function EmployeeProfile() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
 
         {/* Bank Details */}
-        <TabsContent value="bank" className="space-y-6">
+        <div className="space-y-6">
           <Card className="shadow-lg border-0 bg-gradient-to-br from-purple-500/5 via-background to-purple-500/5">
             <CardHeader className="border-b bg-gradient-to-r from-purple-500/10 to-transparent">
               <CardTitle className="flex items-center gap-2">
@@ -500,10 +470,10 @@ export default function EmployeeProfile() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
 
         {/* Leaves */}
-        <TabsContent value="leaves" className="space-y-6">
+        <div className="space-y-6">
           <Card className="shadow-md border-0">
             <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent">
               <CardTitle className="flex items-center gap-2">
@@ -544,10 +514,10 @@ export default function EmployeeProfile() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
 
         {/* Documents */}
-        <TabsContent value="documents" className="space-y-6">
+        <div className="space-y-6">
           <Card className="shadow-md border-0">
             <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent">
               <CardTitle className="flex items-center gap-2">
@@ -717,8 +687,8 @@ export default function EmployeeProfile() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
     </div>
   );
 }

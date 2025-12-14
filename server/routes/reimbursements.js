@@ -124,11 +124,12 @@ router.get('/', requirePermission('reimbursements.view'), async (req, res) => {
     if (userLevel === 0) {
       // Super Admin: See all reimbursements (no filter)
     } else if (userLevel === 1) {
-      // Level 1 (Manager): Only see claims from their direct reports
+      // Level 1 (Manager): See claims from their direct reports AND their own claims
       if (currentEmployeeId) {
         // Get all employees who report to this manager (where team_lead_id = current employee_id)
-        query += ' AND e.team_lead_id = ?';
-        params.push(currentEmployeeId);
+        // OR their own claims (where r.employee_id = currentEmployeeId)
+        query += ' AND (e.team_lead_id = ? OR r.employee_id = ?)';
+        params.push(currentEmployeeId, currentEmployeeId);
       } else {
         // If no employee record, return empty
         return res.json({ data: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } });
@@ -509,7 +510,7 @@ router.post('/:id/approve', requirePermission('reimbursements.approve'), async (
         await db.query(`
           UPDATE reimbursements 
           SET 
-            status = 'Super Admin Approved',
+            status = 'Approved',
             super_admin_approved_by = ?,
             super_admin_approved_at = CURRENT_TIMESTAMP,
             current_approval_level = 'Completed',

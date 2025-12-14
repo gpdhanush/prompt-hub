@@ -317,7 +317,6 @@ export default function Reimbursements() {
                     <TableHead>Claim Code</TableHead>
                     <TableHead>Employee</TableHead>
                     <TableHead>Amount</TableHead>
-                    <TableHead>Category</TableHead>
                     <TableHead>Submitted</TableHead>
                     <TableHead>Approval Level</TableHead>
                     <TableHead>Status</TableHead>
@@ -331,10 +330,10 @@ export default function Reimbursements() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => navigate(`/reimbursements/${r.id}`)}
                     >
-                      <TableCell className="font-mono text-sm">
-                        <Badge variant="outline" className="font-mono">
+                      <TableCell>
+                        <p className="font-bold text-sm text-primary">
                           {r.claim_code || `CLM-${r.id}`}
-                        </Badge>
+                        </p>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -348,9 +347,6 @@ export default function Reimbursements() {
                         </div>
                       </TableCell>
                       <TableCell className="font-semibold">{formatCurrency(parseFloat(r.amount || 0))}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{r.category || 'N/A'}</Badge>
-                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Calendar className="h-3.5 w-3.5" />

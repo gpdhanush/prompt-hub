@@ -457,17 +457,17 @@ export default function Tasks() {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <CardTitle className="text-lg">All Tasks</CardTitle>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search tasks..."
-                className="pl-9"
-                value={searchQuery}
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search tasks..."
+                  className="pl-9"
+                  value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setPage(1);
                 }}
-              />
+                />
             </div>
           </div>
         </CardHeader>
@@ -477,32 +477,28 @@ export default function Tasks() {
               <TableRow>
                 <TableHead>Task ID</TableHead>
                 <TableHead>Title</TableHead>
-                <TableHead>Developer</TableHead>
-                <TableHead>Designer</TableHead>
-                <TableHead>Tester</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead>Deadline</TableHead>
-                <TableHead className="text-center">Activity</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     Loading tasks...
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-destructive">
+                  <TableCell colSpan={5} className="text-center py-8 text-destructive">
                     Error loading tasks. Please check your database connection.
                   </TableCell>
                 </TableRow>
               ) : filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     {searchQuery || activeStage !== "All" ? 'No tasks found matching your filters.' : 'No tasks found. Create your first task to get started.'}
                   </TableCell>
                 </TableRow>
@@ -519,15 +515,6 @@ export default function Tasks() {
                   <TableCell className="font-medium max-w-[200px] truncate">
                     {task.title}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {task.developer_name || '-'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {task.designer_name || '-'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {task.tester_name || '-'}
-                  </TableCell>
                   <TableCell>
                       <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]}>
                         {getPriorityLabel(task.priority)}
@@ -540,18 +527,6 @@ export default function Tasks() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                       {task.deadline ? formatDate(task.deadline) : "Not set"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-center gap-3 text-muted-foreground">
-                      <span className="flex items-center gap-1 text-xs">
-                        <MessageSquare className="h-3 w-3" />
-                          0
-                      </span>
-                      <span className="flex items-center gap-1 text-xs">
-                        <Paperclip className="h-3 w-3" />
-                          0
-                      </span>
-                    </div>
                   </TableCell>
                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
@@ -985,11 +960,11 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
       <div className="grid grid-cols-2 gap-4">
         <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 hover:border-primary/40 transition-all">
           <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
+        <div className="flex items-center justify-between">
+          <div>
                 <p className="text-sm font-medium text-muted-foreground mb-1">Total Hours</p>
                 <p className="text-3xl font-bold text-primary">{totalHours.toFixed(2)}</p>
-              </div>
+          </div>
               <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
                 <Timer className="h-6 w-6 text-primary" />
               </div>
@@ -999,13 +974,13 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
         <Card className="border-2 border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-blue-500/10 hover:border-blue-500/40 transition-all">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
-              <div>
+          <div>
                 <p className="text-sm font-medium text-muted-foreground mb-1">Entries</p>
                 <p className="text-3xl font-bold text-blue-600">{timesheets.length}</p>
-              </div>
+          </div>
               <div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center">
                 <FileText className="h-6 w-6 text-blue-600" />
-              </div>
+        </div>
             </div>
           </CardContent>
         </Card>
@@ -1018,9 +993,10 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
           setEditingTimesheet(null);
           setTimesheetForm({ date: '', hours: '', notes: '' });
         }}
-        className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
+        size="sm"
+        variant="outline"
       >
-        <Plus className="mr-2 h-5 w-5" />
+        <Plus className="mr-2 h-4 w-4" />
         Add Timesheet Entry
       </Button>
 
@@ -1111,8 +1087,8 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
                 <div className="flex items-start gap-4">
                   <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0 border-2 border-primary/30 group-hover:border-primary/50 transition-all">
                     <Timer className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
+              </div>
+              <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -1130,54 +1106,54 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
                             day: 'numeric' 
                           })}</span>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
                           className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditingTimesheet(timesheet.id);
-                            setTimesheetForm({
-                              date: timesheet.date,
-                              hours: timesheet.hours.toString(),
-                              notes: timesheet.notes || '',
-                            });
-                          }}
-                        >
+                        setEditingTimesheet(timesheet.id);
+                        setTimesheetForm({
+                          date: timesheet.date,
+                          hours: timesheet.hours.toString(),
+                          notes: timesheet.notes || '',
+                        });
+                      }}
+                    >
                           <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                           className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm('Are you sure you want to delete this timesheet entry?')) {
-                              deleteTimesheetMutation.mutate(timesheet.id);
-                            }
-                          }}
-                        >
+                        if (confirm('Are you sure you want to delete this timesheet entry?')) {
+                          deleteTimesheetMutation.mutate(timesheet.id);
+                        }
+                      }}
+                    >
                           <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    {timesheet.notes && (
+                    </Button>
+                  </div>
+                </div>
+                {timesheet.notes && (
                       <div className="mt-3 p-3 rounded-lg bg-muted/50 border border-muted">
                         <p className="text-sm text-foreground">{timesheet.notes}</p>
                       </div>
-                    )}
-                    {timesheet.approved_by_name && (
+                )}
+                {timesheet.approved_by_name && (
                       <div className="mt-2 flex items-center gap-2">
                         <Badge variant="outline" className="text-xs border-green-500/50 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30">
                           <CheckCircle className="mr-1 h-3 w-3" />
-                          Approved by {timesheet.approved_by_name}
+                    Approved by {timesheet.approved_by_name}
                         </Badge>
                       </div>
-                    )}
-                  </div>
-                </div>
+                )}
+              </div>
+            </div>
               </CardContent>
             </Card>
           ))}

@@ -58,9 +58,16 @@ export default function MFAVerify() {
         sessionToken as string
       );
 
-      // Store token and user info securely
-      await secureStorageWithCache.setItem("auth_token", response.token);
+      // Store tokens and user info securely
+      // Use accessToken if available, fallback to token for backward compatibility
+      const accessToken = response.accessToken || response.token;
+      await secureStorageWithCache.setItem("auth_token", accessToken);
       await secureStorageWithCache.setItem("user", JSON.stringify(response.user));
+      
+      // Store refresh token if available
+      if (response.refreshToken) {
+        await secureStorageWithCache.setItem("refresh_token", response.refreshToken);
+      }
 
       toast({
         title: "Success",

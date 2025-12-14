@@ -60,21 +60,7 @@ async function request<T>(
       ...config.headers,
       Authorization: `Bearer ${token}`,
     };
-    
-    // Add user ID header for authentication middleware
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        if (user.id) {
-          config.headers = {
-            ...config.headers,
-            'user-id': user.id.toString(),
-          };
-        }
-      } catch (e) {
-        logger.error('Error parsing user from secure storage:', e);
-      }
-    }
+    // Note: user-id header removed - user ID is now in JWT token payload
   }
 
   try {
@@ -83,16 +69,57 @@ async function request<T>(
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: response.statusText }));
       
-      // Handle 401 errors - clear cache, logout, and navigate to login
+      // Handle 401 errors - try to refresh token first, then logout if that fails
       if (response.status === 401) {
         const errorMessage = error.error || error.message || '';
+        const errorCode = error.code || '';
+        
+        // If access token expired, try to refresh it
+        if (errorCode === 'TOKEN_EXPIRED' || errorMessage.includes('Access token expired')) {
+          try {
+            const refreshToken = await secureStorageWithCache.getItem('refresh_token');
+            if (refreshToken) {
+              logger.info('Access token expired, attempting to refresh...');
+              const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken }),
+              });
+              
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json();
+                const newAccessToken = refreshData.accessToken || refreshData.token;
+                
+                // Store new access token
+                await secureStorageWithCache.setItem('auth_token', newAccessToken);
+                
+                // Retry original request with new token
+                config.headers = {
+                  ...config.headers,
+                  Authorization: `Bearer ${newAccessToken}`,
+                };
+                
+                const retryResponse = await fetch(url, config);
+                if (retryResponse.ok) {
+                  const retryData = await retryResponse.json();
+                  return retryData;
+                }
+              }
+            }
+          } catch (refreshError) {
+            logger.warn('Token refresh failed:', refreshError);
+            // Fall through to logout
+          }
+        }
         
         // Check if it's an authentication error that requires logout
         if (errorMessage.includes('Invalid token') || 
             errorMessage.includes('User not found') ||
             errorMessage.includes('expired') || 
             errorMessage.includes('Authentication required') ||
-            errorMessage.includes('Please login')) {
+            errorMessage.includes('Please login') ||
+            errorCode === 'INVALID_TOKEN' ||
+            errorCode === 'REFRESH_TOKEN_EXPIRED') {
           // This is a real auth error - logout the user
           logger.warn('Authentication error detected, logging out user:', errorMessage);
           // Force logout will clear cache and navigate to login
@@ -196,16 +223,7 @@ export const employeesApi = {
       const headers: HeadersInit = {};
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
-        if (userStr) {
-          try {
-            const user = JSON.parse(userStr);
-            if (user.id) {
-              headers['user-id'] = user.id.toString();
-            }
-          } catch (e) {
-            logger.error('Error parsing user from secure storage:', e);
-          }
-        }
+        // Note: user-id header removed - user ID is now in JWT token payload
       }
       
       const response = await fetch(`${API_BASE_URL}/employees/${id}/documents`, {
@@ -312,16 +330,7 @@ export const projectsApi = {
       const headers: HeadersInit = {};
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
-        if (userStr) {
-          try {
-            const user = JSON.parse(userStr);
-            if (user.id) {
-              headers['user-id'] = user.id.toString();
-            }
-          } catch (e) {
-            logger.error('Error parsing user from secure storage:', e);
-          }
-        }
+        // Note: user-id header removed - user ID is now in JWT token payload
       }
       
       const response = await fetch(`${API_BASE_URL}/projects/${id}/files`, {
@@ -548,16 +557,7 @@ export const bugsApi = {
       
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
-        if (userStr) {
-          try {
-            const user = JSON.parse(userStr);
-            if (user.id) {
-              headers['user-id'] = user.id.toString();
-            }
-          } catch (e) {
-            logger.error('Error parsing user from secure storage:', e);
-          }
-        }
+        // Note: user-id header removed - user ID is now in JWT token payload
       }
       
       const response = await fetch(`${API_BASE_URL}/bugs`, {
@@ -618,6 +618,15 @@ export const bugsApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  uploadAttachments: (id: number, files: File[]) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append('attachments', file));
+    return request<{ data: any[]; message: string }>(`/bugs/${id}/attachments`, {
+      method: 'POST',
+      body: formData,
+      headers: {}, // Let browser set Content-Type for FormData
+    });
+  },
 };
 
 
@@ -706,7 +715,17 @@ export const reimbursementsApi = {
 // Auth API
 export const authApi = {
   login: (email: string, password: string) =>
-    request<{ token: string; user: any; requiresMfa?: boolean; userId?: number; sessionToken?: string; requiresMfaSetup?: boolean }>('/auth/login', {
+    request<{ 
+      token: string; // Backward compatibility (same as accessToken)
+      accessToken?: string;
+      refreshToken?: string;
+      user: any; 
+      requiresMfa?: boolean; 
+      userId?: number; 
+      sessionToken?: string; 
+      requiresMfaSetup?: boolean;
+      expiresIn?: number;
+    }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -733,7 +752,14 @@ export const mfaApi = {
       body: JSON.stringify({ code, backupCode }),
     }),
   verify: (userId: number, code: string, backupCode?: string, sessionToken?: string) =>
-    request<{ success: boolean; token: string; user: any }>('/mfa/verify', {
+    request<{ 
+      success: boolean; 
+      token: string; // Backward compatibility
+      accessToken?: string;
+      refreshToken?: string;
+      user: any;
+      expiresIn?: number;
+    }>('/mfa/verify', {
       method: 'POST',
       body: JSON.stringify({ userId, code, backupCode, sessionToken }),
     }),

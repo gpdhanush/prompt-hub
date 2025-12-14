@@ -103,39 +103,50 @@ export default function BugDetail() {
     }
   };
 
-  const handleDownloadAttachment = (attachment: any) => {
-    const API_BASE_URL = API_CONFIG.BASE_URL;
-    const token = getAuthToken();
-    // Use the path from attachment to download
-    const url = `${API_BASE_URL}/bugs/${id}/attachments/${attachment.id}`;
-    
-    fetch(url, {
-      headers: {
+  const handleDownloadAttachment = async (attachment: any) => {
+    try {
+      const API_BASE_URL = API_CONFIG.BASE_URL;
+      const token = getAuthToken();
+      const currentUser = getCurrentUser();
+      const url = `${API_BASE_URL}/bugs/${id}/attachments/${attachment.id}`;
+      
+      const headers: HeadersInit = {
         'Authorization': `Bearer ${token}`,
-      },
-    })
-      .then(response => {
-        if (!response.ok) throw new Error('Failed to download');
-        return response.blob();
-      })
-      .then(blob => {
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = attachment.original_filename || 'attachment';
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(downloadUrl);
-        document.body.removeChild(a);
-      })
-      .catch(error => {
-        logger.error('Download error:', error);
-        toast({
-          title: "Error",
-          description: "Failed to download attachment.",
-          variant: "destructive",
-        });
+      };
+      
+      // Note: user-id header removed - user ID is now in JWT token payload
+      
+      const response = await fetch(url, {
+        headers,
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(errorData.error || `Failed to download: ${response.status} ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = attachment.original_filename || 'attachment';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+      
+      toast({
+        title: "Success",
+        description: "Attachment downloaded successfully.",
+      });
+    } catch (error: any) {
+      logger.error('Download error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to download attachment.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (isLoading) {
@@ -339,11 +350,11 @@ export default function BugDetail() {
                       </div>
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => handleDownloadAttachment(attachment)}
+                        title="Download"
                       >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
+                        <Download className="h-4 w-4" />
                       </Button>
                     </div>
                   ))}
@@ -394,29 +405,16 @@ export default function BugDetail() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm text-muted-foreground">Severity</Label>
+                <Label className="text-sm text-muted-foreground">Priority</Label>
                 <div>
                   <StatusBadge 
-                    variant={bugSeverityMap[bug.severity as keyof typeof bugSeverityMap] || 'neutral'}
+                    variant={bug.severity === 'High' ? 'error' : bug.severity === 'Medium' ? 'warning' : bug.severity === 'Low' ? 'info' : 'neutral'}
                     className="text-xs px-2.5 py-0.5 w-fit"
                   >
                     {bug.severity || 'Low'}
                   </StatusBadge>
                 </div>
               </div>
-              {bug.priority && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm text-muted-foreground">Priority</Label>
-                  <div>
-                    <StatusBadge 
-                      variant={bug.priority === 'P1' ? 'error' : bug.priority === 'P2' ? 'warning' : 'neutral'}
-                      className="text-xs px-2.5 py-0.5 w-fit"
-                    >
-                      {bug.priority}
-                    </StatusBadge>
-                  </div>
-                </div>
-              )}
               {bug.bug_type && (
                 <div className="space-y-1.5">
                   <Label className="text-sm text-muted-foreground">Bug Type</Label>

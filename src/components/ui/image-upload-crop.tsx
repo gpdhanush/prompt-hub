@@ -145,10 +145,7 @@ export function ImageUploadCrop({ value, onChange, aspect = 1, className, disabl
       const headers: HeadersInit = {
         'Authorization': `Bearer ${token || ''}`,
       };
-      
-      if (userId) {
-        headers['user-id'] = userId.toString();
-      }
+      // Note: user-id header removed - user ID is now in JWT token payload
       
       const response = await fetch(`${API_BASE_URL}/employees/upload-profile-photo`, {
         method: 'POST',

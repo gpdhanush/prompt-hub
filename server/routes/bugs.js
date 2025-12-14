@@ -736,6 +736,61 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
   }
 });
 
+// Upload attachments to existing bug
+router.post('/:id/attachments', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), upload.array('attachments', 10), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+    
+    // Check if bug exists
+    const [bugs] = await db.query('SELECT id FROM bugs WHERE id = ?', [id]);
+    if (bugs.length === 0) {
+      // Clean up uploaded files
+      req.files.forEach((file) => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+    
+    const uploadedFiles = [];
+    for (const file of req.files) {
+      const [attachmentResult] = await db.query(`
+        INSERT INTO attachments (
+          bug_id, uploaded_by, path, original_filename, mime_type, size
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [id, userId, file.path, file.originalname, file.mimetype, file.size]);
+      
+      uploadedFiles.push({
+        id: attachmentResult.insertId,
+        path: file.path,
+        original_filename: file.originalname,
+        mime_type: file.mimetype,
+        size: file.size
+      });
+    }
+    
+    res.json({ data: uploadedFiles, message: 'Files uploaded successfully' });
+  } catch (error) {
+    logger.error('Error uploading bug attachments:', error);
+    // Clean up uploaded files on error
+    if (req.files) {
+      req.files.forEach((file) => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Download attachment
 router.get('/:bugId/attachments/:attachmentId', async (req, res) => {
   try {
@@ -752,10 +807,27 @@ router.get('/:bugId/attachments/:attachmentId', async (req, res) => {
     }
     
     const attachment = attachments[0];
-    const filePath = attachment.path;
+    let filePath = attachment.path;
+    
+    // file.path from multer is the full absolute path
+    // If it's already absolute, use it directly
+    // If it's relative (starts with /uploads/), resolve it relative to process.cwd()
+    if (!path.isAbsolute(filePath)) {
+      if (filePath.startsWith('/uploads/')) {
+        filePath = path.join(process.cwd(), filePath);
+      } else {
+        filePath = path.resolve(process.cwd(), filePath);
+      }
+    }
+    
+    // Normalize the path to handle any path separators
+    filePath = path.normalize(filePath);
     
     // Check if file exists
     if (!fs.existsSync(filePath)) {
+      logger.error(`File not found at path: ${filePath}`);
+      logger.error(`Original path from DB: ${attachment.path}`);
+      logger.error(`Process CWD: ${process.cwd()}`);
       return res.status(404).json({ error: 'File not found on server' });
     }
     
@@ -763,8 +835,8 @@ router.get('/:bugId/attachments/:attachmentId', async (req, res) => {
     res.setHeader('Content-Type', attachment.mime_type || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${attachment.original_filename || 'attachment'}"`);
     
-    // Send file
-    res.sendFile(path.resolve(filePath));
+    // Send file - use absolute path
+    res.sendFile(filePath);
   } catch (error) {
     logger.error('Error downloading attachment:', error);
     res.status(500).json({ error: error.message });

@@ -1,25 +1,26 @@
 import express from 'express';
 import { db } from '../config/database.js';
 import { logger } from '../utils/logger.js';
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
+import { storeRefreshToken, findRefreshToken, revokeRefreshToken, revokeAllUserTokens } from '../utils/refreshTokenService.js';
+import { validate, schemas } from '../middleware/validation.js';
+import { authenticate } from '../middleware/auth.js';
+import crypto from 'crypto';
 
 const router = express.Router();
 
-// Login
-router.post('/login', async (req, res) => {
+// Login with JWT Access + Refresh Tokens
+router.post('/login', validate(schemas.login), async (req, res) => {
   try {
     const { email, password } = req.body;
     
     logger.debug('Login attempt for email:', email);
     
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
-    
     const [users] = await db.query(`
       SELECT u.*, r.name as role
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
-      WHERE u.email = ?
+      WHERE u.email = ? AND u.status = 'Active'
     `, [email]);
     
     if (users.length === 0) {
@@ -65,9 +66,6 @@ router.post('/login', async (req, res) => {
       // Generate temporary session token for MFA verification
       const sessionToken = `mfa-session-${user.id}-${Date.now()}`;
       
-      // Store session token temporarily (in production, use Redis or similar)
-      // For now, we'll return it and verify it in the MFA route
-      
       return res.json({
         requiresMfa: true,
         userId: user.id,
@@ -79,17 +77,52 @@ router.post('/login', async (req, res) => {
     // Update last login
     await db.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
     
-    // In production, generate JWT token here
-    const token = 'mock-jwt-token'; // Replace with actual JWT
+    // Generate JWT tokens
+    // Access token: 15 minutes (configurable via user's session_timeout or default)
+    const accessTokenExpiry = user.session_timeout || 15;
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      roleId: user.role_id
+    }, accessTokenExpiry);
+    
+    // Refresh token: 30 days
+    const { token: refreshToken, tokenId } = generateRefreshToken(user.id, 30);
+    
+    // Hash refresh token before storing
+    const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    
+    // Calculate expiration date (30 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+    
+    // Store refresh token in database
+    const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    
+    await storeRefreshToken(
+      user.id,
+      tokenId,
+      refreshTokenHash,
+      expiresAt,
+      ipAddress,
+      userAgent
+    );
+    
+    logger.info(`User ${user.email} logged in successfully`);
     
     res.json({
-      token,
+      token: accessToken, // Backward compatibility
+      accessToken,
+      refreshToken,
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role
-      }
+      },
+      expiresIn: accessTokenExpiry * 60 // seconds
     });
   } catch (error) {
     logger.error('Login error:', error);
@@ -97,11 +130,128 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Get current user
-router.get('/me', async (req, res) => {
+// Refresh Access Token using Refresh Token
+router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
   try {
-    // In production, verify JWT token from headers
-    const userId = req.headers['user-id'] || 1; // Mock for now
+    const { refreshToken } = req.body;
+    
+    // Verify refresh token
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch (error) {
+      if (error.message === 'Refresh token expired') {
+        return res.status(401).json({ 
+          error: 'Refresh token expired. Please login again.',
+          code: 'REFRESH_TOKEN_EXPIRED'
+        });
+      }
+      return res.status(401).json({ 
+        error: 'Invalid refresh token.',
+        code: 'INVALID_REFRESH_TOKEN'
+      });
+    }
+    
+    // Check if token exists in database and is not revoked
+    const tokenRecord = await findRefreshToken(decoded.tokenId);
+    if (!tokenRecord) {
+      return res.status(401).json({ 
+        error: 'Refresh token not found or revoked.',
+        code: 'TOKEN_REVOKED'
+      });
+    }
+    
+    // Verify token hash matches
+    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    if (tokenRecord.token_hash !== tokenHash) {
+      logger.warn('Token hash mismatch for token ID:', decoded.tokenId);
+      return res.status(401).json({ 
+        error: 'Invalid refresh token.',
+        code: 'INVALID_REFRESH_TOKEN'
+      });
+    }
+    
+    // Get user from database
+    const [users] = await db.query(`
+      SELECT u.*, r.name as role
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = ? AND u.status = 'Active'
+    `, [decoded.userId]);
+    
+    if (users.length === 0) {
+      return res.status(401).json({ 
+        error: 'User not found or inactive.',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+    
+    const user = users[0];
+    
+    // Generate new access token
+    const accessTokenExpiry = user.session_timeout || 15;
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      roleId: user.role_id
+    }, accessTokenExpiry);
+    
+    logger.debug(`Access token refreshed for user ${user.email}`);
+    
+    res.json({
+      accessToken,
+      expiresIn: accessTokenExpiry * 60 // seconds
+    });
+  } catch (error) {
+    logger.error('Refresh token error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Logout - Revoke refresh token
+router.post('/logout', authenticate, async (req, res) => {
+  try {
+    const refreshToken = req.body.refreshToken;
+    
+    if (refreshToken) {
+      try {
+        const decoded = verifyRefreshToken(refreshToken);
+        await revokeRefreshToken(decoded.tokenId);
+        logger.info(`Refresh token revoked for user ${req.user.id}`);
+      } catch (error) {
+        // Token might be invalid, but we still want to logout
+        logger.debug('Error revoking refresh token:', error.message);
+      }
+    }
+    
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    logger.error('Logout error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Logout from all devices - Revoke all refresh tokens
+router.post('/logout-all', authenticate, async (req, res) => {
+  try {
+    const count = await revokeAllUserTokens(req.user.id);
+    logger.info(`All refresh tokens revoked for user ${req.user.id} (${count} tokens)`);
+    
+    res.json({ 
+      message: 'Logged out from all devices successfully',
+      tokensRevoked: count
+    });
+  } catch (error) {
+    logger.error('Logout all error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get current user (requires authentication)
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
     
     const [users] = await db.query(`
       SELECT 
@@ -133,7 +283,9 @@ router.get('/me', async (req, res) => {
       } : null
     };
     
-    // Remove duplicate fields
+    // Remove sensitive fields
+    delete response.password_hash;
+    delete response.mfa_secret;
     delete response.employee_id;
     delete response.profile_photo_url;
     delete response.emp_code;
@@ -146,13 +298,9 @@ router.get('/me', async (req, res) => {
 });
 
 // Update current user's profile
-router.put('/me/profile', async (req, res) => {
+router.put('/me/profile', authenticate, validate(schemas.updateProfile), async (req, res) => {
   try {
-    const userId = req.headers['user-id'];
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'User ID not provided' });
-    }
+    const userId = req.user.id;
     
     const { name, email, mobile, password, oldPassword, session_timeout } = req.body;
     
@@ -239,13 +387,9 @@ router.put('/me/profile', async (req, res) => {
 });
 
 // Get current user's permissions
-router.get('/me/permissions', async (req, res) => {
+router.get('/me/permissions', authenticate, async (req, res) => {
   try {
-    const userId = req.headers['user-id'];
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'User ID not provided' });
-    }
+    const userId = req.user.id;
     
     // Get user's role
     const [users] = await db.query(`
