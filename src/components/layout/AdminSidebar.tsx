@@ -123,7 +123,11 @@ export function AdminSidebar() {
     // - /it-assets/* routes
     // Special handling for /employees/list - it should not match /employees
     if (href === '/employees') {
-      return location.pathname === href || (location.pathname.startsWith(href + '/') && !location.pathname.startsWith('/employees/list'));
+      return location.pathname === href || (location.pathname.startsWith(href + '/') && !location.pathname.startsWith('/employees/list') && !location.pathname.startsWith('/employees/') && !location.pathname.match(/^\/employees\/\d+\/view$/));
+    }
+    // Special handling for Employee Directory - should match /employees/list and /employees/:id/view
+    if (href === '/employees/list') {
+      return location.pathname === href || location.pathname.match(/^\/employees\/\d+\/view$/);
     }
     return location.pathname === href || location.pathname.startsWith(href + '/');
   };

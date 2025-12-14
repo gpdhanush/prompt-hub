@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import http from 'http';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
@@ -75,7 +76,9 @@ const PORT = SERVER_CONFIG.PORT;
 
 // Configure Express to trust proxies (for accurate IP address detection)
 // This allows req.ip to work correctly when behind a reverse proxy
-app.set('trust proxy', true);
+// Set to 1 to trust only the first proxy (more secure than true)
+// In production behind a reverse proxy, set this to the number of proxies
+app.set('trust proxy', SERVER_CONFIG.NODE_ENV === 'production' ? 1 : false);
 
 // Security Middleware - Helmet
 app.use(helmet({
@@ -104,8 +107,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Global Rate Limiting
-const globalRateLimiter = rateLimit({
+// Global Rate Limiting - Disabled in development/testing environments
+if (SERVER_CONFIG.NODE_ENV !== 'production') {
+  logger.info('⚠️  Rate limiting is DISABLED (non-production environment)');
+}
+
+const globalRateLimiter = SERVER_CONFIG.NODE_ENV === 'production' ? rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
   message: {
@@ -114,17 +121,19 @@ const globalRateLimiter = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Configure trust proxy properly - only trust first proxy in production
+  trustProxy: true,
   skip: (req) => {
     // Skip rate limiting for health checks
     return req.path === '/health' || req.path === '/api/test-db';
   }
-});
+}) : (req, res, next) => next(); // No-op middleware for non-production
 
-// Apply rate limiting to all API routes
+// Apply rate limiting to all API routes (only in production)
 app.use('/api', globalRateLimiter);
 
-// Stricter rate limiting for auth routes
-const authRateLimiter = rateLimit({
+// Stricter rate limiting for auth routes - Disabled in development/testing environments
+const authRateLimiter = SERVER_CONFIG.NODE_ENV === 'production' ? rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Limit each IP to 5 login attempts per windowMs
   message: {
@@ -133,8 +142,10 @@ const authRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Configure trust proxy properly - only trust first proxy in production
+  trustProxy: true,
   skipSuccessfulRequests: true // Don't count successful requests
-});
+}) : (req, res, next) => next(); // No-op middleware for non-production
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -153,9 +164,42 @@ if (!fs.existsSync(uploadsPath)) {
 
 app.use('/uploads', express.static(uploadsPath));
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    // Check database connection
+    let dbStatus = 'unknown';
+    try {
+      await db.query('SELECT 1 as test');
+      dbStatus = 'connected';
+    } catch (dbError) {
+      dbStatus = 'disconnected';
+      logger.warn('Database health check failed:', dbError.message);
+    }
+    
+    const health = {
+      status: dbStatus === 'connected' ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      services: {
+        database: dbStatus,
+        server: 'running'
+      }
+    };
+    
+    // Return 503 if database is disconnected
+    if (dbStatus === 'disconnected') {
+      return res.status(503).json(health);
+    }
+    
+    res.json(health);
+  } catch (error) {
+    logger.error('Health check error:', error);
+    res.status(503).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
 });
 
 // Test database connection
@@ -248,10 +292,10 @@ app.use((req, res) => {
     } catch (error) {
       logger.error('❌ Failed to load SSL certificates:', error.message);
       logger.warn('⚠️  Falling back to HTTP');
-      server = app;
+      server = http.createServer(app);
     }
   } else {
-    server = app;
+    server = http.createServer(app);
     if (SERVER_CONFIG.NODE_ENV === 'production') {
       logger.warn('⚠️  HTTPS is not enabled. Consider enabling HTTPS in production.');
     }

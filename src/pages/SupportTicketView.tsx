@@ -238,8 +238,8 @@ export default function SupportTicketView() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-green-500/20 to-green-600/10">
-                <Ticket className="h-6 w-6 text-green-600 dark:text-green-400" />
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Ticket className="h-6 w-6 text-primary" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold">Ticket #{ticket.ticket_number}</h1>
@@ -427,7 +427,7 @@ export default function SupportTicketView() {
                     onClick={handleAddComment}
                     disabled={!comment.trim() || addCommentMutation.isPending}
                     size="sm"
-                    className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+                    className="bg-primary hover:bg-primary/90"
                   >
                     {addCommentMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -561,7 +561,7 @@ export default function SupportTicketView() {
                       onClick={handleUploadFile}
                       disabled={uploadAttachmentMutation.isPending}
                       size="sm"
-                      className="w-full"
+                      className="w-full bg-primary hover:bg-primary/90"
                     >
                       {uploadAttachmentMutation.isPending ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />

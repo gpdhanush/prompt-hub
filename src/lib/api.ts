@@ -26,6 +26,15 @@ function setGlobalLoading(loading: boolean) {
   loadingCallbacks.forEach(callback => callback(loading));
 }
 
+/**
+ * Get CSRF token from meta tag if available
+ */
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const metaTag = document.querySelector('meta[name="csrf-token"]');
+  return metaTag ? metaTag.getAttribute('content') : null;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -34,9 +43,14 @@ async function request<T>(
   setGlobalLoading(true);
   const url = `${API_BASE_URL}${endpoint}`;
   
+  // Get CSRF token if available
+  const csrfToken = getCsrfToken();
+  
   const config: RequestInit = {
+    credentials: 'include', // Include cookies for HttpOnly cookie support
     headers: {
       'Content-Type': 'application/json',
+      ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
       ...options.headers,
     },
     ...options,
@@ -75,13 +89,14 @@ async function request<T>(
         const errorCode = error.code || '';
         
         // If access token expired, try to refresh it
-        if (errorCode === 'TOKEN_EXPIRED' || errorMessage.includes('Access token expired')) {
+        if (errorCode === 'TOKEN_EXPIRED' || errorMessage.includes('Access token expired') || errorMessage.includes('expired')) {
           try {
             const refreshToken = await secureStorageWithCache.getItem('refresh_token');
             if (refreshToken) {
               logger.info('Access token expired, attempting to refresh...');
               const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refreshToken }),
               });
@@ -90,21 +105,42 @@ async function request<T>(
                 const refreshData = await refreshResponse.json();
                 const newAccessToken = refreshData.accessToken || refreshData.token;
                 
-                // Store new access token
-                await secureStorageWithCache.setItem('auth_token', newAccessToken);
-                
-                // Retry original request with new token
-                config.headers = {
-                  ...config.headers,
-                  Authorization: `Bearer ${newAccessToken}`,
-                };
-                
-                const retryResponse = await fetch(url, config);
-                if (retryResponse.ok) {
-                  const retryData = await retryResponse.json();
-                  return retryData;
+                if (newAccessToken) {
+                  // Store new access token
+                  await secureStorageWithCache.setItem('auth_token', newAccessToken);
+                  
+                  // Also update refresh token if provided
+                  if (refreshData.refreshToken) {
+                    await secureStorageWithCache.setItem('refresh_token', refreshData.refreshToken);
+                  }
+                  
+                  logger.info('Token refreshed successfully, retrying original request...');
+                  
+                  // Retry original request with new token
+                  const retryConfig: RequestInit = {
+                    ...config,
+                    headers: {
+                      ...config.headers,
+                      Authorization: `Bearer ${newAccessToken}`,
+                    },
+                  };
+                  
+                  const retryResponse = await fetch(url, retryConfig);
+                  if (retryResponse.ok) {
+                    const retryData = await retryResponse.json();
+                    return retryData;
+                  }
+                  
+                  // If retry also fails with 401, fall through to logout
+                  if (retryResponse.status === 401) {
+                    logger.warn('Retry after token refresh also returned 401, logging out');
+                  }
                 }
+              } else {
+                logger.warn('Token refresh failed with status:', refreshResponse.status);
               }
+            } else {
+              logger.warn('No refresh token available');
             }
           } catch (refreshError) {
             logger.warn('Token refresh failed:', refreshError);
@@ -112,22 +148,40 @@ async function request<T>(
           }
         }
         
-        // Check if it's an authentication error that requires logout
-        if (errorMessage.includes('Invalid token') || 
-            errorMessage.includes('User not found') ||
-            errorMessage.includes('expired') || 
-            errorMessage.includes('Authentication required') ||
-            errorMessage.includes('Please login') ||
-            errorCode === 'INVALID_TOKEN' ||
-            errorCode === 'REFRESH_TOKEN_EXPIRED') {
-          // This is a real auth error - logout the user
-          logger.warn('Authentication error detected, logging out user:', errorMessage);
-          // Force logout will clear cache and navigate to login
-          // Page will reload, so we don't need to throw error
-          await forceLogout(errorMessage);
-          // Return a rejected promise - navigation will happen via window.location
-          return Promise.reject(new ApiError(401, 'Session expired. Please login again.'));
+        // All 401 errors should trigger logout (after refresh attempt if applicable)
+        // Show alert and logout
+        logger.warn('401 Unauthorized - logging out user:', errorMessage);
+        
+        // Determine error message based on error code
+        let toastTitle = "Unauthorized";
+        let toastDescription = "Your session has expired. Please login again.";
+        
+        if (errorCode === 'SESSION_INVALIDATED') {
+          toastTitle = "Session Invalidated";
+          toastDescription = "You have logged in from another device. Please login again.";
+        } else if (errorCode === 'TOKEN_REVOKED' || errorMessage.includes('revoked')) {
+          toastTitle = "Session Revoked";
+          toastDescription = "Your session has been revoked. Please login again.";
         }
+        
+        // Show alert using toast (dynamically import to avoid circular dependencies)
+        try {
+          const { toast } = await import('@/hooks/use-toast');
+          toast({
+            title: toastTitle,
+            description: toastDescription,
+            variant: "destructive",
+          });
+        } catch (toastError) {
+          // If toast import fails, use alert as fallback
+          alert(`${toastTitle}: ${toastDescription}`);
+        }
+        
+        // Force logout will clear cache and navigate to login
+        await forceLogout(errorMessage);
+        
+        // Return a rejected promise - navigation will happen via window.location
+        return Promise.reject(new ApiError(401, 'Unauthorized. Please login again.'));
       }
       
       throw new ApiError(response.status, error.error || 'Request failed');
@@ -198,6 +252,11 @@ export const employeesApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  updateMyProfile: (data: any) =>
+    request<{ data: any }>('/employees/my-profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   delete: (id: number) =>
     request<{ message: string }>(`/employees/${id}`, {
       method: 'DELETE',
@@ -223,11 +282,11 @@ export const employeesApi = {
       const headers: HeadersInit = {};
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
-        // Note: user-id header removed - user ID is now in JWT token payload
       }
       
       const response = await fetch(`${API_BASE_URL}/employees/${id}/documents`, {
         method: 'POST',
+        credentials: 'include',
         headers,
         body: formData,
       });
@@ -250,6 +309,53 @@ export const employeesApi = {
             // Force logout will clear cache and navigate to login
             await forceLogout(errorMessage);
             // Return a rejected promise - navigation will happen via window.location
+            return Promise.reject(new ApiError(401, 'Session expired. Please login again.'));
+          }
+        }
+        
+        throw new ApiError(response.status, errorData.error || 'Request failed');
+      }
+      
+      return await response.json();
+    } finally {
+      setGlobalLoading(false);
+    }
+  },
+  uploadMyDocument: async (formData: FormData) => {
+    const API_BASE_URL = API_CONFIG.BASE_URL;
+    setGlobalLoading(true);
+    
+    try {
+      let token = getItemSync('auth_token');
+      if (!token) {
+        token = await secureStorageWithCache.getItem('auth_token');
+      }
+      
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/employees/my-documents`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        
+        // Handle 401 errors
+        if (response.status === 401) {
+          const errorMessage = errorData.error || errorData.message || '';
+          if (errorMessage.includes('Invalid token') || 
+              errorMessage.includes('User not found') ||
+              errorMessage.includes('expired') || 
+              errorMessage.includes('Authentication required') ||
+              errorMessage.includes('Please login')) {
+            logger.warn('Authentication error detected, logging out user:', errorMessage);
+            await forceLogout(errorMessage);
             return Promise.reject(new ApiError(401, 'Session expired. Please login again.'));
           }
         }
@@ -335,6 +441,7 @@ export const projectsApi = {
       
       const response = await fetch(`${API_BASE_URL}/projects/${id}/files`, {
         method: 'POST',
+        credentials: 'include',
         headers,
         body: formData,
       });
@@ -562,6 +669,7 @@ export const bugsApi = {
       
       const response = await fetch(`${API_BASE_URL}/bugs`, {
         method: 'POST',
+        credentials: 'include',
         headers,
         body: formData,
       });
@@ -729,6 +837,54 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
+  logout: async (refreshToken?: string) => {
+    try {
+      // Call backend logout API to revoke refresh token
+      // Use direct fetch to bypass 401 handler (since token may already be expired)
+      const refreshTokenToUse = refreshToken || await secureStorageWithCache.getItem('refresh_token');
+      
+      // Get auth token for Authorization header (required by logout API)
+      let authToken = getItemSync('auth_token');
+      if (!authToken) {
+        authToken = await secureStorageWithCache.getItem('auth_token');
+      }
+      
+      if (refreshTokenToUse) {
+        try {
+          const headers: HeadersInit = {
+            'Content-Type': 'application/json',
+          };
+          
+          // Add Authorization header if token is available
+          if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+          }
+          
+          const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+            method: 'POST',
+            credentials: 'include',
+            headers,
+            body: JSON.stringify({ refreshToken: refreshTokenToUse }),
+          });
+          
+          // Don't throw on 401 - token is already expired/invalid, which is expected during logout
+          if (!response.ok && response.status !== 401) {
+            const error = await response.json().catch(() => ({ error: response.statusText }));
+            logger.warn('Logout API call failed:', error);
+          } else if (response.status === 401) {
+            // 401 is expected if token is expired - silently ignore
+            logger.debug('Logout API returned 401 (token already expired, continuing with frontend logout)');
+          }
+        } catch (fetchError) {
+          // Network errors or other issues - log but don't throw
+          logger.warn('Logout API call failed (network error):', fetchError);
+        }
+      }
+    } catch (error) {
+      // Log error but don't throw - we still want to clear frontend state
+      logger.warn('Logout API call failed (continuing with frontend logout):', error);
+    }
+  },
   getMe: () =>
     request<{ data: any }>('/auth/me'),
   getPermissions: () =>
@@ -884,17 +1040,28 @@ export const auditLogsApi = {
     request<{ message: string; restoredData: any }>(`/audit-logs/${id}/restore`, {
       method: 'POST',
     }),
-  exportCSV: (params?: {
+  exportCSV: async (params?: {
     startDate?: string;
     endDate?: string;
     action?: string;
     module?: string;
   }) => {
     const queryString = new URLSearchParams(params as any).toString();
+    
+    // Get token from secure storage (consistent with other endpoints)
+    let token = getItemSync('auth_token');
+    if (!token) {
+      token = await secureStorageWithCache.getItem('auth_token');
+    }
+    
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     return fetch(`${API_CONFIG.BASE_URL}/audit-logs/export/csv${queryString ? `?${queryString}` : ''}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      },
+      credentials: 'include',
+      headers,
     });
   },
 };

@@ -262,12 +262,12 @@ export default function EmployeeProfile() {
                       </div>
                     </div>
                   )}
-                  {employee.skype && (
+                  {employee.teams_id && (
                     <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
                       <MessageCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-muted-foreground mb-1">Skype</p>
-                        <p className="text-base font-semibold">{employee.skype}</p>
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Teams ID</p>
+                        <p className="text-base font-semibold">{employee.teams_id}</p>
                       </div>
                     </div>
                   )}

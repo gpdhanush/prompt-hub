@@ -15,4 +15,8 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Disable source maps in production to prevent reverse engineering
+    sourcemap: mode === 'development',
+  },
 }));

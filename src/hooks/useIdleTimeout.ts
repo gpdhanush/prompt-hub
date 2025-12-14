@@ -25,10 +25,23 @@ export function useIdleTimeout({
 
   const logout = useCallback(async () => {
     try {
+      // Try to call backend logout API to revoke refresh token
+      try {
+        const { authApi } = await import('@/lib/api');
+        const refreshToken = await secureStorageWithCache.getItem('refresh_token');
+        if (refreshToken) {
+          await authApi.logout(refreshToken);
+        }
+      } catch (apiError) {
+        // Log but don't throw - we still want to clear frontend state
+        console.warn('Logout API call failed during idle timeout (continuing):', apiError);
+      }
+      
       // Clear secure storage
       await secureStorageWithCache.removeItem('auth_token');
       await secureStorageWithCache.removeItem('user');
       await secureStorageWithCache.removeItem('remember_me');
+      await secureStorageWithCache.removeItem('refresh_token');
       
       // Clear any other auth-related data
       localStorage.removeItem('auth_token');

@@ -93,6 +93,7 @@ export const bugStatusMap = {
   Retesting: "purple",
   Passed: "success",
   Completed: "success",
+  Closed: "success",
   Rejected: "neutral",
   Duplicate: "neutral",
   "Not a Bug": "neutral",

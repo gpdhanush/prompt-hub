@@ -53,8 +53,6 @@ export default function ProjectCreate() {
     client_phone: "",
     start_date: "",
     end_date: "",
-    target_end_date: "",
-    actual_end_date: "",
     status: "Not Started",
     progress: 0,
     risk_level: "",
@@ -333,7 +331,7 @@ export default function ProjectCreate() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-6xl">
+    <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={() => navigate('/projects')}>
@@ -411,58 +409,45 @@ export default function ProjectCreate() {
         <Card>
           <CardHeader>
             <CardTitle>Client Details</CardTitle>
-            <CardDescription>Optional if internal project</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="is_internal"
-                checked={formData.is_internal}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_internal: checked })}
+            <div className="grid gap-2">
+              <Label htmlFor="client_name">Client Name</Label>
+              <Input
+                id="client_name"
+                value={formData.client_name}
+                onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
+                placeholder="Enter client name"
               />
-              <Label htmlFor="is_internal">Internal Project</Label>
             </div>
-            {!formData.is_internal && (
-              <>
-                <div className="grid gap-2">
-                  <Label htmlFor="client_name">Client Name</Label>
-                  <Input
-                    id="client_name"
-                    value={formData.client_name}
-                    onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
-                    placeholder="Enter client name"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="client_contact_person">Client Contact Person</Label>
-                  <Input
-                    id="client_contact_person"
-                    value={formData.client_contact_person}
-                    onChange={(e) => setFormData({ ...formData, client_contact_person: e.target.value })}
-                    placeholder="Enter contact person name"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="client_email">Client Email</Label>
-                  <Input
-                    id="client_email"
-                    type="email"
-                    value={formData.client_email}
-                    onChange={(e) => setFormData({ ...formData, client_email: e.target.value })}
-                    placeholder="client@example.com"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="client_phone">Client Phone</Label>
-                  <Input
-                    id="client_phone"
-                    value={formData.client_phone}
-                    onChange={(e) => setFormData({ ...formData, client_phone: e.target.value })}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-              </>
-            )}
+            <div className="grid gap-2">
+              <Label htmlFor="client_contact_person">Client Contact Person</Label>
+              <Input
+                id="client_contact_person"
+                value={formData.client_contact_person}
+                onChange={(e) => setFormData({ ...formData, client_contact_person: e.target.value })}
+                placeholder="Enter contact person name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="client_email">Client Email</Label>
+              <Input
+                id="client_email"
+                type="email"
+                value={formData.client_email}
+                onChange={(e) => setFormData({ ...formData, client_email: e.target.value })}
+                placeholder="client@example.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="client_phone">Client Phone</Label>
+              <Input
+                id="client_phone"
+                value={formData.client_phone}
+                onChange={(e) => setFormData({ ...formData, client_phone: e.target.value })}
+                placeholder="+1 (555) 000-0000"
+              />
+            </div>
           </CardContent>
         </Card>
           </TabsContent>
@@ -492,24 +477,6 @@ export default function ProjectCreate() {
                   value={formData.end_date}
                   onChange={(date) => setFormData({ ...formData, end_date: date })}
                   placeholder="Select target end date"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="target_end_date">Target End Date (Alternative)</Label>
-                <DatePicker
-                  id="target_end_date"
-                  value={formData.target_end_date}
-                  onChange={(date) => setFormData({ ...formData, target_end_date: date })}
-                  placeholder="Select target end date"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="actual_end_date">Actual End Date</Label>
-                <DatePicker
-                  id="actual_end_date"
-                  value={formData.actual_end_date}
-                  onChange={(date) => setFormData({ ...formData, actual_end_date: date })}
-                  placeholder="Select actual end date"
                 />
               </div>
             </div>
@@ -1785,29 +1752,9 @@ export default function ProjectCreate() {
           <CardContent className="space-y-4">
             <div className="grid gap-2">
               <Label>Technologies</Label>
-              <div className="flex flex-wrap gap-2">
-                {['Flutter', 'React', 'Node.js', 'MySQL', 'PostgreSQL', 'MongoDB', 'Python', 'Java', 'PHP', 'Vue.js', 'Angular', 'TypeScript', 'Docker', 'AWS', 'Azure', 'Git', 'Redis', 'Elasticsearch', 'GraphQL', 'REST API'].map((tech) => (
-                  <div key={tech} className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id={`tech-${tech}`}
-                      checked={formData.technologies_used.includes(tech)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setFormData({ ...formData, technologies_used: [...formData.technologies_used, tech] });
-                        } else {
-                          setFormData({ ...formData, technologies_used: formData.technologies_used.filter(t => t !== tech) });
-                        }
-                      }}
-                      className="rounded"
-                    />
-                    <Label htmlFor={`tech-${tech}`} className="text-sm font-normal cursor-pointer">{tech}</Label>
-                  </div>
-                ))}
-              </div>
               <div className="mt-2">
                 <Input
-                  placeholder="Add custom technology (press Enter)"
+                  placeholder="Enter technologies used (press Enter to add each technology)"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -1848,21 +1795,21 @@ export default function ProjectCreate() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="github_repo_url">GitHub/Bitbucket Repo URL</Label>
+              <Label htmlFor="github_repo_url">Code Repo URL (Frontend)</Label>
               <Input
                 id="github_repo_url"
                 value={formData.github_repo_url}
                 onChange={(e) => setFormData({ ...formData, github_repo_url: e.target.value })}
-                placeholder="https://github.com/username/repo"
+                placeholder="https://github.com/username/repo or https://bitbucket.org/username/repo"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="bitbucket_repo_url">Bitbucket Repo URL</Label>
+              <Label htmlFor="bitbucket_repo_url">Code Repo URL (Backend)</Label>
               <Input
                 id="bitbucket_repo_url"
                 value={formData.bitbucket_repo_url}
                 onChange={(e) => setFormData({ ...formData, bitbucket_repo_url: e.target.value })}
-                placeholder="https://bitbucket.org/username/repo"
+                placeholder="https://github.com/username/repo or https://bitbucket.org/username/repo"
               />
             </div>
           </CardContent>

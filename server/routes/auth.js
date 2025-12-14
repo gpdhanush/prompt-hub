@@ -74,8 +74,21 @@ router.post('/login', validate(schemas.login), async (req, res) => {
       });
     }
     
-    // Update last login
-    await db.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
+    // Revoke all previous refresh tokens for single-device login
+    await revokeAllUserTokens(user.id);
+    logger.info(`Revoked all previous tokens for user ${user.id} (single-device login)`);
+    
+    // Update last login and increment session version (for single-device login)
+    await db.query(`
+      UPDATE users 
+      SET last_login = CURRENT_TIMESTAMP,
+          session_version = COALESCE(session_version, 0) + 1
+      WHERE id = ?
+    `, [user.id]);
+    
+    // Get updated session version
+    const [updatedUsers] = await db.query('SELECT session_version FROM users WHERE id = ?', [user.id]);
+    const sessionVersion = updatedUsers[0]?.session_version || 1;
     
     // Generate JWT tokens
     // Access token: 15 minutes (configurable via user's session_timeout or default)
@@ -84,7 +97,8 @@ router.post('/login', validate(schemas.login), async (req, res) => {
       userId: user.id,
       email: user.email,
       role: user.role,
-      roleId: user.role_id
+      roleId: user.role_id,
+      sessionVersion // Include session version for single-device validation
     }, accessTokenExpiry);
     
     // Refresh token: 30 days
@@ -188,13 +202,29 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
     
     const user = users[0];
     
-    // Generate new access token
+    // Check session version for single-device login
+    // If refresh token was issued before a new login, the session version won't match
+    const tokenSessionVersion = decoded.sessionVersion;
+    const userSessionVersion = user.session_version || 0;
+    
+    // Note: Old refresh tokens won't have sessionVersion, so we allow them
+    // But if they do have it and it doesn't match, reject
+    if (tokenSessionVersion !== undefined && tokenSessionVersion !== userSessionVersion) {
+      logger.warn(`Session version mismatch during token refresh for user ${user.id}. Token version: ${tokenSessionVersion}, Current version: ${userSessionVersion}`);
+      return res.status(401).json({ 
+        error: 'Your session has been invalidated. Please login again.',
+        code: 'SESSION_INVALIDATED'
+      });
+    }
+    
+    // Generate new access token with current session version
     const accessTokenExpiry = user.session_timeout || 15;
     const accessToken = generateAccessToken({
       userId: user.id,
       email: user.email,
       role: user.role,
-      roleId: user.role_id
+      roleId: user.role_id,
+      sessionVersion: userSessionVersion // Include current session version
     }, accessTokenExpiry);
     
     logger.debug(`Access token refreshed for user ${user.email}`);

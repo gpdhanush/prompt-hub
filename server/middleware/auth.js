@@ -61,6 +61,19 @@ export const authenticate = async (req, res, next) => {
       });
     }
     
+    // Check session version for single-device login
+    // If token has sessionVersion, it must match the user's current session_version
+    const tokenSessionVersion = decoded.sessionVersion;
+    const userSessionVersion = users[0].session_version || 0;
+    
+    if (tokenSessionVersion !== undefined && tokenSessionVersion !== userSessionVersion) {
+      logger.warn(`Session version mismatch for user ${userId}. Token version: ${tokenSessionVersion}, Current version: ${userSessionVersion}`);
+      return res.status(401).json({ 
+        error: 'Your session has been invalidated. Please login again.',
+        code: 'SESSION_INVALIDATED'
+      });
+    }
+    
     req.user = users[0];
     logger.debug('Authenticated user:', req.user.name, 'Role:', req.user.role);
     return next();

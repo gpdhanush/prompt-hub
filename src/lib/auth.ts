@@ -80,6 +80,19 @@ export async function forceLogout(reason?: string): Promise<void> {
   try {
     logger.warn('Force logout triggered', reason ? `Reason: ${reason}` : '');
     
+    // Try to call backend logout API to revoke refresh token
+    try {
+      const { authApi } = await import('./api');
+      const { secureStorageWithCache } = await import('./secureStorage');
+      const refreshToken = await secureStorageWithCache.getItem('refresh_token');
+      if (refreshToken) {
+        await authApi.logout(refreshToken);
+      }
+    } catch (apiError) {
+      // Log but don't throw - we still want to clear frontend state
+      logger.warn('Logout API call failed during force logout (continuing):', apiError);
+    }
+    
     // Clear authentication data from secure storage
     await clearAuth();
     

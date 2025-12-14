@@ -32,6 +32,8 @@ import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { projectsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
@@ -186,22 +188,6 @@ export default function Projects() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 border rounded-md p-1">
-            <Button
-              variant={viewFilter === 'all' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewFilter('all')}
-            >
-              All Projects
-            </Button>
-            <Button
-              variant={viewFilter === 'my' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewFilter('my')}
-            >
-              My Projects
-            </Button>
-          </div>
           {canCreateProject && (
             <Button onClick={() => navigate('/projects/new')}>
               <Plus className="mr-2 h-4 w-4" />
@@ -243,17 +229,35 @@ export default function Projects() {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">All Projects</CardTitle>
+            <div className="flex items-center gap-4">
               <div className="relative w-64">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search projects..."
                   className="pl-9"
                   value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setPage(1);
-                }}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
                 />
+              </div>
+              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border">
+                <Label htmlFor="view-filter-projects" className="text-sm font-medium cursor-pointer">
+                  All Projects
+                </Label>
+                <Switch
+                  id="view-filter-projects"
+                  checked={viewFilter === 'my'}
+                  onCheckedChange={(checked) => {
+                    setViewFilter(checked ? 'my' : 'all');
+                    setPage(1);
+                  }}
+                />
+                <Label htmlFor="view-filter-projects" className="text-sm font-medium cursor-pointer">
+                  My Projects
+                </Label>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -278,8 +282,33 @@ export default function Projects() {
                 </TableRow>
               ) : error ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-destructive">
-                    Error loading projects. Please check your database connection.
+                  <TableCell colSpan={6} className="text-center py-8">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="text-destructive font-semibold">
+                        {(error as any).status === 503 
+                          ? 'Service Unavailable' 
+                          : (error as any).status === 401
+                          ? 'Authentication Required'
+                          : 'Error Loading Projects'}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {(error as any).status === 503 
+                          ? 'The database service is temporarily unavailable. Please try again in a moment.'
+                          : (error as any).status === 401
+                          ? 'Your session has expired. Please login again.'
+                          : error.message || 'An error occurred while loading projects. Please refresh the page.'}
+                      </div>
+                      {(error as any).status === 503 && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => window.location.reload()}
+                          className="mt-2"
+                        >
+                          Retry
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : filteredProjects.length === 0 ? (

@@ -91,8 +91,8 @@ export default function EmployeeView() {
     },
     {
       icon: MessageCircle,
-      label: "Skype ID",
-      value: employee.skype || "-",
+      label: "Teams ID",
+      value: employee.teams_id || employee.skype || "-",
       color: "text-cyan-600 dark:text-cyan-400",
       bgColor: "bg-cyan-50 dark:bg-cyan-950",
     },

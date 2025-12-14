@@ -12,7 +12,7 @@ import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
 import { authApi, employeesApi } from "@/lib/api";
 import { logger } from "@/lib/logger";
-import { ImageUploadCrop } from "@/components/ui/image-upload-crop";
+import { ProfilePhotoUpload } from "@/components/ui/profile-photo-upload";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { getImageUrl } from "@/lib/imageUtils";
@@ -27,14 +27,16 @@ export default function ProfileSetup() {
     name: "",
     email: "",
     mobile: "",
+    whatsapp: "",
+    teams_id: "",
+    date_of_birth: "",
+    gender: "",
     oldPassword: "",
     password: "",
     confirmPassword: "",
     
     // Employee Basic Information
     emp_code: "",
-    date_of_birth: "",
-    gender: "",
     date_of_joining: "",
     
     // Salary & Finance Information
@@ -97,6 +99,38 @@ export default function ProfileSetup() {
 
   const documents = documentsData?.data || [];
 
+  // Date formatting helpers
+  const formatDateFromDB = (dateValue: string | null | undefined): string => {
+    if (!dateValue) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return dateValue;
+    try {
+      const date = new Date(dateValue);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+    } catch (e) {}
+    return "";
+  };
+
+  const formatDateForDB = (dateValue: string | null | undefined): string | null => {
+    if (!dateValue || dateValue === "") return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return dateValue;
+    try {
+      const date = new Date(dateValue);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+    } catch (e) {}
+    return null;
+  };
+
+  // Mandatory field label component
+  const MandatoryLabel = ({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) => (
+    <Label htmlFor={htmlFor} className="text-red-500">
+      {children} *
+    </Label>
+  );
+
   useEffect(() => {
     if (userData?.data) {
       setFormData(prev => ({
@@ -105,12 +139,14 @@ export default function ProfileSetup() {
         name: userData.data.name || "",
         email: userData.data.email || "",
         mobile: userData.data.mobile || "",
+        whatsapp: employeeData?.data?.whatsapp || "",
+        teams_id: employeeData?.data?.teams_id || employeeData?.data?.skype || "",
+        date_of_birth: formatDateFromDB(employeeData?.data?.date_of_birth),
+        gender: employeeData?.data?.gender || "",
         
         // Employee Basic Information
         emp_code: employeeData?.data?.emp_code || "",
-        date_of_birth: employeeData?.data?.date_of_birth || "",
-        gender: employeeData?.data?.gender || "",
-        date_of_joining: employeeData?.data?.date_of_joining || "",
+        date_of_joining: formatDateFromDB(employeeData?.data?.date_of_joining),
         
         // Salary & Finance Information
         bank_name: employeeData?.data?.bank_name || "",
@@ -173,7 +209,8 @@ export default function ProfileSetup() {
       if (!employeeData?.data?.id) {
         throw new Error('Employee record not found');
       }
-      return employeesApi.uploadDocument(employeeData.data.id, formData);
+      // Use my-documents endpoint for own profile uploads (no permission required)
+      return employeesApi.uploadMyDocument(formData);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Document uploaded successfully." });
@@ -182,6 +219,11 @@ export default function ProfileSetup() {
       setUploadFile(null);
       setUploadDocumentType("");
       setUploadDocumentNumber("");
+      // Reset file input
+      const fileInput = document.getElementById('file') as HTMLInputElement;
+      if (fileInput) {
+        fileInput.value = '';
+      }
     },
     onError: (error: any) => {
       toast({ 
@@ -293,38 +335,42 @@ export default function ProfileSetup() {
         ...(data.password && { password: data.password }),
       });
 
-      // Update employee profile if exists
+      // Update employee profile if exists - use my-profile endpoint to avoid permission check
       if (employeeData?.data?.id) {
-        // Always include all employee fields explicitly, even if null
-        const employeeUpdateData: any = {
-          // Employee Basic Information
-          date_of_birth: data.date_of_birth || null,
-          gender: data.gender || null,
-          date_of_joining: data.date_of_joining || null,
-          
-          // Salary & Finance Information
-          bank_name: data.bank_name || null,
-          bank_account_number: data.bank_account_number || null,
-          ifsc_code: data.ifsc_code || null,
-          pf_uan_number: data.pf_uan_number || null,
-          
-          // Address & Emergency Details
-          address1: data.address1 || null,
-          address2: data.address2 || null,
-          landmark: data.landmark || null,
-          state: data.state || null,
-          district: data.district || null,
-          pincode: data.pincode || null,
-          emergency_contact_name: data.emergency_contact_name || null,
-          emergency_contact_relation: data.emergency_contact_relation || null,
-          emergency_contact_number: data.emergency_contact_number || null,
-          
-          // Profile Photo
-          profile_photo_url: data.profile_photo_url || null,
-        };
+          // Always include all employee fields explicitly, even if null
+          const employeeUpdateData: any = {
+            // Employee Basic Information
+            emp_code: data.emp_code || null,
+            date_of_birth: formatDateForDB(data.date_of_birth),
+            gender: data.gender || null,
+            date_of_joining: formatDateForDB(data.date_of_joining),
+            whatsapp: data.whatsapp || null,
+            teams_id: data.teams_id || null,
+            
+            // Salary & Finance Information
+            bank_name: data.bank_name || null,
+            bank_account_number: data.bank_account_number || null,
+            ifsc_code: data.ifsc_code || null,
+            pf_uan_number: data.pf_uan_number || null,
+            
+            // Address & Emergency Details
+            address1: data.address1 || null,
+            address2: data.address2 || null,
+            landmark: data.landmark || null,
+            state: data.state || null,
+            district: data.district || null,
+            pincode: data.pincode || null,
+            emergency_contact_name: data.emergency_contact_name || null,
+            emergency_contact_relation: data.emergency_contact_relation || null,
+            emergency_contact_number: data.emergency_contact_number || null,
+            
+            // Profile Photo
+            profile_photo_url: data.profile_photo_url || null,
+          };
         
         logger.debug('Sending employee update data:', JSON.stringify(employeeUpdateData, null, 2));
-        await employeesApi.update(employeeData.data.id, employeeUpdateData);
+        // Use updateMyProfile endpoint which doesn't require employees.view permission
+        await employeesApi.updateMyProfile(employeeUpdateData);
       }
 
       // Update stored user data
@@ -498,9 +544,12 @@ export default function ProfileSetup() {
     
     // Always include employee fields if employee data exists
     if (employeeData?.data) {
-      updateData.date_of_birth = formData.date_of_birth || null;
+      updateData.emp_code = formData.emp_code || null;
+      updateData.date_of_birth = formatDateForDB(formData.date_of_birth);
       updateData.gender = formData.gender || null;
-      updateData.date_of_joining = formData.date_of_joining || null;
+      updateData.date_of_joining = formatDateForDB(formData.date_of_joining);
+      updateData.whatsapp = formData.whatsapp || null;
+      updateData.teams_id = formData.teams_id || null;
       updateData.bank_name = formData.bank_name || null;
       updateData.bank_account_number = formData.bank_account_number || null;
       updateData.ifsc_code = formData.ifsc_code || null;
@@ -533,14 +582,32 @@ export default function ProfileSetup() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <User className="h-8 w-8 text-muted-foreground" />
+        <h1 className="text-3xl font-bold flex items-center gap-2 text-primary">
+          <User className="h-8 w-8 text-primary" />
           Profile Setup
         </h1>
         <p className="text-muted-foreground">Manage your profile information and settings</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+        {/* Profile Photo Section - At Top */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile Photo</CardTitle>
+            <CardDescription>Upload employee profile picture</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ProfilePhotoUpload
+              value={formData.profile_photo_url}
+              onChange={(url) => setFormData({ ...formData, profile_photo_url: url })}
+              name={formData.name}
+            />
+            <p className="text-sm text-muted-foreground mt-4">
+              Recommended size: 400x400px for best option to view the profile photo. Maximum file size: 5MB.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Basic User Information */}
         <Card className="glass-card">
           <CardHeader>
@@ -551,11 +618,10 @@ export default function ProfileSetup() {
             <CardDescription>Update your basic account information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 3 columns: full name, date of birth, gender, mobile, whatsapp number, teams id, email */}
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">
-                  Full Name <span className="text-destructive">*</span>
-                </Label>
+                <MandatoryLabel htmlFor="name">Full Name</MandatoryLabel>
                 <Input
                   id="name"
                   value={formData.name}
@@ -569,7 +635,11 @@ export default function ProfileSetup() {
                     }
                   }}
                   onBlur={(e) => {
-                    const error = validateName(e.target.value);
+                    const trimmed = e.target.value.trim();
+                    if (trimmed !== e.target.value) {
+                      setFormData({ ...formData, name: trimmed });
+                    }
+                    const error = validateName(trimmed);
                     if (error) {
                       setErrors({ ...errors, name: error });
                     } else if (errors.name) {
@@ -586,45 +656,62 @@ export default function ProfileSetup() {
                 )}
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="email">
-                  Email <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => {
-                    setFormData({ ...formData, email: e.target.value });
-                    if (errors.email) {
-                      const newErrors = { ...errors };
-                      delete newErrors.email;
-                      setErrors(newErrors);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const error = validateEmail(e.target.value);
+                <MandatoryLabel htmlFor="date_of_birth">Date of Birth</MandatoryLabel>
+                <DatePicker
+                  id="date_of_birth"
+                  value={formData.date_of_birth}
+                  onChange={(date) => {
+                    setFormData({ ...formData, date_of_birth: date || "" });
+                    const error = validateDateOfBirth(date || "");
                     if (error) {
-                      setErrors({ ...errors, email: error });
-                    } else if (errors.email) {
+                      setErrors({ ...errors, date_of_birth: error });
+                    } else if (errors.date_of_birth) {
                       const newErrors = { ...errors };
-                      delete newErrors.email;
+                      delete newErrors.date_of_birth;
                       setErrors(newErrors);
                     }
                   }}
-                  placeholder="Enter your email"
-                  className={errors.email ? "border-destructive" : ""}
                 />
-                {errors.email && (
-                  <p className="text-sm text-destructive">{errors.email}</p>
+                {errors.date_of_birth && (
+                  <p className="text-sm text-destructive">{errors.date_of_birth}</p>
                 )}
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="mobile">
-                  Mobile Number <span className="text-destructive">*</span>
-                </Label>
+                <Label>Gender</Label>
+                <Select
+                  value={formData.gender}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, gender: value });
+                    const error = validateGender(value);
+                    if (error) {
+                      setErrors({ ...errors, gender: error });
+                    } else if (errors.gender) {
+                      const newErrors = { ...errors };
+                      delete newErrors.gender;
+                      setErrors(newErrors);
+                    }
+                  }}
+                >
+                  <SelectTrigger className={errors.gender ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.gender && (
+                  <p className="text-sm text-destructive">{errors.gender}</p>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <MandatoryLabel htmlFor="mobile">Mobile Number</MandatoryLabel>
                 <Input
                   id="mobile"
-                  type="tel"
+                  type="text"
                   value={formData.mobile}
                   onChange={(e) => {
                     // Only allow digits, max 10
@@ -654,6 +741,63 @@ export default function ProfileSetup() {
                   <p className="text-sm text-destructive">{errors.mobile}</p>
                 )}
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="whatsapp">WhatsApp Number</Label>
+                <Input
+                  id="whatsapp"
+                  type="text"
+                  value={formData.whatsapp}
+                  onChange={(e) => {
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, whatsapp: digitsOnly });
+                  }}
+                  placeholder="Enter WhatsApp number (10 digits)"
+                  maxLength={10}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="teams_id">Teams ID</Label>
+                <Input
+                  id="teams_id"
+                  type="text"
+                  value={formData.teams_id}
+                  onChange={(e) => setFormData({ ...formData, teams_id: e.target.value })}
+                  placeholder="Enter Teams ID"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <MandatoryLabel htmlFor="email">Email</MandatoryLabel>
+                <Input
+                  id="email"
+                  type="text"
+                  value={formData.email}
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value });
+                    if (errors.email) {
+                      const newErrors = { ...errors };
+                      delete newErrors.email;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const error = validateEmail(e.target.value);
+                    if (error) {
+                      setErrors({ ...errors, email: error });
+                    } else if (errors.email) {
+                      const newErrors = { ...errors };
+                      delete newErrors.email;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  placeholder="Enter your email"
+                  className={errors.email ? "border-destructive" : ""}
+                />
+                {errors.email && (
+                  <p className="text-sm text-destructive">{errors.email}</p>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -669,73 +813,18 @@ export default function ProfileSetup() {
               <CardDescription>Your employee details and basic information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="emp_code">Employee Code</Label>
+                  <Label htmlFor="emp_code">Employee ID</Label>
                   <Input
                     id="emp_code"
                     value={formData.emp_code}
-                    disabled
-                    className="bg-muted"
+                    onChange={(e) => setFormData({ ...formData, emp_code: e.target.value.toUpperCase() })}
+                    placeholder="Enter employee ID"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="date_of_birth">
-                    Date of Birth <span className="text-destructive">*</span>
-                  </Label>
-                  <DatePicker
-                    value={formData.date_of_birth}
-                    onChange={(date) => {
-                      setFormData({ ...formData, date_of_birth: date || "" });
-                      const error = validateDateOfBirth(date || "");
-                      if (error) {
-                        setErrors({ ...errors, date_of_birth: error });
-                      } else if (errors.date_of_birth) {
-                        const newErrors = { ...errors };
-                        delete newErrors.date_of_birth;
-                        setErrors(newErrors);
-                      }
-                    }}
-                  />
-                  {errors.date_of_birth && (
-                    <p className="text-sm text-destructive">{errors.date_of_birth}</p>
-                  )}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="gender">
-                    Gender <span className="text-destructive">*</span>
-                  </Label>
-                  <Select
-                    value={formData.gender}
-                    onValueChange={(value) => {
-                      setFormData({ ...formData, gender: value });
-                      const error = validateGender(value);
-                      if (error) {
-                        setErrors({ ...errors, gender: error });
-                      } else if (errors.gender) {
-                        const newErrors = { ...errors };
-                        delete newErrors.gender;
-                        setErrors(newErrors);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className={errors.gender ? "border-destructive" : ""}>
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Male">Male</SelectItem>
-                      <SelectItem value="Female">Female</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {errors.gender && (
-                    <p className="text-sm text-destructive">{errors.gender}</p>
-                  )}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="date_of_joining">
-                    Date of Joining <span className="text-destructive">*</span>
-                  </Label>
+                  <MandatoryLabel htmlFor="date_of_joining">Date of Joining</MandatoryLabel>
                   <DatePicker
                     value={formData.date_of_joining}
                     onChange={(date) => {
@@ -770,7 +859,7 @@ export default function ProfileSetup() {
               <CardDescription>Bank and financial details for payroll processing</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="bank_name">Bank Name</Label>
                   <Input
@@ -799,15 +888,13 @@ export default function ProfileSetup() {
                     maxLength={11}
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="pf_uan_number">PF UAN Number</Label>
+                  <Label htmlFor="pf_uan_number">UAN Number</Label>
                   <Input
                     id="pf_uan_number"
                     value={formData.pf_uan_number}
                     onChange={(e) => setFormData({ ...formData, pf_uan_number: e.target.value.toUpperCase() })}
-                    placeholder="Enter PF UAN number"
+                    placeholder="Enter UAN number"
                   />
                 </div>
               </div>
@@ -826,186 +913,189 @@ export default function ProfileSetup() {
               <CardDescription>Your address and emergency contact information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label className="mb-2 block">Address</Label>
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="address1" className="text-sm font-normal">Address Line 1</Label>
-                    <Input
-                      id="address1"
-                      value={formData.address1}
-                      onChange={(e) => setFormData({ ...formData, address1: e.target.value.toUpperCase() })}
-                      placeholder="Enter address line 1"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="address2" className="text-sm font-normal">Address Line 2</Label>
-                    <Input
-                      id="address2"
-                      value={formData.address2}
-                      onChange={(e) => setFormData({ ...formData, address2: e.target.value.toUpperCase() })}
-                      placeholder="Enter address line 2"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="landmark" className="text-sm font-normal">Landmark</Label>
-                    <Input
-                      id="landmark"
-                      value={formData.landmark}
-                      onChange={(e) => setFormData({ ...formData, landmark: e.target.value.toUpperCase() })}
-                      placeholder="Enter landmark"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="state" className="text-sm font-normal">State</Label>
-                      <Input
-                        id="state"
-                        value={formData.state}
-                        onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
-                        placeholder="Enter state"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="district" className="text-sm font-normal">District</Label>
-                      <Input
-                        id="district"
-                        value={formData.district}
-                        onChange={(e) => setFormData({ ...formData, district: e.target.value.toUpperCase() })}
-                        placeholder="Enter district"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="pincode" className="text-sm font-normal">Pincode</Label>
-                      <Input
-                        id="pincode"
-                        type="tel"
-                        value={formData.pincode}
-                        onChange={(e) => {
-                          // Only allow digits, max 6
-                          const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 6);
-                          setFormData({ ...formData, pincode: digitsOnly });
-                          if (errors.pincode) {
-                            const newErrors = { ...errors };
-                            delete newErrors.pincode;
-                            setErrors(newErrors);
-                          }
-                        }}
-                        onBlur={(e) => {
-                          const error = validatePincode(e.target.value);
-                          if (error) {
-                            setErrors({ ...errors, pincode: error });
-                          } else if (errors.pincode) {
-                            const newErrors = { ...errors };
-                            delete newErrors.pincode;
-                            setErrors(newErrors);
-                          }
-                        }}
-                        placeholder="Enter pincode (6 digits)"
-                        maxLength={6}
-                        className={errors.pincode ? "border-destructive" : ""}
-                      />
-                      {errors.pincode && (
-                        <p className="text-sm text-destructive">{errors.pincode}</p>
-                      )}
-                    </div>
-                  </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="address1">Address Line 1</Label>
+                  <Input
+                    id="address1"
+                    value={formData.address1}
+                    onChange={(e) => setFormData({ ...formData, address1: e.target.value.toUpperCase() })}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim();
+                      if (trimmed !== e.target.value) {
+                        setFormData({ ...formData, address1: trimmed });
+                      }
+                    }}
+                    placeholder="Enter address line 1"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="address2">Address Line 2</Label>
+                  <Input
+                    id="address2"
+                    value={formData.address2}
+                    onChange={(e) => setFormData({ ...formData, address2: e.target.value.toUpperCase() })}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim();
+                      if (trimmed !== e.target.value) {
+                        setFormData({ ...formData, address2: trimmed });
+                      }
+                    }}
+                    placeholder="Enter address line 2"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="landmark">Landmark</Label>
+                  <Input
+                    id="landmark"
+                    value={formData.landmark}
+                    onChange={(e) => setFormData({ ...formData, landmark: e.target.value.toUpperCase() })}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim();
+                      if (trimmed !== e.target.value) {
+                        setFormData({ ...formData, landmark: trimmed });
+                      }
+                    }}
+                    placeholder="Enter landmark"
+                  />
                 </div>
               </div>
-              <Separator />
-              <div>
-                <Label className="mb-2 block">Emergency Contact</Label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="emergency_contact_name" className="text-sm font-normal">Contact Name</Label>
-                    <Input
-                      id="emergency_contact_name"
-                      value={formData.emergency_contact_name}
-                      onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value.toUpperCase() })}
-                      placeholder="Enter contact name"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="emergency_contact_relation" className="text-sm font-normal">Relation</Label>
-                    <Select
-                      value={formData.emergency_contact_relation}
-                      onValueChange={(value) => setFormData({ ...formData, emergency_contact_relation: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select relation" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Father">Father</SelectItem>
-                        <SelectItem value="Mother">Mother</SelectItem>
-                        <SelectItem value="Spouse">Spouse</SelectItem>
-                        <SelectItem value="Sibling">Sibling</SelectItem>
-                        <SelectItem value="Son">Son</SelectItem>
-                        <SelectItem value="Daughter">Daughter</SelectItem>
-                        <SelectItem value="Friend">Friend</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="emergency_contact_number" className="text-sm font-normal">Contact Number</Label>
-                    <Input
-                      id="emergency_contact_number"
-                      type="tel"
-                      value={formData.emergency_contact_number}
-                      onChange={(e) => {
-                        // Only allow digits, max 10
-                        const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
-                        setFormData({ ...formData, emergency_contact_number: digitsOnly });
-                        if (errors.emergency_contact_number) {
-                          const newErrors = { ...errors };
-                          delete newErrors.emergency_contact_number;
-                          setErrors(newErrors);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        const error = validateEmergencyContactNumber(e.target.value);
-                        if (error) {
-                          setErrors({ ...errors, emergency_contact_number: error });
-                        } else if (errors.emergency_contact_number) {
-                          const newErrors = { ...errors };
-                          delete newErrors.emergency_contact_number;
-                          setErrors(newErrors);
-                        }
-                      }}
-                      placeholder="Enter contact number (10 digits)"
-                      maxLength={10}
-                      className={errors.emergency_contact_number ? "border-destructive" : ""}
-                    />
-                    {errors.emergency_contact_number && (
-                      <p className="text-sm text-destructive">{errors.emergency_contact_number}</p>
-                    )}
-                  </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="state">State</Label>
+                  <Input
+                    id="state"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim();
+                      if (trimmed !== e.target.value) {
+                        setFormData({ ...formData, state: trimmed });
+                      }
+                    }}
+                    placeholder="Enter state"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="district">District</Label>
+                  <Input
+                    id="district"
+                    value={formData.district}
+                    onChange={(e) => setFormData({ ...formData, district: e.target.value.toUpperCase() })}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim();
+                      if (trimmed !== e.target.value) {
+                        setFormData({ ...formData, district: trimmed });
+                      }
+                    }}
+                    placeholder="Enter district"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="pincode">Pincode</Label>
+                      <Input
+                        id="pincode"
+                        type="text"
+                    value={formData.pincode}
+                    onChange={(e) => {
+                      // Only allow digits, max 6
+                      const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setFormData({ ...formData, pincode: digitsOnly });
+                      if (errors.pincode) {
+                        const newErrors = { ...errors };
+                        delete newErrors.pincode;
+                        setErrors(newErrors);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const error = validatePincode(e.target.value);
+                      if (error) {
+                        setErrors({ ...errors, pincode: error });
+                      } else if (errors.pincode) {
+                        const newErrors = { ...errors };
+                        delete newErrors.pincode;
+                        setErrors(newErrors);
+                      }
+                    }}
+                    placeholder="Enter pincode"
+                    maxLength={6}
+                    className={errors.pincode ? "border-destructive" : ""}
+                  />
+                  {errors.pincode && (
+                    <p className="text-sm text-destructive">{errors.pincode}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
+                  <Input
+                    id="emergency_contact_name"
+                    value={formData.emergency_contact_name}
+                    onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value.toUpperCase() })}
+                    placeholder="Enter emergency contact name"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="emergency_contact_relation">Relation</Label>
+                  <Select
+                    value={formData.emergency_contact_relation}
+                    onValueChange={(value) => setFormData({ ...formData, emergency_contact_relation: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select relation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Father">Father</SelectItem>
+                      <SelectItem value="Mother">Mother</SelectItem>
+                      <SelectItem value="Spouse">Spouse</SelectItem>
+                      <SelectItem value="Sibling">Sibling</SelectItem>
+                      <SelectItem value="Son">Son</SelectItem>
+                      <SelectItem value="Daughter">Daughter</SelectItem>
+                      <SelectItem value="Friend">Friend</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="emergency_contact_number">Emergency Contact Number</Label>
+                  <Input
+                    id="emergency_contact_number"
+                    type="text"
+                    value={formData.emergency_contact_number}
+                    onChange={(e) => {
+                      // Only allow digits, max 10
+                      const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setFormData({ ...formData, emergency_contact_number: digitsOnly });
+                      if (errors.emergency_contact_number) {
+                        const newErrors = { ...errors };
+                        delete newErrors.emergency_contact_number;
+                        setErrors(newErrors);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const error = validateEmergencyContactNumber(e.target.value);
+                      if (error) {
+                        setErrors({ ...errors, emergency_contact_number: error });
+                      } else if (errors.emergency_contact_number) {
+                        const newErrors = { ...errors };
+                        delete newErrors.emergency_contact_number;
+                        setErrors(newErrors);
+                      }
+                    }}
+                    placeholder="Enter contact number (10 digits)"
+                    maxLength={10}
+                    className={errors.emergency_contact_number ? "border-destructive" : ""}
+                  />
+                  {errors.emergency_contact_number && (
+                    <p className="text-sm text-destructive">{errors.emergency_contact_number}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Profile Photo */}
-        <Card className="glass-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Camera className="h-5 w-5" />
-              Profile Photo
-            </CardTitle>
-            <CardDescription>Upload and manage your profile picture</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <ImageUploadCrop
-              value={formData.profile_photo_url}
-              onChange={(url) => setFormData({ ...formData, profile_photo_url: url })}
-              aspect={1}
-            />
-            <p className="text-sm text-muted-foreground pt-2">
-              Recommended size: 400x400 pixels. Maximum file size: 5MB.
-            </p>
-          </CardContent>
-        </Card>
 
         {/* Submit Button */}
         <div className="flex justify-end gap-3">
@@ -1256,7 +1346,19 @@ export default function ProfileSetup() {
                 <CardTitle>Documents</CardTitle>
                 <CardDescription>Upload and manage your documents (Images and PDFs only)</CardDescription>
               </div>
-              <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+              <Dialog open={showUploadDialog} onOpenChange={(open) => {
+                setShowUploadDialog(open);
+                if (!open) {
+                  // Reset form when dialog closes
+                  setUploadFile(null);
+                  setUploadDocumentType("");
+                  setUploadDocumentNumber("");
+                  const fileInput = document.getElementById('file') as HTMLInputElement;
+                  if (fileInput) {
+                    fileInput.value = '';
+                  }
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button type="button">
                     <Upload className="mr-2 h-4 w-4" />
@@ -1278,12 +1380,25 @@ export default function ProfileSetup() {
                           <SelectValue placeholder="Select document type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Aadhaar">Aadhaar</SelectItem>
-                          <SelectItem value="PAN">PAN</SelectItem>
-                          <SelectItem value="Bank Passbook">Bank Passbook</SelectItem>
-                          <SelectItem value="Driving License">Driving License</SelectItem>
-                          <SelectItem value="Passport">Passport</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
+                          {(() => {
+                            const allDocumentTypes = ['Aadhaar', 'PAN', 'Bank Passbook', 'Driving License', 'Passport', 'Other'];
+                            const uploadedTypes = documents.map((doc: any) => doc.document_type);
+                            const availableTypes = allDocumentTypes.filter(type => !uploadedTypes.includes(type));
+                            
+                            if (availableTypes.length === 0) {
+                              return (
+                                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                  All document types have been uploaded
+                                </div>
+                              );
+                            }
+                            
+                            return availableTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ));
+                          })()}
                         </SelectContent>
                       </Select>
                     </div>

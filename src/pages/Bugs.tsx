@@ -64,6 +64,7 @@ import { StatusBadge, bugSeverityMap, bugStatusMap } from "@/components/ui/statu
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi, tasksApi, usersApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
@@ -501,22 +502,6 @@ export default function Bugs() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 border rounded-md p-1">
-            <Button
-              variant={viewFilter === 'all' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewFilter('all')}
-            >
-              All Bugs
-            </Button>
-            <Button
-              variant={viewFilter === 'my' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewFilter('my')}
-            >
-              My Bugs
-            </Button>
-          </div>
           {canCreateBug && (
             <Button onClick={() => navigate('/bugs/new')}>
               <Plus className="mr-2 h-4 w-4" />
@@ -572,17 +557,35 @@ export default function Bugs() {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">All Bugs</CardTitle>
+            <div className="flex items-center gap-4">
               <div className="relative w-64">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search bugs..."
                   className="pl-9"
                   value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setPage(1);
-                }}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
                 />
+              </div>
+              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border">
+                <Label htmlFor="view-filter" className="text-sm font-medium cursor-pointer">
+                  All Bugs
+                </Label>
+                <Switch
+                  id="view-filter"
+                  checked={viewFilter === 'my'}
+                  onCheckedChange={(checked) => {
+                    setViewFilter(checked ? 'my' : 'all');
+                    setPage(1);
+                  }}
+                />
+                <Label htmlFor="view-filter" className="text-sm font-medium cursor-pointer">
+                  My Bugs
+                </Label>
+              </div>
             </div>
           </div>
         </CardHeader>

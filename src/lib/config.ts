@@ -51,7 +51,7 @@ export const ENV_CONFIG = {
 } as const;
 
 /**
- * Validate required environment variables
+ * Validate required environment variables and security settings
  */
 export function validateConfig() {
   const required = [
@@ -76,6 +76,13 @@ export function validateConfig() {
       }
     }
   });
+
+  // Security: Enforce HTTPS in production
+  if (ENV_CONFIG.IS_PROD && API_CONFIG.BASE_URL && !API_CONFIG.BASE_URL.startsWith('https://')) {
+    const errorMsg = 'Security Error: API URL must use HTTPS in production. Current URL: ' + API_CONFIG.BASE_URL;
+    logger.error('❌ ' + errorMsg);
+    throw new Error(errorMsg);
+  }
 
   if (missing.length > 0 && ENV_CONFIG.IS_PROD) {
     logger.error('❌ Missing required environment variables:', missing.join(', '));

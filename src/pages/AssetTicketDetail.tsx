@@ -469,6 +469,7 @@ export default function AssetTicketDetail() {
                       onClick={handleAddComment}
                       disabled={!comment.trim() || addCommentMutation.isPending}
                       size="sm"
+                      className="bg-primary hover:bg-primary/90"
                     >
                       {addCommentMutation.isPending ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -616,7 +617,7 @@ export default function AssetTicketDetail() {
                   <Button
                     onClick={handleFileUpload}
                     disabled={!selectedFile || uploadAttachmentMutation.isPending}
-                    className="w-full"
+                    className="w-full bg-primary hover:bg-primary/90"
                     size="sm"
                   >
                     {uploadAttachmentMutation.isPending ? (

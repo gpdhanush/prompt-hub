@@ -121,14 +121,22 @@ export function AdminHeader() {
   }, [showGlobalSearch]);
 
   const handleLogout = async () => {
-    // Clear authentication data from secure storage
-    await clearAuth();
-    
-    // Clear all React Query cache
-    queryClient.clear();
-    
-    // Redirect to login
-    navigate('/login');
+    try {
+      // Call backend logout API to revoke refresh token
+      await authApi.logout();
+    } catch (error) {
+      // Log error but continue with frontend logout
+      console.warn('Logout API call failed:', error);
+    } finally {
+      // Always clear frontend state, even if API call fails
+      await clearAuth();
+      
+      // Clear all React Query cache
+      queryClient.clear();
+      
+      // Redirect to login
+      navigate('/login');
+    }
   };
 
   return (

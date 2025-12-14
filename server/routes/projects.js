@@ -72,6 +72,16 @@ router.get('/', async (req, res) => {
     logger.debug('userId:', userId);
     logger.debug('userRole:', userRole);
     
+    // Check database connection
+    if (!db || !db.query) {
+      logger.error('Database connection not available');
+      return res.status(503).json({ 
+        error: 'Database service unavailable',
+        message: 'Unable to connect to database. Please try again later.',
+        code: 'DB_CONNECTION_ERROR'
+      });
+    }
+    
     let query = `
       SELECT DISTINCT
         p.*,
@@ -120,7 +130,21 @@ router.get('/', async (req, res) => {
     query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
     
-    const [projects] = await db.query(query, params);
+    let projects, countResult, total;
+    
+    try {
+      [projects] = await db.query(query, params);
+    } catch (dbError) {
+      logger.error('Database query error (projects):', dbError);
+      if (dbError.code === 'ECONNREFUSED' || dbError.code === 'PROTOCOL_CONNECTION_LOST') {
+        return res.status(503).json({ 
+          error: 'Database connection lost',
+          message: 'Unable to connect to database. Please try again later.',
+          code: 'DB_CONNECTION_LOST'
+        });
+      }
+      throw dbError;
+    }
     
     // Count query
     let countQuery = `
@@ -150,18 +174,56 @@ router.get('/', async (req, res) => {
     }
     // For "all" view, all authenticated users see all projects - no role-based filtering
     
-    const [countResult] = await db.query(countQuery, countParams);
-    const total = countResult[0].total;
+    try {
+      [countResult] = await db.query(countQuery, countParams);
+      total = countResult[0]?.total || 0;
+    } catch (dbError) {
+      logger.error('Database query error (count):', dbError);
+      if (dbError.code === 'ECONNREFUSED' || dbError.code === 'PROTOCOL_CONNECTION_LOST') {
+        return res.status(503).json({ 
+          error: 'Database connection lost',
+          message: 'Unable to connect to database. Please try again later.',
+          code: 'DB_CONNECTION_LOST'
+        });
+      }
+      throw dbError;
+    }
     
     logger.debug('Total projects found:', total);
     logger.debug('Projects returned:', projects.length);
     
     res.json({
-      data: projects,
+      data: projects || [],
       pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / limit) }
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    logger.error('Error in GET /projects:', error);
+    
+    // Handle specific database errors
+    if (error.code === 'ECONNREFUSED' || error.code === 'PROTOCOL_CONNECTION_LOST') {
+      return res.status(503).json({ 
+        error: 'Database service unavailable',
+        message: 'Unable to connect to database. Please try again later.',
+        code: 'DB_CONNECTION_ERROR'
+      });
+    }
+    
+    // Handle SQL errors
+    if (error.code && error.code.startsWith('ER_')) {
+      logger.error('SQL Error:', error);
+      return res.status(500).json({ 
+        error: 'Database query error',
+        message: 'An error occurred while fetching projects. Please contact support.',
+        code: 'SQL_ERROR'
+      });
+    }
+    
+    // Generic error
+    res.status(500).json({ 
+      error: error.message || 'Internal server error',
+      message: 'An unexpected error occurred. Please try again later.',
+      code: 'INTERNAL_ERROR'
+    });
   }
 });
 

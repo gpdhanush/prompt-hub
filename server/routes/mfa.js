@@ -314,8 +314,22 @@ router.post('/verify', mfaVerificationLimiter, mfaUserRateLimiter, async (req, r
     const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
     await recordMfaSuccess(userId, ipAddress);
     
-    // Update last login
-    await db.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [userId]);
+    // Revoke all previous refresh tokens for single-device login
+    const { revokeAllUserTokens } = await import('../utils/refreshTokenService.js');
+    await revokeAllUserTokens(user.id);
+    logger.info(`Revoked all previous tokens for user ${user.id} after MFA verification (single-device login)`);
+    
+    // Update last login and increment session version (for single-device login)
+    await db.query(`
+      UPDATE users 
+      SET last_login = CURRENT_TIMESTAMP,
+          session_version = COALESCE(session_version, 0) + 1
+      WHERE id = ?
+    `, [userId]);
+    
+    // Get updated session version
+    const [updatedUsers] = await db.query('SELECT session_version FROM users WHERE id = ?', [userId]);
+    const sessionVersion = updatedUsers[0]?.session_version || 1;
     
     // Generate JWT tokens
     // Access token: 15 minutes (configurable via user's session_timeout or default)
@@ -324,7 +338,8 @@ router.post('/verify', mfaVerificationLimiter, mfaUserRateLimiter, async (req, r
       userId: user.id,
       email: user.email,
       role: user.role,
-      roleId: user.role_id
+      roleId: user.role_id,
+      sessionVersion // Include session version for single-device validation
     }, accessTokenExpiry);
     
     // Refresh token: 30 days
