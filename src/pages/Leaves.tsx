@@ -46,6 +46,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { StatusBadge, leaveStatusMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Pagination } from "@/components/ui/pagination";
 import { Separator } from "@/components/ui/separator";
 import { leavesApi, employeesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
@@ -394,19 +396,17 @@ export default function Leaves() {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">All Leave Requests</CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search leaves..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Button variant="outline" size="icon">
-                <Filter className="h-4 w-4" />
-              </Button>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search leaves..."
+                className="pl-9"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+              />
             </div>
           </div>
         </CardHeader>
@@ -436,8 +436,12 @@ export default function Leaves() {
                 </TableHeader>
                 <TableBody>
                   {filteredLeaves.map((l: any) => (
-                    <TableRow key={l.id}>
-                      <TableCell className="font-mono text-muted-foreground">
+                    <TableRow 
+                      key={l.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleView(l)}
+                    >
+                      <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
                         LV-{String(l.id).padStart(4, '0')}
                       </TableCell>
                       {canApproveLeaves && (
@@ -468,7 +472,7 @@ export default function Leaves() {
                           {l.status}
                         </StatusBadge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           {l.status === "Pending" && canApproveRejectLeave(l) && (
                             <>
@@ -531,29 +535,13 @@ export default function Leaves() {
                 </TableBody>
               </Table>
               {pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-muted-foreground">
-                    Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, pagination.total)} of {pagination.total} requests
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-                      disabled={page === pagination.totalPages}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
+                <Pagination
+                  currentPage={page}
+                  totalPages={pagination.totalPages}
+                  onPageChange={setPage}
+                  total={pagination.total}
+                  limit={limit}
+                />
               )}
             </>
           )}

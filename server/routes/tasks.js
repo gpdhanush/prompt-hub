@@ -4,8 +4,55 @@ import { authenticate, authorize, requirePermission } from '../middleware/auth.j
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyTaskAssigned } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
+import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const uploadDir = path.join(process.cwd(), 'uploads', 'tasks');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `task-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedMimes = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain',
+    'text/csv'
+  ];
+  
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only images and documents are allowed.'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: fileFilter
+});
 
 // Apply authentication to all routes
 router.use(authenticate);
@@ -99,16 +146,49 @@ router.get('/:id', async (req, res) => {
       WHERE t.id = ?
     `, [req.params.id]);
     if (tasks.length === 0) return res.status(404).json({ error: 'Task not found' });
-    res.json({ data: tasks[0] });
+    
+    // Fetch attachments for this task
+    const [attachments] = await db.query(`
+      SELECT 
+        a.id,
+        a.uploaded_by,
+        a.path,
+        a.original_filename,
+        a.mime_type,
+        a.size,
+        a.created_at,
+        u.name as uploaded_by_name
+      FROM attachments a
+      LEFT JOIN users u ON a.uploaded_by = u.id
+      WHERE a.task_id = ?
+      ORDER BY a.created_at DESC
+    `, [req.params.id]);
+    
+    const taskData = tasks[0];
+    taskData.attachments = attachments;
+    
+    res.json({ data: taskData });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // Create task - check for tasks.create permission
-router.post('/', requirePermission('tasks.create'), async (req, res) => {
+router.post('/', requirePermission('tasks.create'), upload.array('attachments', 10), async (req, res) => {
   try {
-    const { project_id, title, description, status, priority, stage, assigned_to, developer_id, designer_id, tester_id, deadline } = req.body;
+    // Validate and sanitize text inputs
+    const textFields = ['title', 'description'];
+    const validation = validateAndSanitizeObject(req.body, textFields);
+    if (validation.errors && validation.errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input detected', 
+        details: validation.errors.join('; ') 
+      });
+    }
+    
+    let { project_id, title, description, status, priority, stage, assigned_to, developer_id, designer_id, tester_id, deadline } = req.body;
+    title = validation.data.title || title;
+    description = validation.data.description || description;
     const created_by = req.user.id; // Get from authenticated user
     
     // Generate task code
@@ -190,9 +270,40 @@ router.post('/', requirePermission('tasks.create'), async (req, res) => {
       await Promise.allSettled(notificationPromises);
     }
     
+    // Handle file uploads
+    if (req.files && req.files.length > 0) {
+      const uploadedFiles = [];
+      for (const file of req.files) {
+        const filePath = `/uploads/tasks/${file.filename}`;
+        const [attachmentResult] = await db.query(`
+          INSERT INTO attachments (
+            task_id, uploaded_by, path, original_filename, mime_type, size
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [result.insertId, created_by, filePath, file.originalname, file.mimetype, file.size]);
+        
+        uploadedFiles.push({
+          id: attachmentResult.insertId,
+          path: filePath,
+          original_filename: file.originalname,
+          mime_type: file.mimetype,
+          size: file.size
+        });
+      }
+      newTask[0].attachments = uploadedFiles;
+    }
+    
     res.status(201).json({ data: newTask[0] });
   } catch (error) {
     logger.error('Error creating task:', error);
+    // Clean up uploaded files on error
+    if (req.files) {
+      req.files.forEach((file) => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -201,7 +312,20 @@ router.post('/', requirePermission('tasks.create'), async (req, res) => {
 router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, status, priority, stage, assigned_to, developer_id, designer_id, tester_id, deadline } = req.body;
+    
+    // Validate and sanitize text inputs
+    const textFields = ['title', 'description'];
+    const validation = validateAndSanitizeObject(req.body, textFields);
+    if (validation.errors && validation.errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input detected', 
+        details: validation.errors.join('; ') 
+      });
+    }
+    
+    let { title, description, status, priority, stage, assigned_to, developer_id, designer_id, tester_id, deadline } = req.body;
+    title = validation.data.title || title;
+    description = validation.data.description || description;
     const updated_by = req.user.id;
     
     // Get before data for audit log
@@ -259,6 +383,19 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
       WHERE t.id = ?
     `, [id]);
     
+    // Record task history if status changed
+    if (status !== undefined && status !== beforeData.status) {
+      try {
+        await db.query(`
+          INSERT INTO task_history (task_id, from_status, to_status, changed_by, note)
+          VALUES (?, ?, ?, ?, ?)
+        `, [id, beforeData.status || 'N/A', status, updated_by, `Status changed from ${beforeData.status || 'N/A'} to ${status}`]);
+      } catch (historyError) {
+        logger.error('Error recording task history:', historyError);
+        // Don't fail the update if history recording fails
+      }
+    }
+    
     // Create audit log for task update
     await logUpdate(req, 'Tasks', id, beforeData, updated[0], 'Task');
     
@@ -313,6 +450,417 @@ router.delete('/:id', requirePermission('tasks.delete'), async (req, res) => {
     
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// TASK COMMENTS ROUTES
+// ============================================
+
+// Get task comments
+router.get('/:id/comments', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [comments] = await db.query(`
+      SELECT 
+        tc.*,
+        u.name as user_name,
+        u.email as user_email,
+        r.name as user_role
+      FROM task_comments tc
+      LEFT JOIN users u ON tc.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE tc.task_id = ?
+      ORDER BY tc.created_at ASC
+    `, [id]);
+    
+    res.json({ data: comments });
+  } catch (error) {
+    logger.error('Error fetching task comments:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create task comment
+router.post('/:id/comments', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { comment, parent_comment_id, role } = req.body;
+    const userId = req.user?.id;
+    
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ error: 'Comment is required' });
+    }
+    
+    const [result] = await db.query(`
+      INSERT INTO task_comments (task_id, user_id, comment, parent_comment_id, role)
+      VALUES (?, ?, ?, ?, ?)
+    `, [id, userId, comment.trim(), parent_comment_id || null, role || null]);
+    
+    const [newComment] = await db.query(`
+      SELECT 
+        tc.*,
+        u.name as user_name,
+        u.email as user_email,
+        r.name as user_role
+      FROM task_comments tc
+      LEFT JOIN users u ON tc.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE tc.id = ?
+    `, [result.insertId]);
+    
+    res.status(201).json({ data: newComment[0] });
+  } catch (error) {
+    logger.error('Error creating task comment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// TASK HISTORY ROUTES
+// ============================================
+
+// Get task history
+router.get('/:id/history', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [history] = await db.query(`
+      SELECT 
+        th.*,
+        u.name as changed_by_name,
+        u.email as changed_by_email
+      FROM task_history th
+      LEFT JOIN users u ON th.changed_by = u.id
+      WHERE th.task_id = ?
+      ORDER BY th.timestamp DESC
+    `, [id]);
+    
+    res.json({ data: history });
+  } catch (error) {
+    logger.error('Error fetching task history:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// TIMESHEETS ROUTES
+// ============================================
+
+// Get timesheets for a task
+router.get('/:id/timesheets', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    const isSuperAdmin = userRole === 'Super Admin';
+    
+    let query = `
+      SELECT 
+        ts.*,
+        e.emp_code,
+        u.name as employee_name,
+        u2.name as approved_by_name
+      FROM timesheets ts
+      LEFT JOIN employees e ON ts.employee_id = e.id
+      LEFT JOIN users u ON e.user_id = u.id
+      LEFT JOIN users u2 ON ts.approved_by = u2.id
+      WHERE ts.task_id = ?
+    `;
+    const params = [id];
+    
+    // If not Super Admin, only show their own timesheets
+    if (!isSuperAdmin) {
+      const [employee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
+      if (employee.length > 0) {
+        query += ' AND ts.employee_id = ?';
+        params.push(employee[0].id);
+      } else {
+        return res.json({ data: [] });
+      }
+    }
+    
+    query += ' ORDER BY ts.date DESC, ts.created_at DESC';
+    
+    const [timesheets] = await db.query(query, params);
+    
+    res.json({ data: timesheets });
+  } catch (error) {
+    logger.error('Error fetching timesheets:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create timesheet entry
+router.post('/:id/timesheets', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date, hours, notes } = req.body;
+    const userId = req.user?.id;
+    
+    if (!date || !hours) {
+      return res.status(400).json({ error: 'Date and hours are required' });
+    }
+    
+    // Get employee ID
+    const [employee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
+    if (employee.length === 0) {
+      return res.status(404).json({ error: 'Employee record not found' });
+    }
+    
+    const [result] = await db.query(`
+      INSERT INTO timesheets (employee_id, task_id, date, hours, notes)
+      VALUES (?, ?, ?, ?, ?)
+    `, [employee[0].id, id, date, hours, notes || null]);
+    
+    const [newTimesheet] = await db.query(`
+      SELECT 
+        ts.*,
+        e.emp_code,
+        u.name as employee_name
+      FROM timesheets ts
+      LEFT JOIN employees e ON ts.employee_id = e.id
+      LEFT JOIN users u ON e.user_id = u.id
+      WHERE ts.id = ?
+    `, [result.insertId]);
+    
+    res.status(201).json({ data: newTimesheet[0] });
+  } catch (error) {
+    logger.error('Error creating timesheet:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update timesheet entry
+router.put('/timesheets/:timesheetId', async (req, res) => {
+  try {
+    const { timesheetId } = req.params;
+    const { date, hours, notes } = req.body;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    const isSuperAdmin = userRole === 'Super Admin';
+    
+    // Check if timesheet exists and belongs to user (unless Super Admin)
+    const [timesheets] = await db.query(`
+      SELECT ts.*, e.user_id as employee_user_id
+      FROM timesheets ts
+      LEFT JOIN employees e ON ts.employee_id = e.id
+      WHERE ts.id = ?
+    `, [timesheetId]);
+    
+    if (timesheets.length === 0) {
+      return res.status(404).json({ error: 'Timesheet not found' });
+    }
+    
+    if (!isSuperAdmin && timesheets[0].employee_user_id !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    const updates = [];
+    const params = [];
+    
+    if (date !== undefined) {
+      updates.push('date = ?');
+      params.push(date);
+    }
+    if (hours !== undefined) {
+      updates.push('hours = ?');
+      params.push(hours);
+    }
+    if (notes !== undefined) {
+      updates.push('notes = ?');
+      params.push(notes);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    
+    params.push(timesheetId);
+    
+    await db.query(
+      `UPDATE timesheets SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
+    
+    const [updated] = await db.query(`
+      SELECT 
+        ts.*,
+        e.emp_code,
+        u.name as employee_name
+      FROM timesheets ts
+      LEFT JOIN employees e ON ts.employee_id = e.id
+      LEFT JOIN users u ON e.user_id = u.id
+      WHERE ts.id = ?
+    `, [timesheetId]);
+    
+    res.json({ data: updated[0] });
+  } catch (error) {
+    logger.error('Error updating timesheet:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete timesheet entry
+router.delete('/timesheets/:timesheetId', async (req, res) => {
+  try {
+    const { timesheetId } = req.params;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    const isSuperAdmin = userRole === 'Super Admin';
+    
+    // Check if timesheet exists and belongs to user (unless Super Admin)
+    const [timesheets] = await db.query(`
+      SELECT ts.*, e.user_id as employee_user_id
+      FROM timesheets ts
+      LEFT JOIN employees e ON ts.employee_id = e.id
+      WHERE ts.id = ?
+    `, [timesheetId]);
+    
+    if (timesheets.length === 0) {
+      return res.status(404).json({ error: 'Timesheet not found' });
+    }
+    
+    if (!isSuperAdmin && timesheets[0].employee_user_id !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    await db.query('DELETE FROM timesheets WHERE id = ?', [timesheetId]);
+    
+    res.json({ message: 'Timesheet deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting timesheet:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// TASK ATTACHMENTS ROUTES
+// ============================================
+
+// Get task attachments
+router.get('/:id/attachments', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [attachments] = await db.query(`
+      SELECT 
+        a.*,
+        u.name as uploaded_by_name
+      FROM attachments a
+      LEFT JOIN users u ON a.uploaded_by = u.id
+      WHERE a.task_id = ?
+      ORDER BY a.created_at DESC
+    `, [id]);
+    
+    res.json({ data: attachments });
+  } catch (error) {
+    logger.error('Error fetching task attachments:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload task attachments
+router.post('/:id/attachments', requirePermission('tasks.edit'), upload.array('attachments', 10), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+    
+    // Check if task exists
+    const [tasks] = await db.query('SELECT id FROM tasks WHERE id = ?', [id]);
+    if (tasks.length === 0) {
+      // Clean up uploaded files
+      req.files.forEach((file) => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    const uploadedFiles = [];
+    for (const file of req.files) {
+      const filePath = `/uploads/tasks/${file.filename}`;
+      const [attachmentResult] = await db.query(`
+        INSERT INTO attachments (
+          task_id, uploaded_by, path, original_filename, mime_type, size
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [id, userId, filePath, file.originalname, file.mimetype, file.size]);
+      
+      uploadedFiles.push({
+        id: attachmentResult.insertId,
+        path: filePath,
+        original_filename: file.originalname,
+        mime_type: file.mimetype,
+        size: file.size
+      });
+    }
+    
+    res.json({ data: uploadedFiles, message: 'Files uploaded successfully' });
+  } catch (error) {
+    logger.error('Error uploading task attachments:', error);
+    // Clean up uploaded files on error
+    if (req.files) {
+      req.files.forEach((file) => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete task attachment
+router.delete('/:id/attachments/:attachmentId', requirePermission('tasks.edit'), async (req, res) => {
+  try {
+    const { id, attachmentId } = req.params;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    const isSuperAdmin = userRole === 'Super Admin';
+    
+    // Get attachment info
+    const [attachments] = await db.query(`
+      SELECT a.*, t.created_by as task_created_by
+      FROM attachments a
+      LEFT JOIN tasks t ON a.task_id = t.id
+      WHERE a.id = ? AND a.task_id = ?
+    `, [attachmentId, id]);
+    
+    if (attachments.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+    
+    const attachment = attachments[0];
+    
+    // Check permission: user must be the uploader, task creator, or Super Admin
+    if (!isSuperAdmin && attachment.uploaded_by !== userId && attachment.task_created_by !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    // Delete file from filesystem
+    if (attachment.path && fs.existsSync(attachment.path)) {
+      try {
+        fs.unlinkSync(attachment.path);
+      } catch (fileError) {
+        logger.warn('Error deleting file from filesystem:', fileError);
+        // Continue with database deletion even if file deletion fails
+      }
+    }
+    
+    // Delete from database
+    await db.query('DELETE FROM attachments WHERE id = ?', [attachmentId]);
+    
+    res.json({ message: 'Attachment deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting task attachment:', error);
     res.status(500).json({ error: error.message });
   }
 });

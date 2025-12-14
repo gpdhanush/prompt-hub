@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, MessageSquare, Paperclip, CheckSquare, User, Clock, CalendarDays, FileText, AlertCircle, Target, Users, Calendar } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, MessageSquare, Paperclip, CheckSquare, CheckCircle, User, Clock, CalendarDays, FileText, AlertCircle, Target, Users, Calendar, History, Timer, Send, Reply, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +49,8 @@ import { StatusBadge, taskStageMap, taskPriorityMap } from "@/components/ui/stat
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Pagination } from "@/components/ui/pagination";
 import { tasksApi, projectsApi, usersApi } from "@/lib/api";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
@@ -85,6 +87,7 @@ type Task = {
 const stages = ["All", "Analysis", "Documentation", "Development", "Testing", "Pre-Prod", "Production", "Closed"];
 
 export default function Tasks() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
@@ -95,6 +98,9 @@ export default function Tasks() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [activeTab, setActiveTab] = useState('details');
+  const [newComment, setNewComment] = useState('');
+  const [timesheetForm, setTimesheetForm] = useState({ date: '', hours: '', notes: '' });
   const [taskForm, setTaskForm] = useState({
     project_id: "",
     title: "",
@@ -120,11 +126,17 @@ export default function Tasks() {
   const canEditTask = hasPermission('tasks.edit');
   const canDeleteTask = hasPermission('tasks.delete');
 
+  const [page, setPage] = useState(1);
+  const limit = 10;
+
   // Fetch tasks from API
   const { data, isLoading, error } = useQuery({
-    queryKey: ['tasks', searchQuery, activeStage, viewFilter],
-    queryFn: () => tasksApi.getAll({ page: 1, limit: 100, my_tasks: viewFilter === 'my' ? currentUserId : undefined }),
+    queryKey: ['tasks', searchQuery, activeStage, viewFilter, page],
+    queryFn: () => tasksApi.getAll({ page, limit, my_tasks: viewFilter === 'my' ? currentUserId : undefined }),
   });
+
+  const tasks = data?.data || [];
+  const pagination = data?.pagination || { total: 0, totalPages: 0 };
 
   // Fetch projects for dropdown
   const { data: projectsData } = useQuery({
@@ -138,7 +150,6 @@ export default function Tasks() {
     queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
   });
 
-  const tasks = data?.data || [];
   const projects = projectsData?.data || [];
   const allUsers = usersData?.data || [];
   
@@ -259,17 +270,16 @@ export default function Tasks() {
 
   // Handlers
   const handleView = (task: Task) => {
-    setSelectedTask(task);
-    setShowViewDialog(true);
+    navigate(`/tasks/${task.id}`);
   };
 
-  // Handle task query parameter to open view dialog
+  // Handle task query parameter to navigate to view page
   const taskIdParam = searchParams.get('task');
   useEffect(() => {
     if (taskIdParam && tasks.length > 0) {
       const task = tasks.find((t: Task) => t.id.toString() === taskIdParam || t.task_code === taskIdParam);
       if (task) {
-        handleView(task);
+        navigate(`/tasks/${task.id}`);
         // Remove task parameter from URL
         setSearchParams((params) => {
           params.delete('task');
@@ -277,24 +287,10 @@ export default function Tasks() {
         });
       }
     }
-  }, [taskIdParam, tasks, setSearchParams]);
+  }, [taskIdParam, tasks, setSearchParams, navigate]);
 
   const handleEdit = (task: Task) => {
-    setSelectedTask(task);
-    setTaskForm({
-      project_id: task.project_id?.toString() || "",
-      title: task.title,
-      description: task.description || "",
-      priority: task.priority === 'Med' ? 'Medium' : (task.priority || 'Medium'),
-      stage: task.stage || "Analysis",
-      status: task.status || "Open",
-      assigned_to: task.assigned_to?.toString() || "",
-      developer_id: task.developer_id?.toString() || "",
-      designer_id: task.designer_id?.toString() || "",
-      tester_id: task.tester_id?.toString() || "",
-      deadline: task.deadline ? task.deadline.split('T')[0] : "",
-    });
-    setShowEditDialog(true);
+    navigate(`/tasks/${task.id}/edit`);
   };
 
   const handleDelete = (task: Task) => {
@@ -428,208 +424,11 @@ export default function Tasks() {
             </Button>
           </div>
           {canCreateTask && (
-          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-            <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          New Task
-        </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-              <DialogHeader>
-                <DialogTitle>Create New Task</DialogTitle>
-                <DialogDescription>
-                  Add a new task to track and manage
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="task-project">Project *</Label>
-                  <Select
-                    value={taskForm.project_id}
-                    onValueChange={(value) => setTaskForm({ ...taskForm, project_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projects.map((project: any) => (
-                        <SelectItem key={project.id} value={project.id.toString()}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="task-title">Task Title *</Label>
-                  <Input
-                    id="task-title"
-                    placeholder="Enter task title"
-                    value={taskForm.title}
-                    onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="task-description">Description</Label>
-                  <Textarea
-                    id="task-description"
-                    placeholder="Enter task description"
-                    value={taskForm.description}
-                    onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
-                    rows={4}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="task-priority">Priority</Label>
-                    <Select
-                      value={taskForm.priority}
-                      onValueChange={(value) => setTaskForm({ ...taskForm, priority: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Low">Low</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="High">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="task-stage">Stage</Label>
-                    <Select
-                      value={taskForm.stage}
-                      onValueChange={(value) => setTaskForm({ ...taskForm, stage: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Analysis">Analysis</SelectItem>
-                        <SelectItem value="Documentation">Documentation</SelectItem>
-                        <SelectItem value="Development">Development</SelectItem>
-                        <SelectItem value="Testing">Testing</SelectItem>
-                        <SelectItem value="Pre-Prod">Pre-Prod</SelectItem>
-                        <SelectItem value="Production">Production</SelectItem>
-                        <SelectItem value="Closed">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="task-status">Status</Label>
-                    <Select
-                      value={taskForm.status}
-                      onValueChange={(value) => setTaskForm({ ...taskForm, status: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Open">Open</SelectItem>
-                        <SelectItem value="In Progress">In Progress</SelectItem>
-                        <SelectItem value="Ready for Testing">Ready for Testing</SelectItem>
-                        <SelectItem value="Testing">Testing</SelectItem>
-                        <SelectItem value="Failed">Failed</SelectItem>
-                        <SelectItem value="Closed">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="task-deadline">Deadline</Label>
-                    <DatePicker
-                      id="task-deadline"
-                      value={taskForm.deadline}
-                      onChange={(date) => setTaskForm({ ...taskForm, deadline: date })}
-                      placeholder="Select deadline"
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-4 grid-cols-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="task-developer">Developer</Label>
-                    <Select
-                      value={taskForm.developer_id || undefined}
-                      onValueChange={(value) => setTaskForm({ ...taskForm, developer_id: value === "__none__" ? "" : value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select developer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {developers.map((user: any) => (
-                          <SelectItem key={user.id} value={user.id.toString()}>
-                            {user.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="task-designer">Designer</Label>
-                    <Select
-                      value={taskForm.designer_id || undefined}
-                      onValueChange={(value) => setTaskForm({ ...taskForm, designer_id: value === "__none__" ? "" : value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select designer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {designers.map((user: any) => (
-                          <SelectItem key={user.id} value={user.id.toString()}>
-                            {user.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="task-tester">Tester</Label>
-                    <Select
-                      value={taskForm.tester_id || undefined}
-                      onValueChange={(value) => setTaskForm({ ...taskForm, tester_id: value === "__none__" ? "" : value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select tester" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {testers.map((user: any) => (
-                          <SelectItem key={user.id} value={user.id.toString()}>
-                            {user.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowAddDialog(false);
-                      setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", developer_id: "", designer_id: "", tester_id: "", deadline: "" });
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={handleCreateTask}
-                    disabled={createMutation.isPending}
-                  >
-                    {createMutation.isPending ? "Creating..." : "Create Task"}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
+            <Button onClick={() => navigate('/tasks/new')}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Task
+            </Button>
+          )}
         </div>
       </div>
 
@@ -657,27 +456,18 @@ export default function Tasks() {
       <Card className="glass-card">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between flex-wrap gap-4">
-            <Tabs value={activeStage} onValueChange={setActiveStage} className="w-full md:w-auto">
-              <TabsList className="bg-muted/50">
-                <TabsTrigger value="All">All</TabsTrigger>
-                <TabsTrigger value="Development">Dev</TabsTrigger>
-                <TabsTrigger value="Testing">Testing</TabsTrigger>
-                <TabsTrigger value="Production">Prod</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <div className="flex items-center gap-2">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search tasks..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Button variant="outline" size="icon">
-                <Filter className="h-4 w-4" />
-              </Button>
+            <CardTitle className="text-lg">All Tasks</CardTitle>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search tasks..."
+                className="pl-9"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+              />
             </div>
           </div>
         </CardHeader>
@@ -718,9 +508,13 @@ export default function Tasks() {
                 </TableRow>
               ) : (
                 filteredTasks.map((task: Task) => (
-                <TableRow key={task.id}>
-                  <TableCell className="font-mono text-primary font-medium">
-                      #{task.task_code || task.id}
+                <TableRow 
+                  key={task.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleView(task)}
+                >
+                  <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
+                    {task.task_code || `TASK-${task.id}`}
                   </TableCell>
                   <TableCell className="font-medium max-w-[200px] truncate">
                     {task.title}
@@ -759,7 +553,7 @@ export default function Tasks() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -794,401 +588,19 @@ export default function Tasks() {
               )}
             </TableBody>
           </Table>
+          {pagination.totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalPages={pagination.totalPages}
+              onPageChange={setPage}
+              total={pagination.total}
+              limit={limit}
+            />
+          )}
         </CardContent>
       </Card>
 
-      {/* View Task Dialog */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-              <CheckSquare className="h-6 w-6 text-primary" />
-              Task Details
-            </DialogTitle>
-            <DialogDescription className="text-base">
-              View complete information about this task
-            </DialogDescription>
-          </DialogHeader>
-          {selectedTask && (
-            <div className="space-y-6 py-2">
-              {/* Header Section */}
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <CheckSquare className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Task ID</p>
-                    <p className="text-lg font-bold font-mono">#{selectedTask.task_code || selectedTask.id}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <StatusBadge variant={taskPriorityMap[getPriorityLabel(selectedTask.priority)]} className="text-sm px-3 py-1.5">
-                    {getPriorityLabel(selectedTask.priority)}
-                  </StatusBadge>
-                  <StatusBadge variant={taskStageMap[selectedTask.stage || 'Analysis']} className="text-sm px-3 py-1.5">
-                    {selectedTask.stage || 'Analysis'}
-                  </StatusBadge>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Basic Information */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Basic Information
-                </h3>
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">Task Title</Label>
-                    <p className="text-base font-semibold">{selectedTask.title}</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">Status</Label>
-                    <div className="mt-1">
-                      <StatusBadge variant="neutral" className="text-sm px-3 py-1">
-                        {selectedTask.status || 'Open'}
-                      </StatusBadge>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Description */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Description
-                </h3>
-                <div className="p-4 bg-muted/30 rounded-md border">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-                    {selectedTask.description || "No description provided"}
-                  </p>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Date Information */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Date Information
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {selectedTask.deadline && (
-                    <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                        <CalendarDays className="h-3.5 w-3.5" />
-                        Deadline
-                      </Label>
-                      <p className="text-sm font-semibold">
-                        {formatDate(selectedTask.deadline) !== "Not set" 
-                          ? new Date(selectedTask.deadline).toLocaleDateString("en-US", {
-                              weekday: "short",
-                              year: "numeric",
-                              month: "short",
-                              day: "numeric",
-                            })
-                          : "Not set"}
-                      </p>
-                    </div>
-                  )}
-                  {selectedTask.created_at && (
-                    <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5" />
-                        Created At
-                      </Label>
-                      <p className="text-sm font-semibold">
-                        {new Date(selectedTask.created_at).toLocaleDateString("en-US", {
-                          weekday: "short",
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Team Assignment */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Team Assignment
-                </h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5" />
-                      Developer
-                    </Label>
-                    <p className="text-sm font-medium">{selectedTask.developer_name || 'Not assigned'}</p>
-                  </div>
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5" />
-                      Designer
-                    </Label>
-                    <p className="text-sm font-medium">{selectedTask.designer_name || 'Not assigned'}</p>
-                  </div>
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5" />
-                      Tester
-                    </Label>
-                    <p className="text-sm font-medium">{selectedTask.tester_name || 'Not assigned'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Audit Information */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  Audit Information
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground">Created By</Label>
-                    <p className="text-sm font-medium">{selectedTask.created_by_name || 'N/A'}</p>
-                    {selectedTask.created_at && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatFullDate(selectedTask.created_at)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground">Last Updated By</Label>
-                    <p className="text-sm font-medium">
-                      {selectedTask.updated_by_name || selectedTask.created_by_name || 'N/A'}
-                    </p>
-                    {selectedTask.updated_at && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatFullDate(selectedTask.updated_at)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 pt-2 border-t">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setShowViewDialog(false)}
-                >
-                  Close
-                </Button>
-                {canEditTask && (
-                  <Button
-                    className="flex-1"
-                    onClick={() => {
-                      setShowViewDialog(false);
-                      handleEdit(selectedTask);
-                    }}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit Task
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Task Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Edit Task</DialogTitle>
-            <DialogDescription>
-              Update task information
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-task-title">Task Title *</Label>
-              <Input
-                id="edit-task-title"
-                placeholder="Enter task title"
-                value={taskForm.title}
-                onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-task-description">Description</Label>
-              <Textarea
-                id="edit-task-description"
-                placeholder="Enter task description"
-                value={taskForm.description}
-                onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
-                rows={4}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-task-priority">Priority</Label>
-                <Select
-                  value={taskForm.priority}
-                  onValueChange={(value) => setTaskForm({ ...taskForm, priority: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Low">Low</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-task-stage">Stage</Label>
-                <Select
-                  value={taskForm.stage}
-                  onValueChange={(value) => setTaskForm({ ...taskForm, stage: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Analysis">Analysis</SelectItem>
-                    <SelectItem value="Documentation">Documentation</SelectItem>
-                    <SelectItem value="Development">Development</SelectItem>
-                    <SelectItem value="Testing">Testing</SelectItem>
-                    <SelectItem value="Pre-Prod">Pre-Prod</SelectItem>
-                    <SelectItem value="Production">Production</SelectItem>
-                    <SelectItem value="Closed">Closed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-task-status">Status</Label>
-                <Select
-                  value={taskForm.status}
-                  onValueChange={(value) => setTaskForm({ ...taskForm, status: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Open">Open</SelectItem>
-                    <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Ready for Testing">Ready for Testing</SelectItem>
-                    <SelectItem value="Testing">Testing</SelectItem>
-                    <SelectItem value="Failed">Failed</SelectItem>
-                    <SelectItem value="Closed">Closed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-task-deadline">Deadline</Label>
-                <DatePicker
-                  id="edit-task-deadline"
-                  value={taskForm.deadline}
-                  onChange={(date) => setTaskForm({ ...taskForm, deadline: date })}
-                  placeholder="Select deadline"
-                />
-              </div>
-            </div>
-            <div className="grid gap-4 grid-cols-3">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-task-developer">Developer</Label>
-                <Select
-                  value={taskForm.developer_id || undefined}
-                  onValueChange={(value) => setTaskForm({ ...taskForm, developer_id: value === "__none__" ? "" : value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select developer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {developers.map((user: any) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-task-designer">Designer</Label>
-                <Select
-                  value={taskForm.designer_id || undefined}
-                  onValueChange={(value) => setTaskForm({ ...taskForm, designer_id: value === "__none__" ? "" : value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select designer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {designers.map((user: any) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-task-tester">Tester</Label>
-                <Select
-                  value={taskForm.tester_id || undefined}
-                  onValueChange={(value) => setTaskForm({ ...taskForm, tester_id: value === "__none__" ? "" : value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select tester" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {testers.map((user: any) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => {
-                  setShowEditDialog(false);
-                  setSelectedTask(null);
-                  setTaskForm({ project_id: "", title: "", description: "", priority: "Medium", stage: "Analysis", status: "Open", assigned_to: "", developer_id: "", designer_id: "", tester_id: "", deadline: "" });
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={handleUpdateTask}
-                disabled={updateMutation.isPending}
-              >
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
+      {/* Remove old dialogs - we're using separate pages now */}
       {/* Delete Confirmation Alert Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
@@ -1213,6 +625,564 @@ export default function Tasks() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// Export components for TaskView to use - these are defined below
+
+// Task Comments Section Component
+export function TaskCommentsSection({ taskId }: { taskId: number }) {
+  const queryClient = useQueryClient();
+  const currentUser = getCurrentUser();
+  const [commentText, setCommentText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<number | null>(null);
+
+  const { data: commentsData, isLoading } = useQuery({
+    queryKey: ['task-comments', taskId],
+    queryFn: () => tasksApi.getComments(taskId),
+  });
+
+  const comments = commentsData?.data || [];
+
+  // Organize comments into tree structure
+  const commentMap = new Map();
+  const rootComments: any[] = [];
+
+  comments.forEach((comment: any) => {
+    commentMap.set(comment.id, { ...comment, replies: [] });
+  });
+
+  comments.forEach((comment: any) => {
+    const commentNode = commentMap.get(comment.id);
+    if (comment.parent_comment_id) {
+      const parent = commentMap.get(comment.parent_comment_id);
+      if (parent) {
+        parent.replies.push(commentNode);
+      }
+    } else {
+      rootComments.push(commentNode);
+    }
+  });
+
+  const createCommentMutation = useMutation({
+    mutationFn: (data: { comment: string; parent_comment_id?: number }) =>
+      tasksApi.createComment(taskId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-comments', taskId] });
+      setCommentText('');
+      setReplyingTo(null);
+      toast({ title: "Success", description: "Comment added successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to add comment.", variant: "destructive" });
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!commentText.trim()) return;
+    createCommentMutation.mutate({
+      comment: commentText,
+      parent_comment_id: replyingTo || undefined,
+    });
+  };
+
+  const formatTimeAgo = (date: string) => {
+    const now = new Date();
+    const then = new Date(date);
+    const diffInSeconds = Math.floor((now.getTime() - then.getTime()) / 1000);
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Add Comment Form */}
+      <div className="space-y-2">
+        <Label>Add Comment</Label>
+        <Textarea
+          placeholder={replyingTo ? "Write a reply..." : "Write a comment..."}
+          value={commentText}
+          onChange={(e) => setCommentText(e.target.value)}
+          rows={3}
+        />
+        <div className="flex items-center justify-between">
+          {replyingTo && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setReplyingTo(null);
+                setCommentText('');
+              }}
+            >
+              Cancel Reply
+            </Button>
+          )}
+          <Button
+            onClick={handleSubmit}
+            disabled={!commentText.trim() || createCommentMutation.isPending}
+            size="sm"
+          >
+            <Send className="mr-2 h-4 w-4" />
+            {createCommentMutation.isPending ? 'Posting...' : 'Post Comment'}
+          </Button>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Comments List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Clock className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      ) : rootComments.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No comments yet. Be the first to comment!</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {rootComments.map((comment: any) => (
+            <div key={comment.id} className="space-y-2">
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm font-medium">{comment.user_name || 'Unknown'}</p>
+                    {comment.user_role && (
+                      <Badge variant="outline" className="text-xs">
+                        {comment.user_role}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {formatTimeAgo(comment.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap">{comment.comment}</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 h-7 text-xs"
+                    onClick={() => setReplyingTo(comment.id)}
+                  >
+                    <Reply className="mr-1 h-3 w-3" />
+                    Reply
+                  </Button>
+                </div>
+              </div>
+              {/* Replies */}
+              {comment.replies.length > 0 && (
+                <div className="ml-11 space-y-2 border-l-2 border-muted pl-4">
+                  {comment.replies.map((reply: any) => (
+                    <div key={reply.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <User className="h-3 w-3 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-xs font-medium">{reply.user_name || 'Unknown'}</p>
+                          <span className="text-xs text-muted-foreground">
+                            {formatTimeAgo(reply.created_at)}
+                          </span>
+                        </div>
+                        <p className="text-xs whitespace-pre-wrap">{reply.comment}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Task History Section Component
+export function TaskHistorySection({ taskId }: { taskId: number }) {
+  const { data: historyData, isLoading } = useQuery({
+    queryKey: ['task-history', taskId],
+    queryFn: () => tasksApi.getHistory(taskId),
+  });
+
+  const history = historyData?.data || [];
+
+  const formatTimeAgo = (date: string) => {
+    const now = new Date();
+    const then = new Date(date);
+    const diffInSeconds = Math.floor((now.getTime() - then.getTime()) / 1000);
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  };
+
+  const formatDateTime = (date: string) => {
+    return new Date(date).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Clock className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      ) : history.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No history recorded yet.</p>
+        </div>
+      ) : (
+        <div className="relative">
+          {/* Vertical Stepper Line */}
+          <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-border"></div>
+          
+          <div className="space-y-0">
+            {history.map((entry: any, index: number) => (
+              <div key={entry.id} className="relative flex items-start gap-4 pb-6 last:pb-0">
+                {/* Stepper Circle */}
+                <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 border-2 border-primary/20">
+                  <History className="h-5 w-5 text-primary" />
+                </div>
+                
+                {/* Content Card */}
+                <div className="flex-1 min-w-0 rounded-lg border bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between gap-4 mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm font-semibold text-foreground">{entry.changed_by_name || 'Unknown'}</p>
+                        <Badge variant="outline" className="text-xs">
+                          {formatTimeAgo(entry.timestamp)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="outline" className="text-xs font-normal">
+                          {entry.from_status || 'N/A'}
+                        </Badge>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                        <Badge variant="default" className="text-xs">
+                          {entry.to_status || 'N/A'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">
+                        {formatDateTime(entry.timestamp)}
+                      </p>
+                    </div>
+                  </div>
+                  {entry.note && (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-sm text-muted-foreground">{entry.note}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Task Timesheets Section Component
+export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
+  const queryClient = useQueryClient();
+  const currentUser = getCurrentUser();
+  const [showAddTimesheet, setShowAddTimesheet] = useState(false);
+  const [timesheetForm, setTimesheetForm] = useState({ date: '', hours: '', notes: '' });
+  const [editingTimesheet, setEditingTimesheet] = useState<number | null>(null);
+
+  const { data: timesheetsData, isLoading } = useQuery({
+    queryKey: ['task-timesheets', taskId],
+    queryFn: () => tasksApi.getTimesheets(taskId),
+  });
+
+  const timesheets = timesheetsData?.data || [];
+
+  const createTimesheetMutation = useMutation({
+    mutationFn: (data: { date: string; hours: number; notes?: string }) =>
+      tasksApi.createTimesheet(taskId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-timesheets', taskId] });
+      setTimesheetForm({ date: '', hours: '', notes: '' });
+      setShowAddTimesheet(false);
+      toast({ title: "Success", description: "Timesheet entry added successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to add timesheet.", variant: "destructive" });
+    },
+  });
+
+  const updateTimesheetMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { date?: string; hours?: number; notes?: string } }) =>
+      tasksApi.updateTimesheet(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-timesheets', taskId] });
+      setEditingTimesheet(null);
+      setTimesheetForm({ date: '', hours: '', notes: '' });
+      toast({ title: "Success", description: "Timesheet updated successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update timesheet.", variant: "destructive" });
+    },
+  });
+
+  const deleteTimesheetMutation = useMutation({
+    mutationFn: (id: number) => tasksApi.deleteTimesheet(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-timesheets', taskId] });
+      toast({ title: "Success", description: "Timesheet deleted successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete timesheet.", variant: "destructive" });
+    },
+  });
+
+  const handleSubmitTimesheet = () => {
+    if (!timesheetForm.date || !timesheetForm.hours) {
+      toast({ title: "Error", description: "Date and hours are required.", variant: "destructive" });
+      return;
+    }
+
+    if (editingTimesheet) {
+      updateTimesheetMutation.mutate({
+        id: editingTimesheet,
+        data: {
+          date: timesheetForm.date,
+          hours: parseFloat(timesheetForm.hours),
+          notes: timesheetForm.notes || undefined,
+        },
+      });
+    } else {
+      createTimesheetMutation.mutate({
+        date: timesheetForm.date,
+        hours: parseFloat(timesheetForm.hours),
+        notes: timesheetForm.notes || undefined,
+      });
+    }
+  };
+
+  const totalHours = timesheets.reduce((sum: number, ts: any) => sum + parseFloat(ts.hours || 0), 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 gap-4">
+        <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 hover:border-primary/40 transition-all">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Total Hours</p>
+                <p className="text-3xl font-bold text-primary">{totalHours.toFixed(2)}</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
+                <Timer className="h-6 w-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-blue-500/20 bg-gradient-to-br from-blue-500/5 to-blue-500/10 hover:border-blue-500/40 transition-all">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Entries</p>
+                <p className="text-3xl font-bold text-blue-600">{timesheets.length}</p>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                <FileText className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Add Timesheet Button */}
+      <Button
+        onClick={() => {
+          setShowAddTimesheet(true);
+          setEditingTimesheet(null);
+          setTimesheetForm({ date: '', hours: '', notes: '' });
+        }}
+        className="w-full h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
+      >
+        <Plus className="mr-2 h-5 w-5" />
+        Add Timesheet Entry
+      </Button>
+
+      {/* Add/Edit Timesheet Dialog */}
+      <Dialog open={showAddTimesheet || editingTimesheet !== null} onOpenChange={(open) => {
+        if (!open) {
+          setShowAddTimesheet(false);
+          setEditingTimesheet(null);
+          setTimesheetForm({ date: '', hours: '', notes: '' });
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingTimesheet ? 'Edit Timesheet' : 'Add Timesheet Entry'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Date *</Label>
+              <DatePicker
+                value={timesheetForm.date}
+                onChange={(date) => setTimesheetForm({ ...timesheetForm, date })}
+                placeholder="Select date"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Hours *</Label>
+              <Input
+                type="number"
+                step="0.25"
+                min="0"
+                max="24"
+                placeholder="e.g., 8.5"
+                value={timesheetForm.hours}
+                onChange={(e) => setTimesheetForm({ ...timesheetForm, hours: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea
+                placeholder="What did you work on?"
+                value={timesheetForm.notes}
+                onChange={(e) => setTimesheetForm({ ...timesheetForm, notes: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowAddTimesheet(false);
+                  setEditingTimesheet(null);
+                  setTimesheetForm({ date: '', hours: '', notes: '' });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSubmitTimesheet}
+                disabled={!timesheetForm.date || !timesheetForm.hours || createTimesheetMutation.isPending || updateTimesheetMutation.isPending}
+              >
+                {createTimesheetMutation.isPending || updateTimesheetMutation.isPending ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Timesheets List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Clock className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      ) : timesheets.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Timer className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No timesheet entries yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {timesheets.map((timesheet: any) => (
+            <Card 
+              key={timesheet.id} 
+              className="border-2 hover:border-primary/50 hover:shadow-md transition-all group"
+            >
+              <CardContent className="p-5">
+                <div className="flex items-start gap-4">
+                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0 border-2 border-primary/30 group-hover:border-primary/50 transition-all">
+                    <Timer className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-base font-semibold">{timesheet.employee_name || 'Unknown'}</p>
+                          <Badge variant="outline" className="text-xs">
+                            {timesheet.hours} {timesheet.hours === 1 ? 'hour' : 'hours'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <CalendarDays className="h-3.5 w-3.5" />
+                          <span>{new Date(timesheet.date).toLocaleDateString('en-US', { 
+                            weekday: 'short', 
+                            year: 'numeric', 
+                            month: 'short', 
+                            day: 'numeric' 
+                          })}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-primary/10 hover:text-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTimesheet(timesheet.id);
+                            setTimesheetForm({
+                              date: timesheet.date,
+                              hours: timesheet.hours.toString(),
+                              notes: timesheet.notes || '',
+                            });
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('Are you sure you want to delete this timesheet entry?')) {
+                              deleteTimesheetMutation.mutate(timesheet.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    {timesheet.notes && (
+                      <div className="mt-3 p-3 rounded-lg bg-muted/50 border border-muted">
+                        <p className="text-sm text-foreground">{timesheet.notes}</p>
+                      </div>
+                    )}
+                    {timesheet.approved_by_name && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs border-green-500/50 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30">
+                          <CheckCircle className="mr-1 h-3 w-3" />
+                          Approved by {timesheet.approved_by_name}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

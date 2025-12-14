@@ -31,6 +31,8 @@ import {
   CalendarDays,
   FileCheck,
   ArrowLeft,
+  MessageCircle,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,7 +153,7 @@ export default function EmployeeProfile() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => navigate("/employees")}>
+          <Button variant="outline" size="icon" onClick={() => navigate("/employees/list")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -212,28 +214,28 @@ export default function EmployeeProfile() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-muted/50 w-full justify-start overflow-x-auto">
-          <TabsTrigger value="personal" className="flex items-center gap-2">
+        <TabsList className="bg-muted/50 w-full justify-start overflow-x-auto h-12">
+          <TabsTrigger value="personal" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <User className="h-4 w-4" />
             Personal Info
           </TabsTrigger>
-          <TabsTrigger value="employment" className="flex items-center gap-2">
+          <TabsTrigger value="employment" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Briefcase className="h-4 w-4" />
             Employment
           </TabsTrigger>
-          <TabsTrigger value="address" className="flex items-center gap-2">
+          <TabsTrigger value="address" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Home className="h-4 w-4" />
             Address
           </TabsTrigger>
-          <TabsTrigger value="bank" className="flex items-center gap-2">
+          <TabsTrigger value="bank" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Wallet className="h-4 w-4" />
             Bank Details
           </TabsTrigger>
-          <TabsTrigger value="leaves" className="flex items-center gap-2">
+          <TabsTrigger value="leaves" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <CalendarDays className="h-4 w-4" />
             Leaves
           </TabsTrigger>
-          <TabsTrigger value="documents" className="flex items-center gap-2">
+          <TabsTrigger value="documents" className="flex items-center gap-2 h-10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <FileCheck className="h-4 w-4" />
             Documents
           </TabsTrigger>
@@ -280,6 +282,33 @@ export default function EmployeeProfile() {
                       <p className="text-base font-semibold">{employee.gender || "Not provided"}</p>
                     </div>
                   </div>
+                  {employee.district && (
+                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                      <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-muted-foreground mb-1">District</p>
+                        <p className="text-base font-semibold">{employee.district}</p>
+                      </div>
+                    </div>
+                  )}
+                  {employee.skype && (
+                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                      <MessageCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Skype</p>
+                        <p className="text-base font-semibold">{employee.skype}</p>
+                      </div>
+                    </div>
+                  )}
+                  {employee.whatsapp && (
+                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
+                      <MessageSquare className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-muted-foreground mb-1">WhatsApp</p>
+                        <p className="text-base font-semibold">{employee.whatsapp}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

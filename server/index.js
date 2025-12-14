@@ -21,6 +21,7 @@ import auditLogsRoutes from './routes/auditLogs.js';
 import notificationsRoutes from './routes/notifications.js';
 import reportsRoutes from './routes/reports.js';
 import settingsRoutes from './routes/settings.js';
+import searchRoutes from './routes/search.js';
 import rolesRoutes from './routes/roles.js';
 import positionsRoutes from './routes/positions.js';
 import rolePositionsRoutes from './routes/rolePositions.js';
@@ -28,14 +29,19 @@ import permissionsRoutes from './routes/permissions.js';
 import fcmRoutes from './routes/fcm.js';
 import mfaRoutes from './routes/mfa.js';
 import assetsRoutes from './routes/assets.js';
+import remindersRoutes from './routes/reminders.js';
 import { performHealthCheck } from './utils/dbHealthCheck.js';
 import { initializeFirebase } from './utils/fcmService.js';
 import { reportFatalError, createErrorContext } from './utils/errorReporting.js';
+import { initializeReminderScheduler } from './utils/reminderScheduler.js';
 
 // Initialize Firebase Admin SDK (async)
 initializeFirebase().catch(err => {
   logger.error('Failed to initialize Firebase:', err);
 });
+
+// Initialize Reminder Scheduler
+initializeReminderScheduler();
 
 // Set up global error handlers for production crash reporting
 process.on('uncaughtException', (error) => {
@@ -121,7 +127,9 @@ app.use('/api/fcm', fcmRoutes);
 app.use('/api/mfa', mfaRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/search', searchRoutes);
 app.use('/api/assets', assetsRoutes);
+app.use('/api/reminders', remindersRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

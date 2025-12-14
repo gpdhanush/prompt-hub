@@ -28,6 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getImageUrl } from "@/lib/imageUtils";
+import { sanitizeInput, validateAndSanitize, containsHtmlOrScript } from "@/lib/validation";
 
 export default function EmployeeEdit() {
   const navigate = useNavigate();
@@ -41,6 +42,20 @@ export default function EmployeeEdit() {
   const canManage = ['Admin', 'Super Admin', 'Team Lead', 'Manager'].includes(currentUser?.role);
 
   const [showPassword, setShowPassword] = useState(false);
+
+  // Helper function to handle input changes with HTML/script validation
+  const handleInputChange = (field: string, value: string, fieldName?: string, transform?: (val: string) => string) => {
+    const validation = validateAndSanitize(value, fieldName || field);
+    if (validation.error) {
+      toast({
+        title: "Invalid Input",
+        description: validation.error,
+        variant: "destructive",
+      });
+    }
+    const finalValue = transform ? transform(validation.value) : validation.value;
+    setFormData({ ...formData, [field]: finalValue });
+  };
   
   const [formData, setFormData] = useState({
     // Basic user info
@@ -74,6 +89,10 @@ export default function EmployeeEdit() {
     emergency_contact_name: "",
     emergency_contact_relation: "",
     emergency_contact_number: "",
+    
+    // Contact Details
+    skype: "",
+    whatsapp: "",
     
     // Leave counts
     annual_leave_count: 0,
@@ -333,6 +352,8 @@ export default function EmployeeEdit() {
         emergency_contact_name: emp.emergency_contact_name || "",
         emergency_contact_relation: emp.emergency_contact_relation || "",
         emergency_contact_number: emp.emergency_contact_number || "",
+        skype: emp.skype || "",
+        whatsapp: emp.whatsapp || "",
         annual_leave_count: emp.annual_leave_count || 0,
         sick_leave_count: emp.sick_leave_count || 0,
         casual_leave_count: emp.casual_leave_count || 0,
@@ -562,6 +583,8 @@ export default function EmployeeEdit() {
         emergency_contact_name: data.emergency_contact_name || null,
         emergency_contact_relation: data.emergency_contact_relation || null,
         emergency_contact_number: data.emergency_contact_number || null,
+        skype: data.skype || null,
+        whatsapp: data.whatsapp || null,
         annual_leave_count: data.annual_leave_count || 0,
         sick_leave_count: data.sick_leave_count || 0,
         casual_leave_count: data.casual_leave_count || 0,
@@ -656,13 +679,13 @@ export default function EmployeeEdit() {
             <CardDescription>Login credentials and basic details</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="name">Name *</Label>
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
+                  onChange={(e) => handleInputChange('name', e.target.value, 'Name', (val) => val.toUpperCase())}
                   placeholder="Enter full name"
                   required
                 />
@@ -673,13 +696,11 @@ export default function EmployeeEdit() {
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => handleInputChange('email', e.target.value, 'Email')}
                   placeholder="Enter email address"
                   required
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="password">Password {isOwnProfile && "(Leave blank to keep current)"}</Label>
@@ -739,6 +760,8 @@ export default function EmployeeEdit() {
                   </button>
                 </div>
               </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="mobile">Mobile</Label>
                 <Input
@@ -755,6 +778,34 @@ export default function EmployeeEdit() {
                 />
               </div>
               <div className="grid gap-2">
+                <Label htmlFor="skype">Skype ID</Label>
+                <Input
+                  id="skype"
+                  type="text"
+                  value={formData.skype}
+                  onChange={(e) => handleInputChange('skype', e.target.value, 'Skype ID')}
+                  placeholder="Enter Skype ID"
+                  disabled={!canManage && !isOwnProfile}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="whatsapp">WhatsApp Number</Label>
+                <Input
+                  id="whatsapp"
+                  type="tel"
+                  value={formData.whatsapp}
+                  onChange={(e) => {
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, whatsapp: digitsOnly });
+                  }}
+                  placeholder="Enter WhatsApp number (10 digits)"
+                  maxLength={10}
+                  disabled={!canManage && !isOwnProfile}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
                 <Label>Date of Birth</Label>
                 <DatePicker
                   value={formData.date_of_birth}
@@ -762,16 +813,14 @@ export default function EmployeeEdit() {
                   disabled={!canManage}
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label>Gender</Label>
                 <Select
                   value={formData.gender}
                   onValueChange={(value) => setFormData({ ...formData, gender: value })}
-                  disabled={!canManage}
+                  disabled={true}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-muted">
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
                   <SelectContent>
@@ -792,144 +841,118 @@ export default function EmployeeEdit() {
             <CardDescription>Employee-specific details</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {canManage && (
-              <>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="empCode">Employee ID *</Label>
-                    <Input
-                      id="empCode"
-                      value={formData.empCode}
-                      onChange={(e) => setFormData({ ...formData, empCode: e.target.value })}
-                      placeholder="EMP-0001"
-                      required
-                      disabled={!canManage}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="role">User Role</Label>
-                    <Select
-                      value={formData.role}
-                      onValueChange={(value) => {
-                        setFormData({ ...formData, role: value, position: "" }); // Clear position when role changes
-                      }}
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableRoles.length > 0 ? (
-                          availableRoles.map((role: any) => (
-                            <SelectItem key={role.id} value={role.name}>
-                              {role.name}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          // Fallback if roles not loaded - show all roles from API
-                          allRoles.map((role: any) => (
-                            <SelectItem key={role.id} value={role.name}>
-                              {role.name}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="position">Position *</Label>
-                    <Select
-                      value={formData.position}
-                      onValueChange={(value) => setFormData({ ...formData, position: value })}
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Position" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availablePositions.length > 0 ? (
-                          availablePositions.map((pos: any) => (
-                            <SelectItem key={pos.id} value={pos.name}>
-                              {pos.name} {pos.level !== undefined ? `(Level ${pos.level})` : ''}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <div className="px-2 py-1.5 text-sm text-muted-foreground">No positions available</div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="reportsTo">Reports To *</Label>
-                    <Select
-                      value={formData.teamLeadId || "none"}
-                      onValueChange={(value) => setFormData({ ...formData, teamLeadId: value === "none" ? "" : value })}
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select reporting manager" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None (No Reporting Manager)</SelectItem>
-                        {availableReportingManagers.map((lead: any) => (
-                          <SelectItem key={lead.id} value={lead.id.toString()}>
-                            {lead.name} ({lead.email}) - {lead.role}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Date of Joining</Label>
-                    <DatePicker
-                      value={formData.date_of_joining}
-                      onChange={(date) => setFormData({ ...formData, date_of_joining: date })}
-                      disabled={!canManage}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Reports To (Reporting Manager)</Label>
-                    <Select
-                      value={formData.teamLeadId || "none"}
-                      onValueChange={(value) => setFormData({ ...formData, teamLeadId: value === "none" ? "" : value })}
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select reporting manager" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None (No Reporting Manager)</SelectItem>
-                        {availableReportingManagers.map((lead: any) => (
-                          <SelectItem key={lead.id} value={lead.id.toString()}>
-                            {lead.name} ({lead.email}) - {lead.role}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Employee Status *</Label>
-                    <Select
-                      value={formData.employee_status}
-                      onValueChange={(value) => setFormData({ ...formData, employee_status: value })}
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </>
-            )}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="empCode">Employee ID *</Label>
+                <Input
+                  id="empCode"
+                  value={formData.empCode}
+                  readOnly
+                  className="bg-muted"
+                  placeholder="EMP-0001"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="role">User Role</Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, role: value, position: "" }); // Clear position when role changes
+                  }}
+                  disabled={true}
+                >
+                  <SelectTrigger className="bg-muted">
+                    <SelectValue placeholder="Select Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableRoles.length > 0 ? (
+                      availableRoles.map((role: any) => (
+                        <SelectItem key={role.id} value={role.name}>
+                          {role.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      // Fallback if roles not loaded - show all roles from API
+                      allRoles.map((role: any) => (
+                        <SelectItem key={role.id} value={role.name}>
+                          {role.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="position">Position *</Label>
+                <Select
+                  value={formData.position}
+                  onValueChange={(value) => setFormData({ ...formData, position: value })}
+                  disabled={true}
+                >
+                  <SelectTrigger className="bg-muted">
+                    <SelectValue placeholder="Select Position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availablePositions.length > 0 ? (
+                      availablePositions.map((pos: any) => (
+                        <SelectItem key={pos.id} value={pos.name}>
+                          {pos.name} {pos.level !== undefined ? `(Level ${pos.level})` : ''}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No positions available</div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="reportsTo">Reports To *</Label>
+                <Select
+                  value={formData.teamLeadId || "none"}
+                  onValueChange={(value) => setFormData({ ...formData, teamLeadId: value === "none" ? "" : value })}
+                  disabled={true}
+                >
+                  <SelectTrigger className="bg-muted">
+                    <SelectValue placeholder="Select reporting manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (No Reporting Manager)</SelectItem>
+                    {availableReportingManagers.map((lead: any) => (
+                      <SelectItem key={lead.id} value={lead.id.toString()}>
+                        {lead.name} ({lead.email}) - {lead.role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Date of Joining</Label>
+                <DatePicker
+                  value={formData.date_of_joining}
+                  onChange={(date) => setFormData({ ...formData, date_of_joining: date })}
+                  disabled={true}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Employee Status *</Label>
+                <Select
+                  value={formData.employee_status}
+                  onValueChange={(value) => setFormData({ ...formData, employee_status: value })}
+                  disabled={true}
+                >
+                  <SelectTrigger className="bg-muted">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -947,7 +970,7 @@ export default function EmployeeEdit() {
                   <Input
                     id="bank_name"
                     value={formData.bank_name}
-                    onChange={(e) => setFormData({ ...formData, bank_name: e.target.value.toUpperCase() })}
+                    onChange={(e) => handleInputChange('bank_name', e.target.value, 'Bank Name', (val) => val.toUpperCase())}
                     placeholder="Enter bank name"
                   />
                 </div>
@@ -956,7 +979,7 @@ export default function EmployeeEdit() {
                   <Input
                     id="bank_account_number"
                     value={formData.bank_account_number}
-                    onChange={(e) => setFormData({ ...formData, bank_account_number: e.target.value.toUpperCase() })}
+                    onChange={(e) => handleInputChange('bank_account_number', e.target.value, 'Bank Account Number', (val) => val.toUpperCase())}
                     placeholder="Enter account number"
                   />
                 </div>
@@ -965,7 +988,7 @@ export default function EmployeeEdit() {
                   <Input
                     id="ifsc_code"
                     value={formData.ifsc_code}
-                    onChange={(e) => setFormData({ ...formData, ifsc_code: e.target.value.toUpperCase() })}
+                    onChange={(e) => handleInputChange('ifsc_code', e.target.value, 'IFSC Code', (val) => val.toUpperCase())}
                     placeholder="Enter IFSC code"
                     maxLength={11}
                   />
@@ -988,7 +1011,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="address1"
                   value={formData.address1}
-                  onChange={(e) => setFormData({ ...formData, address1: e.target.value.toUpperCase() })}
+                  onChange={(e) => handleInputChange('address1', e.target.value, 'Address Line 1', (val) => val.toUpperCase())}
                   placeholder="Enter address line 1"
                 />
               </div>
@@ -997,7 +1020,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="address2"
                   value={formData.address2}
-                  onChange={(e) => setFormData({ ...formData, address2: e.target.value.toUpperCase() })}
+                  onChange={(e) => handleInputChange('address2', e.target.value, 'Address Line 2', (val) => val.toUpperCase())}
                   placeholder="Enter address line 2"
                 />
               </div>
@@ -1006,7 +1029,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="landmark"
                   value={formData.landmark}
-                  onChange={(e) => setFormData({ ...formData, landmark: e.target.value.toUpperCase() })}
+                  onChange={(e) => handleInputChange('landmark', e.target.value, 'Landmark', (val) => val.toUpperCase())}
                   placeholder="Enter landmark"
                 />
               </div>
@@ -1017,7 +1040,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="state"
                   value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
+                  onChange={(e) => handleInputChange('state', e.target.value, 'State', (val) => val.toUpperCase())}
                   placeholder="Enter state"
                 />
               </div>
@@ -1026,7 +1049,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="district"
                   value={formData.district}
-                  onChange={(e) => setFormData({ ...formData, district: e.target.value.toUpperCase() })}
+                  onChange={(e) => handleInputChange('district', e.target.value, 'District', (val) => val.toUpperCase())}
                   placeholder="Enter district"
                 />
               </div>
@@ -1052,7 +1075,7 @@ export default function EmployeeEdit() {
                 <Input
                   id="emergency_contact_name"
                   value={formData.emergency_contact_name}
-                  onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value.toUpperCase() })}
+                  onChange={(e) => handleInputChange('emergency_contact_name', e.target.value, 'Emergency Contact Name', (val) => val.toUpperCase())}
                   placeholder="Enter emergency contact name"
                 />
               </div>
@@ -1211,7 +1234,17 @@ export default function EmployeeEdit() {
                         <Input
                           id="document_number"
                           value={uploadDocumentNumber}
-                          onChange={(e) => setUploadDocumentNumber(e.target.value.toUpperCase())}
+                          onChange={(e) => {
+                            const sanitized = sanitizeInput(e.target.value);
+                            setUploadDocumentNumber(sanitized.toUpperCase());
+                            if (containsHtmlOrScript(e.target.value)) {
+                              toast({
+                                title: "Invalid Input",
+                                description: "Document number cannot contain HTML or script tags.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
                           placeholder="Enter document number"
                         />
                       </div>

@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requirePermission } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyReimbursementStatusUpdated } from '../utils/notificationService.js';
 import multer from 'multer';
@@ -85,7 +85,7 @@ function generateClaimCode() {
 }
 
 // GET /reimbursements - List all reimbursements (with filters)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('reimbursements.view'), async (req, res) => {
   try {
     const userId = req.user.id;
     const userLevel = await getUserLevel(userId);
@@ -203,7 +203,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /reimbursements/:id - Get single reimbursement
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('reimbursements.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
@@ -277,7 +277,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /reimbursements - Create new reimbursement
-router.post('/', uploadReimbursementFiles.array('files', 10), async (req, res) => {
+router.post('/', requirePermission('reimbursements.create'), uploadReimbursementFiles.array('files', 10), async (req, res) => {
   try {
     const userId = req.user.id;
     const userLevel = await getUserLevel(userId);
@@ -386,7 +386,7 @@ router.post('/', uploadReimbursementFiles.array('files', 10), async (req, res) =
 });
 
 // PUT /reimbursements/:id - Update reimbursement
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('reimbursements.edit'), async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
@@ -432,7 +432,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /reimbursements/:id - Delete reimbursement
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('reimbursements.edit'), async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
@@ -480,7 +480,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /reimbursements/:id/approve - Approve reimbursement (Level 1 or Super Admin)
-router.post('/:id/approve', async (req, res) => {
+router.post('/:id/approve', requirePermission('reimbursements.approve'), async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
@@ -563,7 +563,7 @@ router.post('/:id/approve', async (req, res) => {
 });
 
 // POST /reimbursements/:id/reject - Reject reimbursement (Level 1 or Super Admin)
-router.post('/:id/reject', async (req, res) => {
+router.post('/:id/reject', requirePermission('reimbursements.approve'), async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;

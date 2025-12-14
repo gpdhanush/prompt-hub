@@ -151,12 +151,14 @@ export const usersApi = {
 export const employeesApi = {
   getAvailablePositions: () =>
     request<{ data: any[] }>('/employees/available-positions'),
-  getAll: (params?: { page?: number; limit?: number; search?: string }) =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; include_all?: string }) =>
     request<{ data: any[]; pagination: any }>(
       `/employees?${new URLSearchParams(params as any).toString()}`
     ),
   getById: (id: number) =>
     request<{ data: any }>(`/employees/${id}`),
+  getBasicById: (id: number) =>
+    request<{ data: any }>(`/employees/${id}/basic`),
   getByUserId: (userId: number) =>
     request<{ data: any }>(`/employees/by-user/${userId}`),
   create: (data: any) =>
@@ -254,6 +256,8 @@ export const employeesApi = {
     request<{ data: any; message: string }>(`/employees/${id}/documents/${docId}/unverify`, {
       method: 'PUT',
     }),
+  getHierarchy: () =>
+    request<{ data: any }>('/employees/hierarchy'),
 };
 
 // Projects API
@@ -449,6 +453,12 @@ export const tasksApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  createWithFiles: (formData: FormData) =>
+    request<{ data: any }>('/tasks', {
+      method: 'POST',
+      body: formData,
+      headers: {}, // Let browser set Content-Type for FormData
+    }),
   update: (id: number, data: any) =>
     request<{ data: any }>(`/tasks/${id}`, {
       method: 'PUT',
@@ -456,6 +466,48 @@ export const tasksApi = {
     }),
   delete: (id: number) =>
     request<{ message: string }>(`/tasks/${id}`, {
+      method: 'DELETE',
+    }),
+  // Comments
+  getComments: (id: number) =>
+    request<{ data: any[] }>(`/tasks/${id}/comments`),
+  createComment: (id: number, data: { comment: string; parent_comment_id?: number; role?: string }) =>
+    request<{ data: any }>(`/tasks/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  // History
+  getHistory: (id: number) =>
+    request<{ data: any[] }>(`/tasks/${id}/history`),
+  // Timesheets
+  getTimesheets: (id: number) =>
+    request<{ data: any[] }>(`/tasks/${id}/timesheets`),
+  createTimesheet: (id: number, data: { date: string; hours: number; notes?: string }) =>
+    request<{ data: any }>(`/tasks/${id}/timesheets`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateTimesheet: (timesheetId: number, data: { date?: string; hours?: number; notes?: string }) =>
+    request<{ data: any }>(`/tasks/timesheets/${timesheetId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteTimesheet: (timesheetId: number) =>
+    request<{ message: string }>(`/tasks/timesheets/${timesheetId}`, {
+      method: 'DELETE',
+    }),
+  // Attachments
+  uploadAttachments: (id: number, files: File[]) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append('attachments', file));
+    return request<{ data: any[]; message: string }>(`/tasks/${id}/attachments`, {
+      method: 'POST',
+      body: formData,
+      headers: {}, // Let browser set Content-Type for FormData
+    });
+  },
+  deleteAttachment: (id: number, attachmentId: number) =>
+    request<{ message: string }>(`/tasks/${id}/attachments/${attachmentId}`, {
       method: 'DELETE',
     }),
 };
@@ -829,6 +881,42 @@ export const settingsApi = {
     request<{ data: any }>('/settings', {
       method: 'PATCH',
       body: JSON.stringify(data),
+    }),
+};
+
+// Search API
+export const searchApi = {
+  global: (query: string, limit?: number) =>
+    request<{ data: { groups: Array<{ type: string; label: string; count: number; items: any[] }>; query: string } }>(
+      `/search?q=${encodeURIComponent(query)}${limit ? `&limit=${limit}` : ''}`
+    ),
+};
+
+// Reminders API
+export const remindersApi = {
+  getAll: (params?: { date?: string; start_date?: string; end_date?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.date) queryParams.append('date', params.date);
+    if (params?.start_date) queryParams.append('start_date', params.start_date);
+    if (params?.end_date) queryParams.append('end_date', params.end_date);
+    const query = queryParams.toString();
+    return request<{ data: any[] }>(`/reminders${query ? `?${query}` : ''}`);
+  },
+  getById: (id: number) =>
+    request<{ data: any }>(`/reminders/${id}`),
+  create: (data: { title: string; description?: string; reminder_date: string; reminder_time: string; reminder_type?: string }) =>
+    request<{ data: any }>('/reminders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: number, data: Partial<{ title: string; description: string; reminder_date: string; reminder_time: string; reminder_type: string; is_completed: boolean }>) =>
+    request<{ data: any }>(`/reminders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: number) =>
+    request<{ message: string }>(`/reminders/${id}`, {
+      method: 'DELETE',
     }),
 };
 

@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate, canAccessUserManagement, requirePermission } from '../middleware/auth.js';
+import { authenticate, canAccessUserManagement, requirePermission, requireSuperAdmin } from '../middleware/auth.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -10,6 +10,7 @@ import { logCreate, logUpdate, logDelete, getClientIp, getUserAgent } from '../u
 import { logger } from '../utils/logger.js';
 import { validateUserCreation, getAvailablePositions } from '../utils/positionValidation.js';
 import { getManagerRoles, getSuperAdminRole, isSuperAdmin, getAllRoles, getRolesByLevel } from '../utils/roleHelpers.js';
+import { sanitizeInput, containsHtmlOrScript, validateAndSanitizeObject } from '../utils/inputValidation.js';
 
 const router = express.Router();
 
@@ -118,6 +119,122 @@ router.post('/upload-profile-photo', authenticate, uploadProfilePhoto.single('fi
 // Apply authentication to all routes
 router.use(authenticate);
 
+// Get employee documents (before permission middleware - users can access their own documents)
+router.get('/:id/documents', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role || '';
+    
+    logger.debug('=== GET EMPLOYEE DOCUMENTS REQUEST ===');
+    logger.debug('Employee ID:', id);
+    logger.debug('Current User ID:', currentUserId);
+    logger.debug('Current User Role:', currentUserRole);
+    
+    const managerRoles = await getManagerRoles();
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    const allManagerRoles = [...managerRoles, 'Manager'];
+    const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
+    
+    logger.debug('Manager Roles:', managerRoles);
+    logger.debug('All Manager Roles:', allManagerRoles);
+    logger.debug('Is Super Admin:', isUserSuperAdmin);
+    logger.debug('Can Manage:', canManage);
+    
+    // Check if employee exists and user has access
+    const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
+    if (employees.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    const employeeUserId = employees[0].user_id;
+    const isOwnProfile = parseInt(currentUserId) === parseInt(employeeUserId);
+    
+    logger.debug('Employee User ID:', employeeUserId);
+    logger.debug('Is Own Profile:', isOwnProfile);
+    
+    if (!canManage && !isOwnProfile) {
+      logger.debug('Access denied - user cannot manage and it is not their own profile');
+      return res.status(403).json({ error: 'You can only access your own documents' });
+    }
+    
+    logger.debug('Access granted - fetching documents');
+    
+    const [documents] = await db.query(`
+      SELECT
+        d.id,
+        d.employee_id,
+        d.document_type,
+        d.document_number,
+        d.file_path,
+        d.file_name,
+        d.mime_type,
+        d.file_size,
+        d.verified,
+        d.verified_by,
+        d.verified_at,
+        d.uploaded_at,
+        u.name as verified_by_name
+      FROM employee_documents d
+      LEFT JOIN users u ON d.verified_by = u.id
+      WHERE d.employee_id = ?
+      ORDER BY d.uploaded_at DESC
+    `, [id]);
+
+    // Decrypt document_number before sending
+    const decryptedDocuments = documents.map(doc => {
+      if (doc.document_number) {
+        doc.document_number = decryptDocumentNumber(doc.document_number);
+      }
+      return doc;
+    });
+
+    res.json({ data: decryptedDocuments });
+  } catch (error) {
+    logger.error('Error fetching employee documents:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get employee basic details by ID (for directory view - no permission required)
+// IMPORTANT: This endpoint MUST be placed BEFORE the permission middleware
+// to allow access without 'employees.view' permission
+router.get('/:id/basic', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [employees] = await db.query(`
+      SELECT 
+        e.id,
+        e.emp_code,
+        e.profile_photo_url,
+        e.gender,
+        e.district,
+        e.skype,
+        e.whatsapp,
+        u.name,
+        u.email,
+        u.mobile,
+        r.name as role
+      FROM employees e
+      INNER JOIN users u ON e.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE e.id = ?
+    `, [id]);
+    
+    if (employees.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    
+    const employee = employees[0];
+    
+    res.json({ data: employee });
+  } catch (error) {
+    logger.error('Error fetching employee basic details:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get employee by user_id - accessible to all authenticated users (for profile)
 router.get('/by-user/:userId', async (req, res) => {
   try {
@@ -166,6 +283,8 @@ router.get('/by-user/:userId', async (req, res) => {
         e.sick_leave_count,
         e.casual_leave_count,
         e.profile_photo_url,
+        e.skype,
+        e.whatsapp,
         e.created_by,
         e.created_at,
         e.updated_at,
@@ -226,27 +345,9 @@ router.get('/by-user/:userId', async (req, res) => {
   }
 });
 
-// Restrict access to Employees page - uses permission-based authorization
-// Super Admin always has access, others need 'employees.view' permission
-router.use(requirePermission('employees.view'));
-
-// Get available positions for current user (filtered by hierarchy)
-router.get('/available-positions', async (req, res) => {
-  try {
-    const creatorUserId = req.user?.id;
-    if (!creatorUserId) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-    
-    const availablePositions = await getAvailablePositions(creatorUserId);
-    res.json({ data: availablePositions });
-  } catch (error) {
-    logger.error('Error getting available positions:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get all employees with pagination
+// Get all employees with pagination (for employee directory - no permission required)
+// IMPORTANT: This endpoint MUST be placed BEFORE the permission middleware
+// to allow access without 'employees.view' permission for directory page
 router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '' } = req.query;
@@ -262,6 +363,10 @@ router.get('/', async (req, res) => {
     logger.debug('Current user role:', currentUserRole);
     logger.debug('Is Super Admin:', userIsSuperAdmin);
     
+    // Check if this is a directory request (include_all parameter)
+    // Default to true for employee directory page
+    const includeAll = req.query.include_all === 'true' || req.query.include_all === undefined;
+    
     let query = `
       SELECT 
         e.id,
@@ -269,6 +374,10 @@ router.get('/', async (req, res) => {
         e.status,
         e.employee_status,
         e.profile_photo_url,
+        e.gender,
+        e.district,
+        e.skype,
+        e.whatsapp,
         DATE_FORMAT(e.date_of_joining, '%Y-%m-%d') as date_of_joining,
         u.name,
         u.email,
@@ -287,8 +396,8 @@ router.get('/', async (req, res) => {
     
     const params = [];
     
-    // If not Super Admin, exclude Super Admin users from results
-    if (!userIsSuperAdmin) {
+    // If not Super Admin and not a directory request, exclude Super Admin users from results
+    if (!userIsSuperAdmin && !includeAll) {
       const superAdminRole = await getSuperAdminRole();
       if (superAdminRole) {
         query += ` AND r.name != ?`;
@@ -296,7 +405,7 @@ router.get('/', async (req, res) => {
         logger.debug('Filtering out Super Admin employees for non-Super Admin user');
       }
     } else {
-      logger.debug('Super Admin user - showing all employees including Super Admins');
+      logger.debug('Super Admin user or directory request - showing all employees including Super Admins');
     }
     
     if (search) {
@@ -322,8 +431,8 @@ router.get('/', async (req, res) => {
     `;
     const countParams = [];
     
-    // If not Super Admin, exclude Super Admin users from count
-    if (!userIsSuperAdmin) {
+    // If not Super Admin and not a directory request, exclude Super Admin users from count
+    if (!userIsSuperAdmin && !includeAll) {
       const superAdminRole = await getSuperAdminRole();
       if (superAdminRole) {
         countQuery += ` AND r.name != ?`;
@@ -350,6 +459,184 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Restrict access to Employees page - uses permission-based authorization
+// Super Admin always has access, others need 'employees.view' permission
+// NOTE: Routes defined above this line do NOT require 'employees.view' permission
+router.use(requirePermission('employees.view'));
+
+// Get available positions for current user (filtered by hierarchy)
+router.get('/available-positions', async (req, res) => {
+  try {
+    const creatorUserId = req.user?.id;
+    if (!creatorUserId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    
+    const availablePositions = await getAvailablePositions(creatorUserId);
+    res.json({ data: availablePositions });
+  } catch (error) {
+    logger.error('Error getting available positions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user hierarchy (Super Admin only) - MUST be before /:id route
+router.get('/hierarchy', requireSuperAdmin, async (req, res) => {
+  try {
+    // Get Super Admin role first to exclude from employee list
+    const superAdminRole = await getSuperAdminRole();
+    const superAdminRoleName = superAdminRole ? superAdminRole.name : 'Super Admin';
+    
+    // Get all employees with their position level and team lead info
+    // Exclude Super Admin users
+    const [employees] = await db.query(`
+      SELECT 
+        e.id,
+        e.emp_code,
+        e.team_lead_id,
+        e.profile_photo_url,
+        u.id as user_id,
+        u.name,
+        u.email,
+        r.name as role,
+        r.level as role_level,
+        u.position_id,
+        p.name as position_name,
+        p.level as position_level,
+        tl_emp.id as team_lead_emp_id,
+        tl_user.name as team_lead_name,
+        tl_user.email as team_lead_email
+      FROM employees e
+      INNER JOIN users u ON e.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
+      LEFT JOIN employees tl_emp ON e.team_lead_id = tl_emp.id
+      LEFT JOIN users tl_user ON tl_emp.user_id = tl_user.id
+      WHERE (r.name IS NULL OR r.name != ?)
+      ORDER BY COALESCE(p.level, r.level, 2) ASC, u.name ASC
+    `, [superAdminRoleName]);
+
+    // Organize by hierarchy
+    const hierarchy = {
+      superAdmin: {
+        level: 0,
+        users: []
+      },
+      level1: [],
+      level2: []
+    };
+
+    // Get Super Admin (already fetched above)
+    if (superAdminRole) {
+      const [superAdmins] = await db.query(`
+        SELECT 
+          u.id, 
+          u.name, 
+          u.email, 
+          r.name as role,
+          e.profile_photo_url
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        LEFT JOIN employees e ON u.id = e.user_id
+        WHERE r.name = ?
+        ORDER BY u.name ASC
+      `, [superAdminRole.name]);
+      hierarchy.superAdmin.users = superAdmins;
+    } else {
+      // If no Super Admin role found, return empty array
+      hierarchy.superAdmin.users = [];
+    }
+
+    // Organize employees by level
+    // Use role_level as primary, fallback to position_level, then default to 2
+    employees.forEach((emp) => {
+      // Determine level: role_level > position_level > default 2
+      const level = emp.role_level !== null && emp.role_level !== undefined 
+        ? emp.role_level 
+        : (emp.position_level !== null && emp.position_level !== undefined 
+          ? emp.position_level 
+          : 2);
+      
+      logger.debug(`Processing employee: ${emp.name}, role: ${emp.role}, role_level: ${emp.role_level}, position_level: ${emp.position_level}, final_level: ${level}`);
+      
+      if (level === 1) {
+        // Level 1 user - find their level 2 users
+        // Check by team_lead_id relationship
+        const level2Users = employees.filter((e) => {
+          const eLevel = e.role_level !== null && e.role_level !== undefined 
+            ? e.role_level 
+            : (e.position_level !== null && e.position_level !== undefined 
+              ? e.position_level 
+              : 2);
+          return e.team_lead_id === emp.id && eLevel === 2;
+        });
+        
+        logger.debug(`Level 1 user ${emp.name} has ${level2Users.length} level 2 employees`);
+        
+        hierarchy.level1.push({
+          id: emp.id,
+          user_id: emp.user_id,
+          name: emp.name,
+          email: emp.email,
+          role: emp.role,
+          position: emp.position_name,
+          emp_code: emp.emp_code,
+          profile_photo_url: emp.profile_photo_url,
+          level2Users: level2Users.map((e) => ({
+            id: e.id,
+            user_id: e.user_id,
+            name: e.name,
+            email: e.email,
+            role: e.role,
+            position: e.position_name,
+            emp_code: e.emp_code,
+            team_lead_id: e.team_lead_id,
+            profile_photo_url: e.profile_photo_url
+          }))
+        });
+      } else if (level === 2) {
+        // Level 2 user - only add if not already added under a level 1 user
+        const alreadyAdded = hierarchy.level1.some((l1) => 
+          l1.level2Users.some((l2) => l2.id === emp.id)
+        );
+        
+        if (!alreadyAdded) {
+          // Orphaned level 2 user (no team lead or team lead not in level 1)
+          if (!hierarchy.level2) {
+            hierarchy.level2 = [];
+          }
+          hierarchy.level2.push({
+            id: emp.id,
+            user_id: emp.user_id,
+            name: emp.name,
+            email: emp.email,
+            role: emp.role,
+            position: emp.position_name,
+            emp_code: emp.emp_code,
+            team_lead_id: emp.team_lead_id,
+            team_lead_name: emp.team_lead_name,
+            profile_photo_url: emp.profile_photo_url
+          });
+        }
+      } else {
+        // Handle level 0 or other levels - shouldn't happen but log it
+        logger.debug(`Employee ${emp.name} has unexpected level: ${level}`);
+      }
+    });
+    
+    logger.debug(`Hierarchy organized: Super Admin: ${hierarchy.superAdmin.users.length}, Level 1: ${hierarchy.level1.length}, Level 2: ${hierarchy.level2.length}, Total employees processed: ${employees.length}`);
+
+    res.json({ data: hierarchy });
+  } catch (error) {
+    logger.error('Error fetching user hierarchy:', error);
+    logger.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: error.message || 'Failed to fetch user hierarchy',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -387,6 +674,8 @@ router.get('/:id', async (req, res) => {
         e.sick_leave_count,
         e.casual_leave_count,
         e.profile_photo_url,
+        e.skype,
+        e.whatsapp,
         e.created_by,
         e.created_at,
         e.updated_at,
@@ -441,14 +730,43 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   let userResult = null; // Declare outside try block for cleanup in catch
   try {
-    const { 
+    let { 
       name, email, mobile, password, role, position, empCode, teamLeadId,
       date_of_birth, gender, date_of_joining, employee_status,
       bank_name, bank_account_number, ifsc_code,
       address1, address2, landmark, state, district, pincode,
       emergency_contact_name, emergency_contact_relation, emergency_contact_number,
-      annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url
+      annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url,
+      skype, whatsapp
     } = req.body;
+    
+    // Validate and sanitize all text inputs for HTML/script tags
+    const textFields = ['name', 'email', 'bank_name', 'bank_account_number', 'ifsc_code', 
+      'address1', 'address2', 'landmark', 'state', 'district', 
+      'emergency_contact_name', 'emergency_contact_relation', 'skype'];
+    
+    const validation = validateAndSanitizeObject(req.body, textFields);
+    if (validation.errors && validation.errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input detected', 
+        details: validation.errors.join('; ') 
+      });
+    }
+    
+    // Use sanitized values
+    name = validation.data.name || name;
+    email = validation.data.email || email;
+    bank_name = validation.data.bank_name || bank_name;
+    bank_account_number = validation.data.bank_account_number || bank_account_number;
+    ifsc_code = validation.data.ifsc_code || ifsc_code;
+    address1 = validation.data.address1 || address1;
+    address2 = validation.data.address2 || address2;
+    landmark = validation.data.landmark || landmark;
+    state = validation.data.state || state;
+    district = validation.data.district || district;
+    emergency_contact_name = validation.data.emergency_contact_name || emergency_contact_name;
+    emergency_contact_relation = validation.data.emergency_contact_relation || emergency_contact_relation;
+    skype = validation.data.skype || skype;
     
     const dbRoleName = role || 'Developer';
     
@@ -785,16 +1103,18 @@ router.post('/', async (req, res) => {
         bank_name, bank_account_number, ifsc_code,
         address1, address2, landmark, state, district, pincode,
         emergency_contact_name, emergency_contact_relation, emergency_contact_number,
-        annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url, created_by
+        annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url, created_by,
+        skype, whatsapp
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       userResult.insertId, finalEmpCode, teamLeadEmployeeId,
       formatDateForDB(date_of_birth), gender || null, formatDateForDB(date_of_joining), employee_status || 'Active',
       processedBankName || null, processedBankAccount || null, processedIfsc || null,
       processedAddress1 || null, processedAddress2 || null, processedLandmark || null, processedState || null, processedDistrict || null, processedPincode || null,
       processedEmergencyName || null, processedEmergencyRelation || null, processedEmergencyNumber || null,
-      annual_leave_count || 0, sick_leave_count || 0, casual_leave_count || 0, profile_photo_url || null, createdBy
+      annual_leave_count || 0, sick_leave_count || 0, casual_leave_count || 0, profile_photo_url || null, createdBy,
+      skype || null, whatsapp || null
     ]);
     
     const [newEmployee] = await db.query(`
@@ -872,14 +1192,44 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
+    let { 
       name, email, mobile, password, empCode, teamLeadId, status, position,
       date_of_birth, gender, date_of_joining, employee_status,
       bank_name, bank_account_number, ifsc_code,
       address1, address2, landmark, state, district, pincode,
       emergency_contact_name, emergency_contact_relation, emergency_contact_number,
-      annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url, pf_uan_number
+      annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url, pf_uan_number,
+      skype, whatsapp
     } = req.body;
+    
+    // Validate and sanitize all text inputs for HTML/script tags
+    const textFields = ['name', 'email', 'bank_name', 'bank_account_number', 'ifsc_code', 
+      'address1', 'address2', 'landmark', 'state', 'district', 
+      'emergency_contact_name', 'emergency_contact_relation', 'skype', 'pf_uan_number'];
+    
+    const validation = validateAndSanitizeObject(req.body, textFields);
+    if (validation.errors && validation.errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input detected', 
+        details: validation.errors.join('; ') 
+      });
+    }
+    
+    // Use sanitized values
+    name = validation.data.name || name;
+    email = validation.data.email || email;
+    bank_name = validation.data.bank_name || bank_name;
+    bank_account_number = validation.data.bank_account_number || bank_account_number;
+    ifsc_code = validation.data.ifsc_code || ifsc_code;
+    address1 = validation.data.address1 || address1;
+    address2 = validation.data.address2 || address2;
+    landmark = validation.data.landmark || landmark;
+    state = validation.data.state || state;
+    district = validation.data.district || district;
+    emergency_contact_name = validation.data.emergency_contact_name || emergency_contact_name;
+    emergency_contact_relation = validation.data.emergency_contact_relation || emergency_contact_relation;
+    skype = validation.data.skype || skype;
+    pf_uan_number = validation.data.pf_uan_number || pf_uan_number;
     
     logger.debug('=== UPDATE EMPLOYEE REQUEST ===');
     logger.debug('Employee ID:', id);
@@ -1233,6 +1583,12 @@ router.put('/:id', async (req, res) => {
       if (sick_leave_count !== undefined) { empUpdates.push('sick_leave_count = ?'); empParams.push(sick_leave_count); }
       if (casual_leave_count !== undefined) { empUpdates.push('casual_leave_count = ?'); empParams.push(casual_leave_count); }
       if (profile_photo_url !== undefined) { empUpdates.push('profile_photo_url = ?'); empParams.push(profile_photo_url || null); }
+      if (skype !== undefined) { empUpdates.push('skype = ?'); empParams.push(skype || null); }
+      if (whatsapp !== undefined) { 
+        const whatsappDigits = extractDigits(whatsapp);
+        empUpdates.push('whatsapp = ?'); 
+        empParams.push(whatsappDigits || null); 
+      }
     } else if (isOwnProfile) {
       // Users can update limited fields on their own profile
       if (mobile !== undefined) { 
@@ -1329,6 +1685,12 @@ router.put('/:id', async (req, res) => {
         empParams.push(contactDigits || null); 
       }
       if ('profile_photo_url' in req.body) { empUpdates.push('profile_photo_url = ?'); empParams.push(profile_photo_url || null); }
+      if ('skype' in req.body) { empUpdates.push('skype = ?'); empParams.push(skype || null); }
+      if ('whatsapp' in req.body) { 
+        const whatsappDigits = extractDigits(whatsapp);
+        empUpdates.push('whatsapp = ?'); 
+        empParams.push(whatsappDigits || null); 
+      }
     }
     
     if (empUpdates.length > 0) {
@@ -1506,64 +1868,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Get employee documents
-router.get('/:id/documents', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const currentUserId = req.user?.id;
-    const currentUserRole = req.user?.role || '';
-    const managerRoles = await getManagerRoles();
-    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
-    const allManagerRoles = [...managerRoles, 'Manager'];
-    const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
-    
-    // Check if employee exists and user has access
-    const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
-    if (employees.length === 0) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-    
-    const employeeUserId = employees[0].user_id;
-    const isOwnProfile = parseInt(currentUserId) === parseInt(employeeUserId);
-    
-    if (!canManage && !isOwnProfile) {
-      return res.status(403).json({ error: 'You can only access your own documents' });
-    }
-    
-    const [documents] = await db.query(`
-      SELECT 
-        d.id,
-        d.employee_id,
-        d.document_type,
-        d.document_number,
-        d.file_path,
-        d.file_name,
-        d.mime_type,
-        d.file_size,
-        d.uploaded_at,
-        d.verified,
-        d.verified_by,
-        d.verified_at,
-        u.name as verified_by_name
-      FROM employee_documents d
-      LEFT JOIN users u ON d.verified_by = u.id
-      WHERE d.employee_id = ?
-      ORDER BY d.uploaded_at DESC
-    `, [id]);
-    
-    // Decrypt document_number for each document
-    const decryptedDocuments = documents.map(doc => {
-      if (doc.document_number) {
-        doc.document_number = decryptDocumentNumber(doc.document_number);
-      }
-      return doc;
-    });
-    
-    res.json({ data: decryptedDocuments });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// Get employee documents endpoint moved above permission middleware (see line ~123)
 
 // Upload employee document
 router.post('/:id/documents', uploadDocument.single('file'), async (req, res) => {
@@ -1781,9 +2086,10 @@ router.delete('/:id/documents/:docId', async (req, res) => {
     
     // Check if document exists
     const [documents] = await db.query(`
-      SELECT d.*, e.user_id as employee_user_id
+      SELECT d.*, e.user_id as employee_user_id, p.level as employee_level
       FROM employee_documents d
       INNER JOIN employees e ON d.employee_id = e.id
+      LEFT JOIN positions p ON e.position_id = p.id
       WHERE d.id = ? AND d.employee_id = ?
     `, [docId, id]);
     
@@ -1793,9 +2099,18 @@ router.delete('/:id/documents/:docId', async (req, res) => {
     
     const document = documents[0];
     const isOwnProfile = parseInt(currentUserId) === parseInt(document.employee_user_id);
+    const isLevel1 = document.employee_level === 1;
+    const isLevel2 = document.employee_level === 2;
     
+    // Check permissions
     if (!canManage && !isOwnProfile) {
       return res.status(403).json({ error: 'You can only delete your own documents' });
+    }
+    
+    // If document is verified and user is level 1 (not Super Admin), prevent deletion
+    // Level 2 users can delete their own verified documents
+    if (document.verified && isLevel1 && !isUserSuperAdmin && !isLevel2) {
+      return res.status(403).json({ error: 'Level 1 users cannot delete verified documents. Only level 2 users can delete their own verified documents.' });
     }
     
     // Delete file from filesystem

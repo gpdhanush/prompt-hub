@@ -29,6 +29,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Pagination } from "@/components/ui/pagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { projectsApi } from "@/lib/api";
@@ -74,21 +76,26 @@ export default function Projects() {
   const canEditProject = hasPermission('projects.edit');
   const canDeleteProject = hasPermission('projects.delete');
 
+  const [page, setPage] = useState(1);
+  const limit = 10;
+
   // Fetch projects from API
   const { data, isLoading, error } = useQuery({
-    queryKey: ['projects', searchQuery, viewFilter],
+    queryKey: ['projects', searchQuery, viewFilter, page],
     queryFn: () => projectsApi.getAll({ 
-      page: 1, 
-      limit: 100, 
+      page, 
+      limit, 
       my_projects: viewFilter === 'my' ? 1 : undefined 
     }),
   });
 
   const projects = data?.data || [];
+  const pagination = data?.pagination || { total: 0, totalPages: 0 };
   
-  // Filter projects based on search query
+  // Filter projects based on search query (client-side for now)
   const filteredProjects = projects.filter((project: Project) =>
     project.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    project.project_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     project.id?.toString().includes(searchQuery)
   );
 
@@ -249,19 +256,17 @@ export default function Projects() {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">All Projects</CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search projects..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Button variant="outline" size="icon">
-                <Filter className="h-4 w-4" />
-              </Button>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search projects..."
+                className="pl-9"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+              />
             </div>
           </div>
         </CardHeader>
@@ -301,9 +306,13 @@ export default function Projects() {
                 filteredProjects.map((project: Project) => {
                   const progress = calculateProgress(project);
                   return (
-                <TableRow key={project.id}>
-                  <TableCell className="font-mono text-muted-foreground">
-                        {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
+                <TableRow 
+                  key={project.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleView(project)}
+                >
+                  <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
+                    {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
                   </TableCell>
                   <TableCell className="font-medium">{project.name}</TableCell>
                       <TableCell className="text-muted-foreground">
@@ -323,7 +332,7 @@ export default function Projects() {
                           {project.status || 'Planning'}
                     </StatusBadge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -359,6 +368,15 @@ export default function Projects() {
               )}
             </TableBody>
           </Table>
+          {pagination.totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalPages={pagination.totalPages}
+              onPageChange={setPage}
+              total={pagination.total}
+              limit={limit}
+            />
+          )}
         </CardContent>
       </Card>
 

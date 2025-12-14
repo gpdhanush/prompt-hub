@@ -2,6 +2,7 @@ import { Bell, Search, User, Moon, Sun, Settings, UserCircle, LogOut, Headphones
 import { useTheme } from "next-themes";
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export function AdminHeader() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const location = useLocation();
@@ -102,6 +104,22 @@ export function AdminHeader() {
     setMounted(true);
   }, []);
 
+  // Keyboard shortcut for global search (Cmd/Ctrl + K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowGlobalSearch(true);
+      }
+      if (e.key === 'Escape' && showGlobalSearch) {
+        setShowGlobalSearch(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showGlobalSearch]);
+
   const handleLogout = async () => {
     // Clear authentication data from secure storage
     await clearAuth();
@@ -119,10 +137,15 @@ export function AdminHeader() {
       <div className="relative w-96">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search anything..."
-          className="pl-10 bg-background/50 border-border/50 focus:border-primary"
+          placeholder="Search anything... (⌘K)"
+          className="pl-10 bg-background/50 border-border/50 focus:border-primary cursor-pointer"
+          onClick={() => setShowGlobalSearch(true)}
+          readOnly
         />
       </div>
+
+      {/* Global Search Dialog */}
+      <GlobalSearch open={showGlobalSearch} onOpenChange={setShowGlobalSearch} />
 
       {/* Right side */}
       <div className="flex items-center gap-4">

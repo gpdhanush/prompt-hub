@@ -43,7 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Pagination,
+  PaginationWrapper as Pagination,
   PaginationContent,
   PaginationItem,
   PaginationLink,

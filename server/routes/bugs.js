@@ -4,6 +4,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyBugAssigned, notifyBugStatusUpdated, notifyBugComment } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
+import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -245,13 +246,38 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
     logger.debug('Files:', req.files ? req.files.map(f => ({ name: f.originalname, size: f.size })) : 'No files');
     logger.debug('User:', req.user);
     
-    const { 
+    // Validate and sanitize text inputs
+    const textFields = ['title', 'description', 'steps_to_reproduce', 'expected_behavior', 'actual_behavior', 
+      'browser', 'device', 'os', 'app_version', 'api_endpoint', 'tags'];
+    const validation = validateAndSanitizeObject(req.body, textFields);
+    if (validation.errors && validation.errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input detected', 
+        details: validation.errors.join('; ') 
+      });
+    }
+    
+    let { 
       task_id, project_id, title, description, bug_type, severity, priority, status, resolution_type,
       steps_to_reproduce, expected_behavior, actual_behavior, 
       assigned_to: provided_assigned_to, team_lead_id,
       browser, device, os, app_version, api_endpoint,
       target_fix_date, tags
     } = req.body;
+    
+    // Use sanitized values
+    title = validation.data.title || title;
+    description = validation.data.description || description;
+    steps_to_reproduce = validation.data.steps_to_reproduce || steps_to_reproduce;
+    expected_behavior = validation.data.expected_behavior || expected_behavior;
+    actual_behavior = validation.data.actual_behavior || actual_behavior;
+    browser = validation.data.browser || browser;
+    device = validation.data.device || device;
+    os = validation.data.os || os;
+    app_version = validation.data.app_version || app_version;
+    api_endpoint = validation.data.api_endpoint || api_endpoint;
+    tags = validation.data.tags || tags;
+    
     const reported_by = req.user.id; // Get from authenticated user
     
     logger.debug('=== CREATE BUG REQUEST ===');
@@ -463,13 +489,38 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
   try {
     const { id } = req.params;
     const userRole = req.user?.role || '';
-    const { 
+    
+    // Validate and sanitize text inputs
+    const textFields = ['title', 'description', 'steps_to_reproduce', 'expected_behavior', 'actual_behavior', 
+      'browser', 'device', 'os', 'app_version', 'api_endpoint', 'tags'];
+    const validation = validateAndSanitizeObject(req.body, textFields);
+    if (validation.errors && validation.errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input detected', 
+        details: validation.errors.join('; ') 
+      });
+    }
+    
+    let { 
       title, description, project_id, task_id, bug_type, severity, priority, status, resolution_type,
       assigned_to, team_lead_id,
       steps_to_reproduce, expected_behavior, actual_behavior,
       browser, device, os, app_version, api_endpoint,
       target_fix_date, actual_fix_date, tags
     } = req.body;
+    
+    // Use sanitized values
+    title = validation.data.title || title;
+    description = validation.data.description || description;
+    steps_to_reproduce = validation.data.steps_to_reproduce || steps_to_reproduce;
+    expected_behavior = validation.data.expected_behavior || expected_behavior;
+    actual_behavior = validation.data.actual_behavior || actual_behavior;
+    browser = validation.data.browser || browser;
+    device = validation.data.device || device;
+    os = validation.data.os || os;
+    app_version = validation.data.app_version || app_version;
+    api_endpoint = validation.data.api_endpoint || api_endpoint;
+    tags = validation.data.tags || tags;
     
     // Get before data for audit log
     const [existingBugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [id]);

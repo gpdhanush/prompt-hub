@@ -4,6 +4,7 @@ import { authenticate, authorize, requirePermission } from '../middleware/auth.j
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyProjectAssigned, notifyProjectComment } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
+import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -221,7 +222,19 @@ router.get('/:id', async (req, res) => {
 // Create project - check for projects.create permission
 router.post('/', requirePermission('projects.create'), async (req, res) => {
   try {
-    const {
+    // Validate and sanitize text inputs
+    const textFields = ['name', 'description', 'client_name', 'client_contact_person', 'client_email', 
+      'internal_notes', 'client_notes', 'admin_remarks', 'github_repo_url', 'bitbucket_repo_url', 
+      'technologies_used', 'estimated_delivery_plan'];
+    const validation = validateAndSanitizeObject(req.body, textFields);
+    if (validation.errors && validation.errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input detected', 
+        details: validation.errors.join('; ') 
+      });
+    }
+    
+    let {
       name, description, status, start_date, end_date, team_lead_id, member_ids, member_roles,
       logo_url, estimated_delivery_plan,
       client_name, client_contact_person, client_email, client_phone, is_internal,
@@ -232,6 +245,20 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
       github_repo_url, bitbucket_repo_url, technologies_used,
       milestones
     } = req.body;
+    
+    // Use sanitized values
+    name = validation.data.name || name;
+    description = validation.data.description || description;
+    client_name = validation.data.client_name || client_name;
+    client_contact_person = validation.data.client_contact_person || client_contact_person;
+    client_email = validation.data.client_email || client_email;
+    internal_notes = validation.data.internal_notes || internal_notes;
+    client_notes = validation.data.client_notes || client_notes;
+    admin_remarks = validation.data.admin_remarks || admin_remarks;
+    github_repo_url = validation.data.github_repo_url || github_repo_url;
+    bitbucket_repo_url = validation.data.bitbucket_repo_url || bitbucket_repo_url;
+    technologies_used = validation.data.technologies_used || technologies_used;
+    estimated_delivery_plan = validation.data.estimated_delivery_plan || estimated_delivery_plan;
     
     // Valid status values matching database ENUM
     const validStatuses = ['Not Started', 'Planning', 'In Progress', 'Testing', 'Pre-Prod', 'Production', 'Completed', 'On Hold', 'Cancelled'];
@@ -374,7 +401,20 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
 router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    const {
+    
+    // Validate and sanitize text inputs
+    const textFields = ['name', 'description', 'client_name', 'client_contact_person', 'client_email', 
+      'internal_notes', 'client_notes', 'admin_remarks', 'github_repo_url', 'bitbucket_repo_url', 
+      'technologies_used', 'estimated_delivery_plan'];
+    const validation = validateAndSanitizeObject(req.body, textFields);
+    if (validation.errors && validation.errors.length > 0) {
+      return res.status(400).json({ 
+        error: 'Invalid input detected', 
+        details: validation.errors.join('; ') 
+      });
+    }
+    
+    let {
       name, description, status, start_date, end_date, team_lead_id, member_ids, member_roles,
       logo_url, estimated_delivery_plan,
       client_name, client_contact_person, client_email, client_phone, is_internal,
@@ -385,6 +425,20 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
       github_repo_url, bitbucket_repo_url, technologies_used,
       milestones
     } = req.body;
+    
+    // Use sanitized values
+    name = validation.data.name || name;
+    description = validation.data.description || description;
+    client_name = validation.data.client_name || client_name;
+    client_contact_person = validation.data.client_contact_person || client_contact_person;
+    client_email = validation.data.client_email || client_email;
+    internal_notes = validation.data.internal_notes || internal_notes;
+    client_notes = validation.data.client_notes || client_notes;
+    admin_remarks = validation.data.admin_remarks || admin_remarks;
+    github_repo_url = validation.data.github_repo_url || github_repo_url;
+    bitbucket_repo_url = validation.data.bitbucket_repo_url || bitbucket_repo_url;
+    technologies_used = validation.data.technologies_used || technologies_used;
+    estimated_delivery_plan = validation.data.estimated_delivery_plan || estimated_delivery_plan;
     
     // Get before data for audit log
     const [existingProjects] = await db.query('SELECT * FROM projects WHERE id = ?', [id]);

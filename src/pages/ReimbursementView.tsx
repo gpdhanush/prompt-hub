@@ -154,7 +154,7 @@ export default function ReimbursementView() {
       case 'Level 1 Approved':
       case 'Super Admin Approved':
       case 'Approved':
-        return <CheckCircle2 className="h-5 w-5 text-green-600" />;
+        return <CheckCircle2 className="h-5 w-5 text-primary" />;
       case 'Level 1 Rejected':
       case 'Super Admin Rejected':
       case 'Rejected':
@@ -174,8 +174,8 @@ export default function ReimbursementView() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-green-500/20 to-green-600/10">
-                <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400" />
+              <div className="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10">
+                <DollarSign className="h-8 w-8 text-primary" />
               </div>
               Reimbursement Details
             </h1>
@@ -192,7 +192,7 @@ export default function ReimbursementView() {
             <>
               <Button
                 variant="outline"
-                className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20"
+                className="text-primary hover:text-primary/80 hover:bg-primary/10"
                 onClick={handleApprove}
                 disabled={approveMutation.isPending}
               >
@@ -228,7 +228,7 @@ export default function ReimbursementView() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Amount</p>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  <p className="text-2xl font-bold text-primary">
                     {formatCurrency(parseFloat(reimbursement.amount || 0))}
                   </p>
                 </div>
@@ -435,7 +435,7 @@ export default function ReimbursementView() {
               {reimbursement.level_1_approved_at && (
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Level 1 Approved</p>
-                  <p className="text-sm font-medium text-green-600">
+                  <p className="text-sm font-medium text-primary">
                     {new Date(reimbursement.level_1_approved_at).toLocaleString()}
                   </p>
                   {reimbursement.level_1_approver_name && (
@@ -464,7 +464,7 @@ export default function ReimbursementView() {
               {reimbursement.super_admin_approved_at && (
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Super Admin Approved</p>
-                  <p className="text-sm font-medium text-green-600">
+                  <p className="text-sm font-medium text-primary">
                     {new Date(reimbursement.super_admin_approved_at).toLocaleString()}
                   </p>
                   {reimbursement.super_admin_approver_name && (

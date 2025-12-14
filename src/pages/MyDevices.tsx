@@ -314,20 +314,18 @@ export default function MyDevices() {
                     </div>
                     <div>
                       <Label htmlFor="purchase_date">Purchase Date</Label>
-                      <Input
-                        id="purchase_date"
-                        type="date"
+                      <DatePicker
                         value={formData.purchase_date}
-                        onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
+                        onChange={(date) => setFormData({ ...formData, purchase_date: date || "" })}
+                        placeholder="Select purchase date"
                       />
                     </div>
                     <div>
                       <Label htmlFor="warranty_expiry">Warranty Expiry</Label>
-                      <Input
-                        id="warranty_expiry"
-                        type="date"
+                      <DatePicker
                         value={formData.warranty_expiry}
-                        onChange={(e) => setFormData({ ...formData, warranty_expiry: e.target.value })}
+                        onChange={(date) => setFormData({ ...formData, warranty_expiry: date || "" })}
+                        placeholder="Select warranty expiry date"
                       />
                     </div>
                   </div>

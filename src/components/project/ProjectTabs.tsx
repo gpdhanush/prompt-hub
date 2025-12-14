@@ -361,14 +361,14 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-7">
-        <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="files">Files</TabsTrigger>
-        <TabsTrigger value="change-requests">Change Requests</TabsTrigger>
-        <TabsTrigger value="calls">Client Calls</TabsTrigger>
-        <TabsTrigger value="credentials">Credentials</TabsTrigger>
-        <TabsTrigger value="status">Daily Status</TabsTrigger>
-        <TabsTrigger value="comments">Comments</TabsTrigger>
+      <TabsList className="grid w-full grid-cols-7 bg-muted/50">
+        <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
+        <TabsTrigger value="files" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Files</TabsTrigger>
+        <TabsTrigger value="change-requests" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Change Requests</TabsTrigger>
+        <TabsTrigger value="calls" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Client Calls</TabsTrigger>
+        <TabsTrigger value="credentials" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Credentials</TabsTrigger>
+        <TabsTrigger value="status" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Daily Status</TabsTrigger>
+        <TabsTrigger value="comments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Comments</TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview" className="space-y-6 mt-6">

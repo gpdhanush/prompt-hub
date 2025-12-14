@@ -39,7 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Pagination,
+  PaginationWrapper as Pagination,
   PaginationContent,
   PaginationItem,
   PaginationLink,

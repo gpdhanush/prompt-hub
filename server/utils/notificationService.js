@@ -481,3 +481,141 @@ export async function notifyBugComment(bugId, commentId, commenterId, commenterN
     logger.error('Error notifying bug comment:', error);
   }
 }
+
+/**
+ * Notify user when their ticket/support status is updated
+ */
+export async function notifyTicketStatusUpdated(userId, ticketId, ticketNumber, oldStatus, newStatus, updatedBy) {
+  try {
+    // Get updater info
+    const [updaters] = await db.query(
+      'SELECT name FROM users WHERE id = ?',
+      [updatedBy]
+    );
+    const updater = updaters[0]?.name || 'Admin';
+
+    const title = 'Ticket Status Updated';
+    const message = `Your ticket #${ticketNumber} status changed from ${oldStatus} to ${newStatus} by ${updater}.`;
+    
+    return await createNotification(
+      userId,
+      'ticket_status_updated',
+      title,
+      message,
+      {
+        ticketId: ticketId,
+        ticketNumber: ticketNumber,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+        updatedBy: updater,
+        link: `/it-assets/tickets/${ticketId}`,
+      }
+    );
+  } catch (error) {
+    logger.error('Error notifying ticket status update:', error);
+  }
+}
+
+/**
+ * Notify users when someone comments on a ticket
+ */
+export async function notifyTicketComment(ticketId, commentId, commenterId, commenterName, commentText, ticketNumber, employeeId, isReply = false, parentCommentId = null) {
+  try {
+    const userIdsToNotify = [];
+
+    if (isReply && parentCommentId) {
+      // This is a reply - notify the parent comment author
+      const [parentComments] = await db.query(`
+        SELECT created_by
+        FROM asset_ticket_comments
+        WHERE id = ?
+      `, [parentCommentId]);
+
+      if (parentComments.length > 0) {
+        const parentAuthorId = parentComments[0].created_by;
+        if (parentAuthorId !== commenterId) {
+          userIdsToNotify.push(parentAuthorId);
+        }
+      }
+    } else {
+      // This is a new comment - notify ticket owner (employee)
+      if (employeeId) {
+        const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [employeeId]);
+        if (employees.length > 0 && employees[0].user_id !== commenterId) {
+          userIdsToNotify.push(employees[0].user_id);
+        }
+      }
+    }
+
+    // Also notify all admins about ticket comments
+    const [admins] = await db.query(`
+      SELECT u.id
+      FROM users u
+      INNER JOIN roles r ON u.role_id = r.id
+      WHERE r.name IN ('Admin', 'Super Admin') AND u.status = 'Active'
+    `);
+    
+    admins.forEach(admin => {
+      if (admin.id !== commenterId && !userIdsToNotify.includes(admin.id)) {
+        userIdsToNotify.push(admin.id);
+      }
+    });
+
+    // Remove duplicates
+    const uniqueUserIds = [...new Set(userIdsToNotify)];
+
+    if (uniqueUserIds.length === 0) return;
+
+    const title = isReply ? 'Reply to Your Ticket Comment' : 'New Comment on Your Ticket';
+    const message = isReply
+      ? `${commenterName} replied to your comment on ticket #${ticketNumber}: ${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}`
+      : `${commenterName} commented on ticket #${ticketNumber}: ${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}`;
+
+    const promises = uniqueUserIds.map(userId =>
+      createNotification(
+        userId,
+        isReply ? 'ticket_comment_reply' : 'ticket_comment',
+        title,
+        message,
+        {
+          ticketId: ticketId,
+          ticketNumber: ticketNumber,
+          commentId: commentId,
+          commenterId: commenterId,
+          commenterName: commenterName,
+          parentCommentId: parentCommentId,
+          link: `/it-assets/tickets/${ticketId}`,
+        }
+      )
+    );
+
+    await Promise.allSettled(promises);
+  } catch (error) {
+    logger.error('Error notifying ticket comment:', error);
+  }
+}
+
+/**
+ * Notify user about calendar reminder (10 minutes before)
+ */
+export async function notifyCalendarReminder(userId, reminderTitle, reminderDate, reminderTime) {
+  try {
+    const title = 'Reminder: Upcoming Event';
+    const message = `${reminderTitle} is scheduled in 10 minutes (${reminderTime}).`;
+    
+    return await createNotification(
+      userId,
+      'calendar_reminder',
+      title,
+      message,
+      {
+        reminderTitle: reminderTitle,
+        reminderDate: reminderDate,
+        reminderTime: reminderTime,
+        link: '/dashboard',
+      }
+    );
+  } catch (error) {
+    logger.error('Error notifying calendar reminder:', error);
+  }
+}

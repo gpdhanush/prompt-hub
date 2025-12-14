@@ -16,6 +16,7 @@ import { ImageUploadCrop } from "@/components/ui/image-upload-crop";
 import { employeesApi, usersApi, rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
+import { sanitizeInput, containsHtmlOrScript } from "@/lib/validation";
 
 export default function EmployeeCreate() {
   const navigate = useNavigate();
@@ -60,6 +61,10 @@ export default function EmployeeCreate() {
     emergency_contact_name: "",
     emergency_contact_relation: "",
     emergency_contact_number: "",
+    
+    // Contact Details
+    skype: "",
+    whatsapp: "",
     
     // Leave counts
     annual_leave_count: 0,
@@ -339,6 +344,8 @@ export default function EmployeeCreate() {
         emergency_contact_name: data.emergency_contact_name || null,
         emergency_contact_relation: data.emergency_contact_relation || null,
         emergency_contact_number: data.emergency_contact_number || null,
+        skype: data.skype || null,
+        whatsapp: data.whatsapp || null,
         annual_leave_count: data.annual_leave_count || 0,
         sick_leave_count: data.sick_leave_count || 0,
         casual_leave_count: data.casual_leave_count || 0,
@@ -411,7 +418,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
+                  onChange={(e) => {
+                    const sanitized = sanitizeInput(e.target.value);
+                    setFormData({ ...formData, name: sanitized.toUpperCase() });
+                    if (containsHtmlOrScript(e.target.value)) {
+                      toast({
+                        title: "Invalid Input",
+                        description: "Name cannot contain HTML or script tags.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                   placeholder="Enter full name"
                   required
                 />
@@ -422,7 +439,17 @@ export default function EmployeeCreate() {
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => {
+                    const sanitized = sanitizeInput(e.target.value);
+                    setFormData({ ...formData, email: sanitized });
+                    if (containsHtmlOrScript(e.target.value)) {
+                      toast({
+                        title: "Invalid Input",
+                        description: "Email cannot contain HTML or script tags.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                   placeholder="Enter email address"
                   required
                 />
@@ -504,6 +531,33 @@ export default function EmployeeCreate() {
                   maxLength={10}
                 />
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="skype">Skype ID</Label>
+                <Input
+                  id="skype"
+                  type="text"
+                  value={formData.skype}
+                  onChange={(e) => setFormData({ ...formData, skype: e.target.value })}
+                  placeholder="Enter Skype ID"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="whatsapp">WhatsApp Number</Label>
+                <Input
+                  id="whatsapp"
+                  type="tel"
+                  value={formData.whatsapp}
+                  onChange={(e) => {
+                    // Only allow digits, max 10
+                    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, whatsapp: digitsOnly });
+                  }}
+                  placeholder="Enter WhatsApp number (10 digits)"
+                  maxLength={10}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label>Date of Birth</Label>
                 <DatePicker
@@ -660,7 +714,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="bank_name"
                   value={formData.bank_name}
-                  onChange={(e) => setFormData({ ...formData, bank_name: e.target.value.toUpperCase() })}
+                    onChange={(e) => {
+                      const sanitized = sanitizeInput(e.target.value);
+                      setFormData({ ...formData, bank_name: sanitized.toUpperCase() });
+                      if (containsHtmlOrScript(e.target.value)) {
+                        toast({
+                          title: "Invalid Input",
+                          description: "Bank name cannot contain HTML or script tags.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
                   placeholder="Enter bank name"
                 />
               </div>
@@ -669,7 +733,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="bank_account_number"
                   value={formData.bank_account_number}
-                  onChange={(e) => setFormData({ ...formData, bank_account_number: e.target.value.toUpperCase() })}
+                    onChange={(e) => {
+                      const sanitized = sanitizeInput(e.target.value);
+                      setFormData({ ...formData, bank_account_number: sanitized.toUpperCase() });
+                      if (containsHtmlOrScript(e.target.value)) {
+                        toast({
+                          title: "Invalid Input",
+                          description: "Bank account number cannot contain HTML or script tags.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
                   placeholder="Enter account number"
                 />
               </div>
@@ -678,7 +752,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="ifsc_code"
                   value={formData.ifsc_code}
-                  onChange={(e) => setFormData({ ...formData, ifsc_code: e.target.value.toUpperCase() })}
+                    onChange={(e) => {
+                      const sanitized = sanitizeInput(e.target.value);
+                      setFormData({ ...formData, ifsc_code: sanitized.toUpperCase() });
+                      if (containsHtmlOrScript(e.target.value)) {
+                        toast({
+                          title: "Invalid Input",
+                          description: "IFSC code cannot contain HTML or script tags.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
                   placeholder="Enter IFSC code"
                   maxLength={11}
                 />
@@ -700,7 +784,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="address1"
                   value={formData.address1}
-                  onChange={(e) => setFormData({ ...formData, address1: e.target.value.toUpperCase() })}
+                  onChange={(e) => {
+                    const sanitized = sanitizeInput(e.target.value);
+                    setFormData({ ...formData, address1: sanitized.toUpperCase() });
+                    if (containsHtmlOrScript(e.target.value)) {
+                      toast({
+                        title: "Invalid Input",
+                        description: "Address cannot contain HTML or script tags.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                   placeholder="Enter address line 1"
                 />
               </div>
@@ -709,7 +803,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="address2"
                   value={formData.address2}
-                  onChange={(e) => setFormData({ ...formData, address2: e.target.value.toUpperCase() })}
+                  onChange={(e) => {
+                    const sanitized = sanitizeInput(e.target.value);
+                    setFormData({ ...formData, address2: sanitized.toUpperCase() });
+                    if (containsHtmlOrScript(e.target.value)) {
+                      toast({
+                        title: "Invalid Input",
+                        description: "Address cannot contain HTML or script tags.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                   placeholder="Enter address line 2"
                 />
               </div>
@@ -718,7 +822,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="landmark"
                   value={formData.landmark}
-                  onChange={(e) => setFormData({ ...formData, landmark: e.target.value.toUpperCase() })}
+                  onChange={(e) => {
+                    const sanitized = sanitizeInput(e.target.value);
+                    setFormData({ ...formData, landmark: sanitized.toUpperCase() });
+                    if (containsHtmlOrScript(e.target.value)) {
+                      toast({
+                        title: "Invalid Input",
+                        description: "Landmark cannot contain HTML or script tags.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                   placeholder="Enter landmark"
                 />
               </div>
@@ -729,7 +843,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="state"
                   value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
+                  onChange={(e) => {
+                    const sanitized = sanitizeInput(e.target.value);
+                    setFormData({ ...formData, state: sanitized.toUpperCase() });
+                    if (containsHtmlOrScript(e.target.value)) {
+                      toast({
+                        title: "Invalid Input",
+                        description: "State cannot contain HTML or script tags.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                   placeholder="Enter state"
                 />
               </div>
@@ -738,7 +862,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="district"
                   value={formData.district}
-                  onChange={(e) => setFormData({ ...formData, district: e.target.value.toUpperCase() })}
+                  onChange={(e) => {
+                    const sanitized = sanitizeInput(e.target.value);
+                    setFormData({ ...formData, district: sanitized.toUpperCase() });
+                    if (containsHtmlOrScript(e.target.value)) {
+                      toast({
+                        title: "Invalid Input",
+                        description: "District cannot contain HTML or script tags.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                   placeholder="Enter district"
                 />
               </div>
@@ -764,7 +898,17 @@ export default function EmployeeCreate() {
                 <Input
                   id="emergency_contact_name"
                   value={formData.emergency_contact_name}
-                  onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value.toUpperCase() })}
+                  onChange={(e) => {
+                    const sanitized = sanitizeInput(e.target.value);
+                    setFormData({ ...formData, emergency_contact_name: sanitized.toUpperCase() });
+                    if (containsHtmlOrScript(e.target.value)) {
+                      toast({
+                        title: "Invalid Input",
+                        description: "Emergency contact name cannot contain HTML or script tags.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                   placeholder="Enter emergency contact name"
                 />
               </div>

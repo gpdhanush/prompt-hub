@@ -24,6 +24,7 @@ import {
   CheckCircle,
   Settings,
   Ticket,
+  UserSearch,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -37,10 +38,12 @@ const allMenuItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, section: null },
   // Administration (Super Admin only)
   { name: "Audit Logs", href: "/audit-logs", icon: FileText, section: "admin" },
+  { name: "User Hierarchy", href: "/user-hierarchy", icon: Users, section: "admin" },
   { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
   { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
   // Main Management
   { name: "Employees", href: "/employees", icon: UserCog, section: "main" },
+  { name: "Employee Directory", href: "/employees/list", icon: UserSearch, section: "main" },
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
   { name: "Tasks", href: "/tasks", icon: CheckSquare, section: "main" },
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
@@ -78,9 +81,9 @@ export function AdminSidebar() {
   const canAccessProjects = isSuperAdmin || hasPermission('projects.view');
   const canAccessTasks = isSuperAdmin || hasPermission('tasks.view');
   const canAccessBugs = isSuperAdmin || hasPermission('bugs.view');
-  // For leaves and reimbursements, default to true if permission doesn't exist (for backward compatibility)
-  const canAccessLeaves = isSuperAdmin || hasPermission('leaves.view') || true;
-  const canAccessReimbursements = isSuperAdmin || hasPermission('reimbursements.view') || true;
+  // Permission-based access checks
+  const canAccessLeaves = isSuperAdmin || hasPermission('leaves.view');
+  const canAccessReimbursements = isSuperAdmin || hasPermission('reimbursements.view');
   const canAccessReports = isSuperAdmin || hasPermission('reports.view');
   
   // Roles & Positions - Super Admin only (system-level)
@@ -94,13 +97,36 @@ export function AdminSidebar() {
   const isAdmin = userRole === 'Admin' || isSuperAdmin;
   const canAccessITAssets = isAdmin;
   
-  // Tickets menu - Admin can see all, employees can see their own
-  const canAccessTickets = !isSuperAdmin; // All users except Super Admin can access tickets (filtered by role)
+  // Tickets menu - Check permission for ticket view
+  // Super Admin always has access, others need tickets.view permission
+  const canAccessTickets = isSuperAdmin || hasPermission('tickets.view');
   
   // My Devices - All users except Super Admin (employees see their own devices)
   const canAccessMyDevices = !isSuperAdmin;
 
-  const isActive = (href: string) => location.pathname === href;
+  const isActive = (href: string) => {
+    // Exact match for dashboard and other specific routes
+    if (href === '/dashboard') {
+      return location.pathname === href;
+    }
+    // Routes that should match exactly (no sub-pages)
+    const exactMatchRoutes = ['/audit-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/my-devices', '/user-hierarchy', '/employees/list'];
+    if (exactMatchRoutes.includes(href)) {
+      return location.pathname === href;
+    }
+    // For routes that have sub-pages, check if pathname starts with href
+    // This handles:
+    // - /tasks, /tasks/new, /tasks/123, /tasks/123/edit
+    // - /projects, /projects/new, /projects/123, /projects/123/edit
+    // - /bugs, /bugs/new, /bugs/123, /bugs/123/edit
+    // - /employees, /employees/new, /employees/123, /employees/123/edit
+    // - /it-assets/* routes
+    // Special handling for /employees/list - it should not match /employees
+    if (href === '/employees') {
+      return location.pathname === href || (location.pathname.startsWith(href + '/') && !location.pathname.startsWith('/employees/list'));
+    }
+    return location.pathname === href || location.pathname.startsWith(href + '/');
+  };
 
   const NavItem = ({ item }: { item: typeof allMenuItems[0] }) => (
     <NavLink
@@ -172,12 +198,15 @@ export function AdminSidebar() {
             if (item.href === '/roles-permissions' && !canAccessRolesPermissions) return false;
             // Audit Logs - Super Admin and Admin only
             if (item.href === '/audit-logs' && !canAccessAuditLogs) return false;
-            // IT Asset Management - Admin only (except Tickets which employees can access)
+            // IT Asset Management - Admin only (except Tickets which requires permission)
             if (item.section === 'it-assets') {
-              // Tickets menu is accessible to all users (except Super Admin)
+              // Tickets menu requires tickets.view permission
               if (item.href === '/it-assets/tickets' && !canAccessTickets) return false;
               // Other IT Asset menus are Admin only
               if (item.href !== '/it-assets/tickets' && !canAccessITAssets) return false;
+              
+              // If no items in this section are accessible, hide the section header
+              // This is handled by checking if any items pass the filter
             }
             // My Devices - All users except Super Admin (now in main section, check by href)
             if (item.href === '/my-devices' && !canAccessMyDevices) return false;
@@ -192,9 +221,20 @@ export function AdminSidebar() {
               "it-assets": "IT Asset Management",
             };
             const sectionLabel = item.section ? sectionLabels[item.section] : '';
-            const showSectionHeader = item.section !== null && 
-                                     sectionLabel !== '' && 
-                                     (!prevItem || prevItem.section !== item.section);
+            
+            // For IT Asset Management section, only show header if at least one item is accessible
+            let showSectionHeader = item.section !== null && 
+                                   sectionLabel !== '' && 
+                                   (index === 0 || !prevItem || prevItem.section !== item.section);
+            
+            // Special handling for IT Asset Management section
+            if (item.section === 'it-assets') {
+              // Check if any IT Asset items are accessible
+              const hasAccessibleItems = filteredItems.some(filteredItem => 
+                filteredItem.section === 'it-assets'
+              );
+              showSectionHeader = showSectionHeader && hasAccessibleItems;
+            }
 
             return (
               <div key={item.href}>

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Search, MoreHorizontal, Check, X, Eye, Filter, DollarSign, FileText, Calendar, User, TrendingUp, AlertCircle, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { reimbursementsApi, settingsApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -46,6 +47,11 @@ export default function Reimbursements() {
   const userRole = currentUser?.role || '';
   const isSuperAdmin = userRole === 'Super Admin';
   const isLevel1 = ['Admin', 'Team Leader', 'Team Lead'].includes(userRole);
+  const { hasPermission } = usePermissions();
+  
+  // Permission checks
+  const canCreate = isSuperAdmin || hasPermission('reimbursements.create');
+  const canApproveReject = isSuperAdmin || hasPermission('reimbursements.approve');
   
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -120,8 +126,10 @@ export default function Reimbursements() {
     rejected: reimbursements.filter((r: any) => r.status === 'Level 1 Rejected' || r.status === 'Super Admin Rejected' || r.status === 'Rejected').length,
   };
 
-  // Check if user can approve/reject
+  // Check if user can approve/reject (must have permission AND meet workflow conditions)
   const canApprove = (reimbursement: any) => {
+    if (!canApproveReject) return false; // Must have permission first
+    
     if (isSuperAdmin) {
       return reimbursement.current_approval_level === 'Super Admin' || reimbursement.current_approval_level === 'Level 1 Approved';
     }
@@ -173,20 +181,21 @@ export default function Reimbursements() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-green-500/20 to-green-600/10">
-              <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400" />
+            <div className="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10">
+              <DollarSign className="h-8 w-8 text-primary" />
             </div>
             Reimbursements
           </h1>
           <p className="text-muted-foreground mt-1">Manage expense claims and multi-level approvals</p>
         </div>
-        <Button 
-          onClick={() => navigate('/reimbursements/new')}
-          className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          New Claim
-        </Button>
+        {canCreate && (
+          <Button 
+            onClick={() => navigate('/reimbursements/new')}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Claim
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -217,15 +226,15 @@ export default function Reimbursements() {
             </div>
           </CardContent>
         </Card>
-        <Card className="glass-card border-l-4 border-l-green-500">
+        <Card className="glass-card border-l-4 border-l-primary">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Approved</p>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.approved}</div>
+                <div className="text-2xl font-bold text-primary">{stats.approved}</div>
               </div>
-              <div className="p-3 rounded-lg bg-green-500/10">
-                <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+              <div className="p-3 rounded-lg bg-primary/10">
+                <CheckCircle2 className="h-6 w-6 text-primary" />
               </div>
             </div>
           </CardContent>
@@ -386,7 +395,7 @@ export default function Reimbursements() {
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20"
+                                className="h-8 w-8 text-primary hover:text-primary/80 hover:bg-primary/10"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleApprove(r.id);

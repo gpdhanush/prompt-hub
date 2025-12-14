@@ -49,7 +49,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import {
-  Pagination,
+  PaginationWrapper as Pagination,
   PaginationContent,
   PaginationItem,
   PaginationLink,

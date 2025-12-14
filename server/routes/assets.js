@@ -2903,6 +2903,29 @@ router.post('/tickets/:id/comments', async (req, res) => {
       WHERE c.id = ?
     `, [result.insertId]);
     
+    // Get ticket info for notification
+    const [ticketInfo] = await db.query(`
+      SELECT t.ticket_number, t.employee_id
+      FROM asset_tickets t
+      WHERE t.id = ?
+    `, [id]);
+    
+    // Notify about comment
+    if (ticketInfo.length > 0) {
+      const { notifyTicketComment } = await import('../utils/notificationService.js');
+      await notifyTicketComment(
+        parseInt(id),
+        result.insertId,
+        userId,
+        newComment[0].user_name || 'Someone',
+        comment,
+        ticketInfo[0].ticket_number,
+        ticketInfo[0].employee_id,
+        false,
+        null
+      );
+    }
+    
     res.status(201).json({
       data: newComment[0],
       message: 'Comment added successfully'
@@ -3102,12 +3125,18 @@ router.put('/tickets/:id', requireAdmin, async (req, res) => {
     }
     
     // Get ticket
-    const [tickets] = await db.query('SELECT * FROM asset_tickets WHERE id = ?', [id]);
+    const [tickets] = await db.query(`
+      SELECT t.*, e.user_id as employee_user_id
+      FROM asset_tickets t
+      LEFT JOIN employees e ON t.employee_id = e.id
+      WHERE t.id = ?
+    `, [id]);
     if (tickets.length === 0) {
       return res.status(404).json({ error: 'Ticket not found' });
     }
     
     const ticket = tickets[0];
+    const oldStatus = ticket.status;
     
     // Update ticket
     await db.query(`
@@ -3124,6 +3153,19 @@ router.put('/tickets/:id', requireAdmin, async (req, res) => {
       ['resolved', 'closed'].includes(status) ? new Date() : null,
       id
     ]);
+    
+    // Notify ticket owner if status changed
+    if (oldStatus !== status && ticket.employee_user_id) {
+      const { notifyTicketStatusUpdated } = await import('../utils/notificationService.js');
+      await notifyTicketStatusUpdated(
+        ticket.employee_user_id,
+        ticket.id,
+        ticket.ticket_number,
+        oldStatus,
+        status,
+        userId
+      );
+    }
     
     res.json({ message: 'Ticket updated successfully' });
   } catch (error) {

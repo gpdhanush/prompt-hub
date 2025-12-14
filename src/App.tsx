@@ -15,6 +15,9 @@ import Users from "./pages/Users";
 import Employees from "./pages/Employees";
 import Projects from "./pages/Projects";
 import Tasks from "./pages/Tasks";
+import TaskCreate from "./pages/TaskCreate";
+import TaskEdit from "./pages/TaskEdit";
+import TaskView from "./pages/TaskView";
 import Bugs from "./pages/Bugs";
 import Leaves from "./pages/Leaves";
 import Reimbursements from "./pages/Reimbursements";
@@ -30,6 +33,8 @@ import Reports from "./pages/Reports";
 import EmployeeProfile from "./pages/EmployeeProfile";
 import EmployeeCreate from "./pages/EmployeeCreate";
 import EmployeeEdit from "./pages/EmployeeEdit";
+import EmployeeList from "./pages/EmployeeList";
+import EmployeeView from "./pages/EmployeeView";
 import BugDetail from "./pages/BugDetail";
 import BugCreate from "./pages/BugCreate";
 import BugEdit from "./pages/BugEdit";
@@ -40,6 +45,7 @@ import RolesPositions from "./pages/RolesPositions";
 import RolesPermissions from "./pages/RolesPermissions";
 import Permissions from "./pages/Permissions";
 import ProfileSetup from "./pages/ProfileSetup";
+import UserHierarchy from "./pages/UserHierarchy";
 import NotFound from "./pages/NotFound";
 import MFASetup from "./pages/MFASetup";
 import MFAVerify from "./pages/MFAVerify";
@@ -230,6 +236,10 @@ const AppContent = () => {
                 } 
               />
               <Route 
+                path="/employees/list" 
+                element={<EmployeeList />} 
+              />
+              <Route 
                 path="/employees/new" 
                 element={
                   <ProtectedRoute requiredPermission="employees.create">
@@ -240,6 +250,10 @@ const AppContent = () => {
               <Route 
                 path="/employees/:id/edit" 
                 element={<EmployeeEdit />} 
+              />
+              <Route 
+                path="/employees/:id/view" 
+                element={<EmployeeView />} 
               />
               <Route 
                 path="/projects" 
@@ -274,10 +288,34 @@ const AppContent = () => {
                 } 
               />
               <Route 
-                path="/tasks" 
+                path="/tasks"
                 element={
                   <ProtectedRoute requiredPermission="tasks.view">
                     <Tasks />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/tasks/new"
+                element={
+                  <ProtectedRoute requiredPermission="tasks.create">
+                    <TaskCreate />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/tasks/:id"
+                element={
+                  <ProtectedRoute requiredPermission="tasks.view">
+                    <TaskView />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/tasks/:id/edit"
+                element={
+                  <ProtectedRoute requiredPermission="tasks.edit">
+                    <TaskEdit />
                   </ProtectedRoute>
                 } 
               />
@@ -319,19 +357,35 @@ const AppContent = () => {
               />
               <Route 
                 path="/reimbursements" 
-                element={<Reimbursements />} 
+                element={
+                  <ProtectedRoute requiredPermission="reimbursements.view">
+                    <Reimbursements />
+                  </ProtectedRoute>
+                } 
               />
               <Route 
                 path="/reimbursements/new" 
-                element={<ReimbursementCreate />} 
+                element={
+                  <ProtectedRoute requiredPermission="reimbursements.create">
+                    <ReimbursementCreate />
+                  </ProtectedRoute>
+                } 
               />
               <Route 
                 path="/reimbursements/:id" 
-                element={<ReimbursementView />} 
+                element={
+                  <ProtectedRoute requiredPermission="reimbursements.view">
+                    <ReimbursementView />
+                  </ProtectedRoute>
+                } 
               />
               <Route 
                 path="/reimbursements/:id/edit" 
-                element={<ReimbursementEdit />} 
+                element={
+                  <ProtectedRoute requiredPermission="reimbursements.edit">
+                    <ReimbursementEdit />
+                  </ProtectedRoute>
+                } 
               />
               <Route path="/prompts" element={<AIPrompts />} />
               <Route 
@@ -349,6 +403,14 @@ const AppContent = () => {
                 element={
                   <ProtectedRoute requiredPermission="reports.view">
                     <Reports />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/user-hierarchy" 
+                element={
+                  <ProtectedRoute allowedRoles={['Super Admin']}>
+                    <UserHierarchy />
                   </ProtectedRoute>
                 } 
               />
