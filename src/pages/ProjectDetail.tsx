@@ -238,9 +238,13 @@ export default function ProjectDetail() {
   });
 
   // Fetch project activities (GitHub/Bitbucket commits, PRs, etc.)
-  const { data: activitiesData } = useQuery({
+  const { data: activitiesData, isLoading: activitiesLoading, error: activitiesError } = useQuery({
     queryKey: ['project-activities', id],
-    queryFn: () => projectsApi.getActivities(Number(id), { limit: 20 }),
+    queryFn: async () => {
+      const result = await projectsApi.getActivities(Number(id), { limit: 20 });
+      logger.debug('Activities data received:', result);
+      return result;
+    },
     enabled: !!id,
   });
 
@@ -612,16 +616,35 @@ export default function ProjectDetail() {
           )}
 
           {/* Repository Activity */}
-          {activitiesData?.data && activitiesData.data.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Github className="h-5 w-5" />
-                  Repository Activity ({activitiesData.data.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {activitiesData.data.map((activity: any) => (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Github className="h-5 w-5" />
+                Repository Activity
+                {activitiesData?.data && ` (${activitiesData.data.length})`}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {activitiesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading activities...</span>
+                </div>
+              ) : activitiesError ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
+                  <p className="text-sm">Error loading repository activities</p>
+                  <p className="text-xs mt-1">{activitiesError.message || 'Unknown error'}</p>
+                </div>
+              ) : !activitiesData?.data || activitiesData.data.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Github className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm font-medium mb-1">No repository activity yet</p>
+                  <p className="text-xs">Commits, pull requests, and issues will appear here once webhooks are configured and events are received</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {activitiesData.data.map((activity: any) => (
                   <div key={activity.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                     {activity.activity_type === 'push' ? (
                       // Detailed Commit View
@@ -805,9 +828,10 @@ export default function ProjectDetail() {
                     )}
                   </div>
                 ))}
-              </CardContent>
-            </Card>
-          )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Comments */}
           {commentsData?.data && commentsData.data.length > 0 && (

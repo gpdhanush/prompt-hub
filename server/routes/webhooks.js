@@ -548,6 +548,328 @@ router.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'webhooks' });
 });
 
+// Sample payloads for testing/documentation
+router.get('/samples', (req, res) => {
+  res.json({
+    push_event: {
+      ref: "refs/heads/main",
+      before: "abc123def456",
+      after: "def456ghi789",
+      repository: {
+        id: 123456789,
+        name: "prompt-hub",
+        full_name: "gpdhanush/prompt-hub",
+        html_url: "https://github.com/gpdhanush/prompt-hub",
+        url: "https://api.github.com/repos/gpdhanush/prompt-hub",
+        clone_url: "https://github.com/gpdhanush/prompt-hub.git",
+        private: true,
+        owner: {
+          login: "gpdhanush",
+          name: "Dhanush",
+          email: "dhanush@example.com"
+        }
+      },
+      pusher: {
+        name: "gpdhanush",
+        email: "dhanush@example.com"
+      },
+      commits: [
+        {
+          id: "def456ghi789",
+          message: "Add GitHub webhook integration\n\n- Implement webhook endpoint\n- Add project activities tracking\n- Update project detail view",
+          timestamp: "2024-12-15T22:30:00Z",
+          url: "https://api.github.com/repos/gpdhanush/prompt-hub/commits/def456ghi789",
+          author: {
+            name: "Dhanush",
+            email: "dhanush@example.com",
+            username: "gpdhanush"
+          },
+          committer: {
+            name: "Dhanush",
+            email: "dhanush@example.com",
+            username: "gpdhanush"
+          },
+          added: ["src/components/webhook.ts", "server/routes/webhooks.js"],
+          removed: [],
+          modified: ["src/pages/ProjectDetail.tsx", "README.md"]
+        },
+        {
+          id: "abc789xyz123",
+          message: "Fix webhook URL matching logic",
+          timestamp: "2024-12-15T22:25:00Z",
+          url: "https://api.github.com/repos/gpdhanush/prompt-hub/commits/abc789xyz123",
+          author: {
+            name: "Dhanush",
+            email: "dhanush@example.com",
+            username: "gpdhanush"
+          },
+          committer: {
+            name: "Dhanush",
+            email: "dhanush@example.com",
+            username: "gpdhanush"
+          },
+          added: [],
+          removed: [],
+          modified: ["server/routes/webhooks.js"]
+        }
+      ]
+    },
+    pull_request_event: {
+      action: "opened",
+      number: 42,
+      pull_request: {
+        id: 987654321,
+        number: 42,
+        title: "Add GitHub webhook integration",
+        body: "This PR adds webhook support to track repository activity.\n\n## Changes\n- Webhook endpoint for GitHub events\n- Project activities table\n- UI updates to show commits",
+        state: "open",
+        html_url: "https://github.com/gpdhanush/prompt-hub/pull/42",
+        head: {
+          ref: "feature/webhook-integration",
+          sha: "def456ghi789"
+        },
+        base: {
+          ref: "main",
+          sha: "abc123def456"
+        },
+        user: {
+          login: "gpdhanush",
+          name: "Dhanush"
+        },
+        created_at: "2024-12-15T22:00:00Z",
+        updated_at: "2024-12-15T22:30:00Z"
+      },
+      repository: {
+        id: 123456789,
+        name: "prompt-hub",
+        full_name: "gpdhanush/prompt-hub",
+        html_url: "https://github.com/gpdhanush/prompt-hub",
+        private: true
+      }
+    },
+    issue_event: {
+      action: "opened",
+      issue: {
+        id: 123456,
+        number: 15,
+        title: "Webhook not matching project repository URL",
+        body: "The webhook is receiving events but can't find the matching project.",
+        state: "open",
+        html_url: "https://github.com/gpdhanush/prompt-hub/issues/15",
+        user: {
+          login: "gpdhanush",
+          name: "Dhanush"
+        },
+        created_at: "2024-12-15T22:20:00Z",
+        updated_at: "2024-12-15T22:20:00Z"
+      },
+      repository: {
+        id: 123456789,
+        name: "prompt-hub",
+        full_name: "gpdhanush/prompt-hub",
+        html_url: "https://github.com/gpdhanush/prompt-hub",
+        private: true
+      }
+    },
+    deployment_status_event: {
+      deployment_status: {
+        id: 12345,
+        state: "success",
+        description: "Deployment to production succeeded",
+        environment: "production",
+        target_url: "https://app.example.com",
+        created_at: "2024-12-15T22:35:00Z"
+      },
+      deployment: {
+        id: 67890,
+        ref: "main",
+        sha: "def456ghi789",
+        environment: "production",
+        description: "Deploy to production"
+      },
+      repository: {
+        id: 123456789,
+        name: "prompt-hub",
+        full_name: "gpdhanush/prompt-hub",
+        html_url: "https://github.com/gpdhanush/prompt-hub",
+        private: true
+      }
+    }
+  });
+});
+
+// Test endpoint to simulate webhook events (for development/testing)
+router.post('/test/:eventType', async (req, res) => {
+  try {
+    const { eventType } = req.params;
+    const { project_id, repository_url } = req.body;
+
+    if (!project_id && !repository_url) {
+      return res.status(400).json({ 
+        error: 'Missing project_id or repository_url',
+        hint: 'Provide either project_id or repository_url to test the webhook'
+      });
+    }
+
+    // Get project if project_id provided
+    let project = null;
+    if (project_id) {
+      const [projects] = await db.query(
+        'SELECT id, project_code, name, github_repo_url, bitbucket_repo_url FROM projects WHERE id = ?',
+        [project_id]
+      );
+      if (projects.length === 0) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      project = projects[0];
+    } else if (repository_url) {
+      project = await findProjectByRepoUrl(repository_url);
+      if (!project) {
+        return res.status(404).json({ 
+          error: 'Project not found',
+          message: `No project found matching repository URL: ${repository_url}`
+        });
+      }
+    }
+
+    // Generate sample payload based on event type
+    let samplePayload = {};
+    const baseRepo = {
+      id: 123456789,
+      name: "prompt-hub",
+      full_name: project.github_repo_url?.replace('https://github.com/', '').replace('.git', '') || "gpdhanush/prompt-hub",
+      html_url: project.github_repo_url || "https://github.com/gpdhanush/prompt-hub",
+      url: `https://api.github.com/repos/${project.github_repo_url?.replace('https://github.com/', '').replace('.git', '') || 'gpdhanush/prompt-hub'}`,
+      clone_url: (project.github_repo_url || "https://github.com/gpdhanush/prompt-hub") + (project.github_repo_url?.endsWith('.git') ? '' : '.git'),
+      private: true,
+      owner: {
+        login: "gpdhanush",
+        name: "Dhanush",
+        email: "dhanush@example.com"
+      }
+    };
+
+    switch (eventType) {
+      case 'push':
+        samplePayload = {
+          ref: "refs/heads/main",
+          before: "abc123def456",
+          after: "def456ghi789",
+          repository: baseRepo,
+          pusher: {
+            name: "gpdhanush",
+            email: "dhanush@example.com"
+          },
+          commits: [
+            {
+              id: "def456ghi789",
+              message: "Add GitHub webhook integration\n\n- Implement webhook endpoint\n- Add project activities tracking\n- Update project detail view",
+              timestamp: new Date().toISOString(),
+              url: `https://api.github.com/repos/${baseRepo.full_name}/commits/def456ghi789`,
+              author: {
+                name: "Dhanush",
+                email: "dhanush@example.com",
+                username: "gpdhanush"
+              },
+              committer: {
+                name: "Dhanush",
+                email: "dhanush@example.com",
+                username: "gpdhanush"
+              },
+              added: ["src/components/webhook.ts", "server/routes/webhooks.js"],
+              removed: [],
+              modified: ["src/pages/ProjectDetail.tsx", "README.md"]
+            }
+          ]
+        };
+        break;
+      case 'pull_request':
+        samplePayload = {
+          action: "opened",
+          number: 42,
+          pull_request: {
+            id: 987654321,
+            number: 42,
+            title: "Add GitHub webhook integration",
+            body: "This PR adds webhook support to track repository activity.",
+            state: "open",
+            html_url: `https://github.com/${baseRepo.full_name}/pull/42`,
+            head: {
+              ref: "feature/webhook-integration",
+              sha: "def456ghi789"
+            },
+            base: {
+              ref: "main",
+              sha: "abc123def456"
+            },
+            user: {
+              login: "gpdhanush",
+              name: "Dhanush"
+            },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          repository: baseRepo
+        };
+        break;
+      case 'issues':
+        samplePayload = {
+          action: "opened",
+          issue: {
+            id: 123456,
+            number: 15,
+            title: "Webhook not matching project repository URL",
+            body: "The webhook is receiving events but can't find the matching project.",
+            state: "open",
+            html_url: `https://github.com/${baseRepo.full_name}/issues/15`,
+            user: {
+              login: "gpdhanush",
+              name: "Dhanush"
+            },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          repository: baseRepo
+        };
+        break;
+      default:
+        return res.status(400).json({ 
+          error: 'Invalid event type',
+          supported_types: ['push', 'pull_request', 'issues']
+        });
+    }
+
+    // Process the sample payload
+    let result;
+    switch (eventType) {
+      case 'push':
+        result = await handlePushEvent(samplePayload, project);
+        break;
+      case 'pull_request':
+        result = await handlePullRequestEvent(samplePayload, project);
+        break;
+      case 'issues':
+        result = await handleIssuesEvent(samplePayload, project);
+        break;
+    }
+
+    res.json({
+      success: true,
+      message: `Test ${eventType} event processed successfully`,
+      project: project.project_code,
+      event_type: eventType,
+      result: result,
+      sample_payload: samplePayload
+    });
+  } catch (error) {
+    logger.error('Error in test webhook endpoint:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error.message 
+    });
+  }
+});
+
 // Diagnostic endpoint to check repository URL matching
 router.get('/diagnose', async (req, res) => {
   try {
