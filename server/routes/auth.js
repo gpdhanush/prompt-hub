@@ -5,6 +5,7 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '.
 import { storeRefreshToken, findRefreshToken, revokeRefreshToken, revokeAllUserTokens } from '../utils/refreshTokenService.js';
 import { validate, schemas } from '../middleware/validation.js';
 import { authenticate } from '../middleware/auth.js';
+import { sendPasswordResetOTP } from '../utils/emailService.js';
 import crypto from 'crypto';
 
 const router = express.Router();
@@ -459,6 +460,212 @@ router.get('/me/permissions', authenticate, async (req, res) => {
     });
   } catch (error) {
     logger.error('Error getting user permissions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Forgot Password - Send OTP
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Find user by email
+    const [users] = await db.query(`
+      SELECT id, name, email, status
+      FROM users
+      WHERE email = ?
+    `, [email]);
+
+    if (users.length === 0) {
+      // Return emailExists flag so frontend can show appropriate message
+      return res.json({ 
+        message: 'If the email exists, an OTP has been sent to your email address.',
+        success: true,
+        emailExists: false // Email not found
+      });
+    }
+
+    const user = users[0];
+
+    // Check if user is active
+    if (user.status !== 'Active') {
+      return res.status(403).json({ error: 'Account is not active. Please contact administrator.' });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // OTP expires in 10 minutes
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    // Invalidate any existing unused OTPs for this user
+    await db.query(`
+      UPDATE password_reset_otps
+      SET used = TRUE
+      WHERE user_id = ? AND used = FALSE
+    `, [user.id]);
+
+    // Store OTP in database
+    await db.query(`
+      INSERT INTO password_reset_otps (user_id, email, otp, expires_at)
+      VALUES (?, ?, ?, ?)
+    `, [user.id, user.email, otp, expiresAt]);
+
+    // Send OTP via email
+    try {
+      await sendPasswordResetOTP(user.email, otp, user.name);
+      logger.info(`Password reset OTP sent to ${user.email}`);
+    } catch (emailError) {
+      logger.error('Failed to send password reset email:', emailError);
+      // Delete the OTP if email failed
+      await db.query(`
+        DELETE FROM password_reset_otps
+        WHERE user_id = ? AND otp = ?
+      `, [user.id, otp]);
+      return res.status(500).json({ 
+        error: 'Failed to send email. Please try again later or contact administrator.' 
+      });
+    }
+
+    res.json({ 
+      message: 'If the email exists, an OTP has been sent to your email address.',
+      success: true,
+      emailExists: true // Email found and OTP sent
+    });
+  } catch (error) {
+    logger.error('Forgot password error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verify OTP
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP are required' });
+    }
+
+    // Find valid OTP
+    const [otps] = await db.query(`
+      SELECT pr.*, u.id as user_id, u.name
+      FROM password_reset_otps pr
+      INNER JOIN users u ON pr.user_id = u.id
+      WHERE pr.email = ? 
+        AND pr.otp = ?
+        AND pr.used = FALSE
+        AND pr.expires_at > NOW()
+      ORDER BY pr.created_at DESC
+      LIMIT 1
+    `, [email, otp]);
+
+    if (otps.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+
+    const otpRecord = otps[0];
+
+    // Mark OTP as used
+    await db.query(`
+      UPDATE password_reset_otps
+      SET used = TRUE
+      WHERE id = ?
+    `, [otpRecord.id]);
+
+    // Generate a temporary token for password reset (valid for 15 minutes)
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiresAt = new Date();
+    tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
+
+    // Store reset token (we'll use the OTP table with a special flag or create a separate token)
+    // For simplicity, we'll store it in a session-like way
+    await db.query(`
+      INSERT INTO password_reset_otps (user_id, email, otp, expires_at, used)
+      VALUES (?, ?, ?, ?, FALSE)
+    `, [otpRecord.user_id, email, resetToken, tokenExpiresAt]);
+
+    res.json({ 
+      success: true,
+      resetToken,
+      message: 'OTP verified successfully. You can now reset your password.'
+    });
+  } catch (error) {
+    logger.error('Verify OTP error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reset Password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, resetToken, newPassword } = req.body;
+
+    if (!email || !resetToken || !newPassword) {
+      return res.status(400).json({ error: 'Email, reset token, and new password are required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    }
+
+    // Verify reset token
+    const [tokens] = await db.query(`
+      SELECT pr.*, u.id as user_id
+      FROM password_reset_otps pr
+      INNER JOIN users u ON pr.user_id = u.id
+      WHERE pr.email = ?
+        AND pr.otp = ?
+        AND pr.used = FALSE
+        AND pr.expires_at > NOW()
+      ORDER BY pr.created_at DESC
+      LIMIT 1
+    `, [email, resetToken]);
+
+    if (tokens.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const tokenRecord = tokens[0];
+
+    // Hash new password
+    const bcrypt = await import('bcryptjs');
+    const passwordHash = await bcrypt.default.hash(newPassword, 10);
+
+    // Update user password
+    await db.query(`
+      UPDATE users
+      SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [passwordHash, tokenRecord.user_id]);
+
+    // Mark token as used
+    await db.query(`
+      UPDATE password_reset_otps
+      SET used = TRUE
+      WHERE id = ?
+    `, [tokenRecord.id]);
+
+    // Invalidate all other unused OTPs for this user
+    await db.query(`
+      UPDATE password_reset_otps
+      SET used = TRUE
+      WHERE user_id = ? AND used = FALSE
+    `, [tokenRecord.user_id]);
+
+    logger.info(`Password reset successful for user ${tokenRecord.user_id}`);
+
+    res.json({ 
+      success: true,
+      message: 'Password reset successfully. You can now login with your new password.'
+    });
+  } catch (error) {
+    logger.error('Reset password error:', error);
     res.status(500).json({ error: error.message });
   }
 });

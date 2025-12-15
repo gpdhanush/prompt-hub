@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, Download, Image as ImageIcon, File, FileType, Presentation, FileSpreadsheet, Video, Music, Archive, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { projectsApi, usersApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
+import { getImageUrl } from "@/lib/imageUtils";
+import { logger } from "@/lib/logger";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,11 +25,174 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Loader2 } from "lucide-react";
-import { ProjectTabs } from "@/components/project/ProjectTabs";
+
+// Comment Item Component
+function CommentItem({ comment, projectId }: { comment: any; projectId: number }) {
+  const queryClient = useQueryClient();
+  const currentUser = getCurrentUser();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editComment, setEditComment] = useState(comment.comment);
+  const [editCommentType, setEditCommentType] = useState(comment.comment_type);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const canEdit = currentUser?.id === comment.user_id || ['Admin', 'Super Admin', 'Team Lead'].includes(currentUser?.role || '');
+  
+  const formatFullDate = (dateString?: string) => {
+    if (!dateString) return "Not set";
+    return new Date(dateString).toLocaleDateString("en-US", { 
+      year: "numeric",
+      month: "long", 
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
+  
+  return (
+    <div className="p-3 border rounded">
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <div className="font-medium">{comment.user_name || 'Unknown User'}</div>
+          <div className="text-sm text-muted-foreground">
+            {comment.created_at ? formatFullDate(comment.created_at) : ''}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge variant="neutral">{comment.comment_type}</StatusBadge>
+          {canEdit && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setIsEditing(!isEditing)}
+              >
+                <Edit className="h-3 w-3" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+      {isEditing ? (
+        <div className="space-y-2 mt-2">
+          <Select value={editCommentType} onValueChange={setEditCommentType}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="General">General</SelectItem>
+              <SelectItem value="Developer">Developer</SelectItem>
+              <SelectItem value="Tester">Tester</SelectItem>
+              <SelectItem value="Designer">Designer</SelectItem>
+              <SelectItem value="Team Lead">Team Lead</SelectItem>
+              <SelectItem value="Client">Client</SelectItem>
+            </SelectContent>
+          </Select>
+          <Textarea
+            value={editComment}
+            onChange={(e) => setEditComment(e.target.value)}
+            rows={3}
+          />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await projectsApi.updateComment(projectId, comment.id, {
+                    comment: editComment,
+                    comment_type: editCommentType
+                  });
+                  toast({
+                    title: "Success",
+                    description: "Comment updated successfully.",
+                  });
+                  setIsEditing(false);
+                  queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
+                } catch (error: any) {
+                  toast({
+                    title: "Error",
+                    description: error.message || "Failed to update comment.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsEditing(false);
+                setEditComment(comment.comment);
+                setEditCommentType(comment.comment_type);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm">{comment.comment}</p>
+      )}
+      
+      {/* Delete Comment Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Comment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this comment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  await projectsApi.deleteComment(projectId, comment.id);
+                  toast({
+                    title: "Success",
+                    description: "Comment deleted successfully.",
+                  });
+                  queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
+                  setShowDeleteDialog(false);
+                } catch (error: any) {
+                  toast({
+                    title: "Error",
+                    description: error.message || "Failed to delete comment.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
 
 export default function ProjectDetail() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Get current user info for role-based permissions
@@ -49,8 +215,42 @@ export default function ProjectDetail() {
     queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
   });
 
+  // Fetch additional project data
+  const { data: filesData } = useQuery({
+    queryKey: ['project-files', id],
+    queryFn: () => projectsApi.getFiles(Number(id)),
+    enabled: !!id,
+  });
+
+  const { data: workedTimeData } = useQuery({
+    queryKey: ['project-worked-time', id],
+    queryFn: () => projectsApi.getTotalWorkedTime(Number(id)),
+    enabled: !!id,
+  });
+
+  // Fetch comments
+  const { data: commentsData } = useQuery({
+    queryKey: ['project-comments', id],
+    queryFn: () => projectsApi.getComments(Number(id)),
+    enabled: !!id,
+  });
+
   const project = projectData?.data;
   const allUsers = usersData?.data || [];
+  const files = filesData?.data || [];
+  const workedTime = workedTimeData?.data 
+    ? {
+        total_hours: typeof workedTimeData.data.total_hours === 'number' 
+          ? workedTimeData.data.total_hours 
+          : parseFloat(workedTimeData.data.total_hours) || 0,
+        total_minutes: typeof workedTimeData.data.total_minutes === 'number'
+          ? workedTimeData.data.total_minutes
+          : parseInt(workedTimeData.data.total_minutes) || 0,
+        unique_contributors: typeof workedTimeData.data.unique_contributors === 'number'
+          ? workedTimeData.data.unique_contributors
+          : parseInt(workedTimeData.data.unique_contributors) || 0,
+      }
+    : { total_hours: 0, total_minutes: 0, unique_contributors: 0 };
 
   const formatFullDate = (dateString?: string) => {
     if (!dateString) return "Not set";
@@ -63,6 +263,7 @@ export default function ProjectDetail() {
     });
   };
 
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return "Not set";
     return new Date(dateString).toLocaleDateString("en-US", { 
@@ -70,16 +271,6 @@ export default function ProjectDetail() {
       month: "short", 
       day: "numeric"
     });
-  };
-
-  const calculateProgress = (project: any) => {
-    if (!project.start_date || !project.end_date) return 0;
-    const start = new Date(project.start_date).getTime();
-    const end = new Date(project.end_date).getTime();
-    const now = Date.now();
-    if (now < start) return 0;
-    if (now > end) return 100;
-    return Math.round(((now - start) / (end - start)) * 100);
   };
 
   const handleEdit = () => {
@@ -135,12 +326,6 @@ export default function ProjectDetail() {
   };
 
   const memberDetails = getMemberDetails();
-  const progress = project?.progress || (project ? calculateProgress(project) : 0);
-  
-  const formatTime = (timeString?: string) => {
-    if (!timeString) return "Not set";
-    return timeString;
-  };
 
   if (isLoading) {
     return (
@@ -214,8 +399,8 @@ export default function ProjectDetail() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-4">
-                {project.logo_url && (
-                  <img src={project.logo_url} alt="Project Logo" className="h-16 w-16 rounded object-cover" />
+                {project.logo_url && getImageUrl(project.logo_url) && (
+                  <img src={getImageUrl(project.logo_url)!} alt="Project Logo" className="h-16 w-16 rounded object-cover border" />
                 )}
                 <div>
                   <CardTitle>{project.name}</CardTitle>
@@ -226,6 +411,75 @@ export default function ProjectDetail() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* First Row: Project Name, Priority, Status, Risk Level in 4 columns */}
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Project Name</Label>
+                  <div className="text-sm font-medium mt-1">{project.name}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Priority</Label>
+                  <div className="mt-1">
+                    {project.priority ? (
+                      <StatusBadge 
+                        variant={(project.priority === 'Critical' ? 'error' : project.priority === 'High' ? 'warning' : 'neutral') as 'error' | 'warning' | 'neutral'}
+                        className="text-xs"
+                      >
+                        {project.priority}
+                      </StatusBadge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Not set</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Project Status</Label>
+                  <div className="mt-1">
+                    <StatusBadge 
+                      variant={projectStatusMap[project.status as keyof typeof projectStatusMap] || 'neutral'}
+                      className="text-xs"
+                    >
+                      {project.status || 'Not Started'}
+                    </StatusBadge>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Risk Level</Label>
+                  <div className="mt-1">
+                    {project.risk_level ? (
+                      <StatusBadge 
+                        variant={project.risk_level === 'High' ? 'error' : project.risk_level === 'Medium' ? 'warning' : 'success'}
+                        className="text-xs"
+                      >
+                        {project.risk_level}
+                      </StatusBadge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Not set</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+
+              {/* Third Row: Technologies Used */}
+              {project.technologies_used && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">Technologies Used</Label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {(Array.isArray(project.technologies_used) 
+                      ? project.technologies_used 
+                      : typeof project.technologies_used === 'string' 
+                        ? JSON.parse(project.technologies_used || '[]')
+                        : []
+                    ).map((tech: string, index: number) => (
+                      <span key={index} className="px-2 py-1 bg-primary/10 text-primary rounded text-sm">
+                        {tech}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {project.description && (
                 <div>
                   <Label className="text-muted-foreground text-sm">Description</Label>
@@ -245,99 +499,6 @@ export default function ProjectDetail() {
             </CardContent>
           </Card>
 
-          {/* Client Details */}
-          {!project.is_internal && (project.client_name || project.client_email) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Client Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {project.client_name && (
-                  <div>
-                    <Label className="text-muted-foreground text-sm">Client Name</Label>
-                    <div className="text-sm font-medium mt-1">{project.client_name}</div>
-                  </div>
-                )}
-                {project.client_contact_person && (
-                  <div>
-                    <Label className="text-muted-foreground text-sm">Contact Person</Label>
-                    <div className="text-sm font-medium mt-1">{project.client_contact_person}</div>
-                  </div>
-                )}
-                {project.client_email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <Label className="text-muted-foreground text-sm">Email</Label>
-                      <div className="text-sm font-medium">{project.client_email}</div>
-                    </div>
-                  </div>
-                )}
-                {project.client_phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <Label className="text-muted-foreground text-sm">Phone</Label>
-                      <div className="text-sm font-medium">{project.client_phone}</div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Timeline & Scheduling */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Timeline & Scheduling
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground text-sm">Start Date</Label>
-                  <div className="text-sm font-medium mt-1">
-                    {formatDate(project.start_date)}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-sm">Target End Date</Label>
-                  <div className="text-sm font-medium mt-1">
-                    {formatDate(project.end_date || project.target_end_date)}
-                  </div>
-                </div>
-                {project.target_end_date && (
-                  <div>
-                    <Label className="text-muted-foreground text-sm">Target End Date (Alt)</Label>
-                    <div className="text-sm font-medium mt-1">
-                      {formatDate(project.target_end_date)}
-                    </div>
-                  </div>
-                )}
-                {project.actual_end_date && (
-                  <div>
-                    <Label className="text-muted-foreground text-sm">Actual End Date</Label>
-                    <div className="text-sm font-medium mt-1">
-                      {formatDate(project.actual_end_date)}
-                    </div>
-                  </div>
-                )}
-                {project.project_duration_days && (
-                  <div className="col-span-2">
-                    <Label className="text-muted-foreground text-sm">Project Duration</Label>
-                    <div className="text-sm font-medium mt-1">
-                      {project.project_duration_days} days
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
 
           {/* Milestones */}
           {project.milestones && project.milestones.length > 0 && (
@@ -375,6 +536,76 @@ export default function ProjectDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Project Files */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Project Files ({files.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {files.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No files uploaded yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {files.map((file: any) => {
+                    const extension = file.file_name.split('.').pop()?.toLowerCase() || '';
+                    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico'].includes(extension);
+                    
+                    let FileIcon = File;
+                    if (isImage) FileIcon = ImageIcon;
+                    else if (extension === 'pdf') FileIcon = FileType;
+                    else if (['doc', 'docx', 'txt', 'rtf', 'odt'].includes(extension)) FileIcon = FileText;
+                    else if (['xls', 'xlsx', 'csv', 'ods'].includes(extension)) FileIcon = FileSpreadsheet;
+                    else if (['ppt', 'pptx', 'odp'].includes(extension)) FileIcon = Presentation;
+                    else if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'].includes(extension)) FileIcon = Video;
+                    else if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma'].includes(extension)) FileIcon = Music;
+                    else if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(extension)) FileIcon = Archive;
+                    
+                    return (
+                      <div key={file.id} className="flex items-center justify-between p-3 border rounded">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {isImage && file.file_url ? (
+                            <div className="h-12 w-12 rounded border overflow-hidden flex-shrink-0 bg-muted">
+                              <img 
+                                src={getImageUrl(file.file_url) || file.file_url} 
+                                alt={file.file_name}
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  // Fallback to icon if image fails to load
+                                  e.currentTarget.style.display = 'none';
+                                  const parent = e.currentTarget.parentElement;
+                                  if (parent) {
+                                    parent.innerHTML = `<div class="flex items-center justify-center h-12 w-12 rounded border flex-shrink-0 bg-muted"><svg class="h-6 w-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>`;
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center h-12 w-12 rounded border flex-shrink-0 bg-muted">
+                              <FileIcon className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{file.file_name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {file.file_type} {file.file_category && `• ${file.file_category}`}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <a href={getImageUrl(file.file_url) || file.file_url} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="icon">
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Additional Notes */}
           {(project.internal_notes || project.client_notes || project.admin_remarks) && (
@@ -414,6 +645,124 @@ export default function ProjectDetail() {
             </Card>
           )}
 
+          {/* Comments */}
+          {commentsData?.data && commentsData.data.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Comments ({commentsData.data.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {commentsData.data.map((comment: any) => (
+                  <CommentItem key={comment.id} comment={comment} projectId={Number(id)} />
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Right Column - Sidebar */}
+        <div className="space-y-6">
+          {/* Client Details - First Card */}
+          {!project.is_internal && (project.client_name || project.client_email) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Client Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {project.client_name && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <Label className="text-muted-foreground text-sm">Client Name</Label>
+                      <div className="text-sm font-medium mt-1">{project.client_name}</div>
+                    </div>
+                  </div>
+                )}
+                {project.client_contact_person && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <Label className="text-muted-foreground text-sm">Contact Person</Label>
+                      <div className="text-sm font-medium mt-1">{project.client_contact_person}</div>
+                    </div>
+                  </div>
+                )}
+                {project.client_email && (
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <Label className="text-muted-foreground text-sm">Email</Label>
+                      <div className="text-sm font-medium">{project.client_email}</div>
+                    </div>
+                  </div>
+                )}
+                {project.client_phone && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <Label className="text-muted-foreground text-sm">Phone</Label>
+                      <div className="text-sm font-medium">{project.client_phone}</div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Timeline & Scheduling */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Timeline
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label className="text-muted-foreground text-sm">Start Date</Label>
+                <div className="text-sm font-medium mt-1">
+                  {formatDate(project.start_date)}
+                </div>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-sm">End Date</Label>
+                <div className="text-sm font-medium mt-1">
+                  {formatDate(project.end_date || project.target_end_date)}
+                </div>
+              </div>
+              {project.target_end_date && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">Target End Date (Alt)</Label>
+                  <div className="text-sm font-medium mt-1">
+                    {formatDate(project.target_end_date)}
+                  </div>
+                </div>
+              )}
+              {project.actual_end_date && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">Actual End Date</Label>
+                  <div className="text-sm font-medium mt-1">
+                    {formatDate(project.actual_end_date)}
+                  </div>
+                </div>
+              )}
+              {project.project_duration_days && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">Project Duration</Label>
+                  <div className="text-sm font-medium mt-1">
+                    {project.project_duration_days} days
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Integrations */}
           {(project.github_repo_url || project.bitbucket_repo_url) && (
             <Card>
@@ -438,91 +787,6 @@ export default function ProjectDetail() {
                     <a href={project.bitbucket_repo_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
                       {project.bitbucket_repo_url}
                     </a>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Right Column - Sidebar */}
-        <div className="space-y-6">
-          {/* Status & Progress */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-center">Status & Progress</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm text-muted-foreground">Status</Label>
-                <div>
-                  <StatusBadge 
-                    variant={projectStatusMap[project.status as keyof typeof projectStatusMap] || 'neutral'}
-                    className="text-xs px-2.5 py-0.5 w-fit"
-                  >
-                    {project.status || 'Not Started'}
-                  </StatusBadge>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm text-muted-foreground">Progress</Label>
-                <div className="flex items-center gap-2">
-                  <Progress value={progress} className="h-2 flex-1" />
-                  <span className="text-xs font-medium">{progress}%</span>
-                </div>
-              </div>
-              {project.risk_level && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm text-muted-foreground flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    Risk Level
-                  </Label>
-                  <div>
-                    <StatusBadge 
-                      variant={project.risk_level === 'High' ? 'error' : project.risk_level === 'Medium' ? 'warning' : 'success'}
-                      className="text-xs"
-                    >
-                      {project.risk_level}
-                    </StatusBadge>
-                  </div>
-                </div>
-              )}
-              {project.priority && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Flag className="h-4 w-4" />
-                    Priority
-                  </Label>
-                  <div>
-                    <StatusBadge 
-                      variant={(project.priority === 'Critical' ? 'error' : project.priority === 'High' ? 'warning' : 'neutral') as 'error' | 'warning' | 'neutral'}
-                      className="text-xs"
-                    >
-                      {project.priority}
-                    </StatusBadge>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Daily Task Reporting */}
-          {project.daily_reporting_required && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileCheck className="h-5 w-5" />
-                  Daily Reporting
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Submission Time: </span>
-                  <span className="font-medium">{formatTime(project.report_submission_time)}</span>
-                </div>
-                {project.auto_reminder_notifications && (
-                  <div className="text-sm text-muted-foreground">
-                    Auto-reminders enabled
                   </div>
                 )}
               </CardContent>
@@ -588,41 +852,52 @@ export default function ProjectDetail() {
               )}
             </CardContent>
           </Card>
-
-          {/* Project Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Project Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground text-sm">Created By</Label>
-                <div className="text-sm">{project.created_by_name || 'N/A'}</div>
-                {project.created_at && (
-                  <div className="text-xs text-muted-foreground">
-                    {formatFullDate(project.created_at)}
-                  </div>
-                )}
-              </div>
-              <Separator />
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground text-sm">Last Updated By</Label>
-                <div className="text-sm">
-                  {project.updated_by_name || project.created_by_name || 'N/A'}
-                </div>
-                {project.updated_at && (
-                  <div className="text-xs text-muted-foreground">
-                    {formatFullDate(project.updated_at)}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
-      {/* Project Tabs for Advanced Features */}
-      <ProjectTabs projectId={Number(id)} project={project} canEdit={canEditProject} />
+      {/* Additional Project Information - Container Sections */}
+      <div className="space-y-6">
+        {/* Total Worked Time */}
+        {(workedTime.total_hours > 0 || workedTime.total_minutes > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Total Worked Time
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Total Hours</Label>
+                  <div className="text-2xl font-bold">
+                    {typeof workedTime.total_hours === 'number' 
+                      ? workedTime.total_hours.toFixed(2) 
+                      : (parseFloat(String(workedTime.total_hours)) || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Total Minutes</Label>
+                  <div className="text-2xl font-bold">
+                    {typeof workedTime.total_minutes === 'number'
+                      ? workedTime.total_minutes
+                      : parseInt(String(workedTime.total_minutes)) || 0}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Contributors</Label>
+                  <div className="text-2xl font-bold">
+                    {typeof workedTime.unique_contributors === 'number'
+                      ? workedTime.unique_contributors
+                      : parseInt(String(workedTime.unique_contributors)) || 0}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

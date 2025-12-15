@@ -92,6 +92,20 @@ All database variables are required.
 
 **Note**: Use either `FIREBASE_SERVICE_ACCOUNT` (JSON string) OR `FIREBASE_SERVICE_ACCOUNT_PATH` (file path), not both.
 
+### Email/SMTP Configuration (For Password Reset)
+
+| Variable | Required | Description | Default | Example |
+|----------|----------|-------------|---------|---------|
+| `SMTP_HOST` | ✅ Yes (for password reset) | SMTP server hostname | - | `smtp.gmail.com` |
+| `SMTP_PORT` | ❌ Optional | SMTP server port | `587` | `587` or `465` |
+| `SMTP_SECURE` | ❌ Optional | Use secure connection (TLS/SSL) | `false` | `true` for port 465, `false` for port 587 |
+| `SMTP_USER` | ✅ Yes (for password reset) | SMTP username/email | - | `your-email@gmail.com` |
+| `SMTP_PASSWORD` | ✅ Yes (for password reset) | SMTP password or app password | - | `your-app-password` |
+| `SMTP_FROM_EMAIL` | ❌ Optional | From email address | Uses `SMTP_USER` | `noreply@naethra.com` |
+| `SMTP_FROM_NAME` | ❌ Optional | From name | - | `Naethra EMS` |
+
+**Note**: For Gmail, you need to use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password.
+
 ### File Upload Configuration
 
 | Variable | Required | Description | Default | Example |

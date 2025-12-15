@@ -133,6 +133,13 @@ export default function Login() {
           </div>
         </div>
 
+        {/* Bottom note */}
+        <div className="relative z-10 pt-6 border-t border-border/50">
+          <p className="text-sm text-muted-foreground/80">
+            For optimal experience, use desktop screens (~1280-1920px wide). Not suitable for mobile view.
+          </p>
+        </div>
+
         {/* Decorative elements */}
         <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
@@ -210,9 +217,13 @@ export default function Login() {
                   Remember me
                 </Label>
               </div>
-              <a href="#" className="text-sm text-primary hover:underline">
+              <button
+                type="button"
+                onClick={() => navigate("/forgot-password", { state: { email } })}
+                className="text-sm text-primary hover:underline"
+              >
                 Forgot password?
-              </a>
+              </button>
             </div>
 
             <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
@@ -230,9 +241,13 @@ export default function Login() {
             <p className="text-xs opacity-70 font-bold">
               Version: {ENV_CONFIG.APP_VERSION}
             </p>
+            {/* <p className="text-sm font-medium text-muted-foreground/80 mt-4 pt-4 border-t border-border">
+              For optimal experience, use desktop screens (~1280-1920px wide). Not suitable for mobile view.
+            </p> */}
           </div>
         </div>
       </div>
+
     </div>
   );
 }

@@ -538,6 +538,15 @@ export const projectsApi = {
     const queryParams = params ? `?${new URLSearchParams(params as any).toString()}` : '';
     return request<{ data: any[] }>(`/projects/${id}/comments${queryParams}`);
   },
+  updateComment: (id: number, commentId: number, data: any) =>
+    request<{ data: any }>(`/projects/${id}/comments/${commentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteComment: (id: number, commentId: number) =>
+    request<{ message: string }>(`/projects/${id}/comments/${commentId}`, {
+      method: 'DELETE',
+    }),
   // Technologies
   updateTechnologies: (id: number, technologies: string[]) =>
     request<{ data: any }>(`/projects/${id}/technologies`, {
@@ -822,6 +831,26 @@ export const reimbursementsApi = {
 
 // Auth API
 export const authApi = {
+  forgotPassword: async (email: string) => {
+    return request<{ message: string; success: boolean; emailExists: boolean }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  verifyOTP: async (email: string, otp: string) => {
+    return request<{ success: boolean; resetToken: string; message: string }>('/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp }),
+    });
+  },
+
+  resetPassword: async (email: string, resetToken: string, newPassword: string) => {
+    return request<{ success: boolean; message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, resetToken, newPassword }),
+    });
+  },
   login: (email: string, password: string) =>
     request<{ 
       token: string; // Backward compatibility (same as accessToken)

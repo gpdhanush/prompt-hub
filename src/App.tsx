@@ -82,6 +82,7 @@ import { registerLoadingCallback } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useQueryClient } from "@tanstack/react-query";
 import { clearAuth } from "@/lib/auth";
+import ForgotPassword from "./pages/ForgotPassword";
 
 const queryClient = new QueryClient();
 
@@ -213,6 +214,7 @@ const AppContent = () => {
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/mfa/setup" element={<MFASetup />} />
             <Route path="/mfa/verify" element={<MFAVerify />} />
             

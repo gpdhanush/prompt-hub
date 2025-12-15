@@ -32,12 +32,12 @@ import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { projectsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { getImageUrl } from "@/lib/imageUtils";
 
 // Component to handle project image with error fallback
 const ProjectImage = ({ src, alt, className }: { src: string; alt: string; className?: string }) => {
@@ -93,6 +93,7 @@ export default function Projects() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewFilter, setViewFilter] = useState<'all' | 'my'>('all');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   
@@ -122,22 +123,38 @@ export default function Projects() {
   const projects = data?.data || [];
   const pagination = data?.pagination || { total: 0, totalPages: 0 };
   
-  // Filter projects based on search query (client-side for now)
-  const filteredProjects = projects.filter((project: Project) =>
-    project.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.project_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.id?.toString().includes(searchQuery)
-  );
+  // Filter projects based on search query and status filter (client-side for now)
+  const filteredProjects = projects.filter((project: Project) => {
+    const matchesSearch = project.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.project_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.id?.toString().includes(searchQuery);
+    
+    let matchesStatus = true;
+    if (statusFilter) {
+      if (statusFilter === 'In Progress') {
+        // Match In Progress, Testing, Pre-Prod, or Production
+        matchesStatus = project.status === 'In Progress' || 
+                       project.status === 'Testing' || 
+                       project.status === 'Pre-Prod' || 
+                       project.status === 'Production';
+      } else {
+        matchesStatus = project.status === statusFilter;
+      }
+    }
+    
+    return matchesSearch && matchesStatus;
+  });
 
-  // Calculate stats from actual data
-  const totalProjects = projects.length;
-  const inProgressCount = projects.filter((p: Project) => 
+  // Calculate stats from actual data (use all projects, not filtered)
+  const allProjectsForStats = data?.data || [];
+  const totalProjects = allProjectsForStats.length;
+  const inProgressCount = allProjectsForStats.filter((p: Project) => 
     p.status === 'In Progress' || p.status === 'Testing' || p.status === 'Pre-Prod' || p.status === 'Production'
   ).length;
-  const completedCount = projects.filter((p: Project) => 
+  const completedCount = allProjectsForStats.filter((p: Project) => 
     p.status === 'Completed'
   ).length;
-  const onHoldCount = projects.filter((p: Project) => 
+  const onHoldCount = allProjectsForStats.filter((p: Project) => 
     p.status === 'On Hold'
   ).length;
 
@@ -192,6 +209,18 @@ export default function Projects() {
   };
 
   const handleEdit = (project: Project) => {
+    // Ensure project has a valid ID before navigating
+    if (!project.id || project.id <= 0) {
+      console.error('Invalid project ID in handleEdit:', project);
+      toast({
+        title: "Cannot Edit Project",
+        description: `Project "${project.name}" has an invalid ID (${project.id}). This project needs to be fixed in the database. Please run the SQL fix script or contact your database administrator.`,
+        variant: "destructive",
+        duration: 10000,
+      });
+      return;
+    }
+    console.log('Navigating to edit project:', project.id, project.name);
     navigate(`/projects/${project.id}/edit`);
   };
 
@@ -228,25 +257,63 @@ export default function Projects() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="glass-card">
+        <Card 
+          className={`glass-card cursor-pointer transition-colors ${
+            statusFilter === null ? 'bg-primary/10 border-primary' : ''
+          }`}
+          onClick={() => {
+            setStatusFilter(null);
+            setPage(1);
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold">{totalProjects}</div>
             <p className="text-xs text-muted-foreground">Total Projects</p>
           </CardContent>
         </Card>
-        <Card className="glass-card">
+        <Card 
+          className={`glass-card cursor-pointer transition-colors ${
+            statusFilter === 'In Progress' || statusFilter === 'Testing' || statusFilter === 'Pre-Prod' || statusFilter === 'Production'
+              ? 'bg-primary/10 border-primary' : ''
+          }`}
+          onClick={() => {
+            // Toggle between In Progress states or clear
+            if (statusFilter === 'In Progress') {
+              setStatusFilter(null);
+            } else {
+              setStatusFilter('In Progress');
+            }
+            setPage(1);
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-status-warning">{inProgressCount}</div>
             <p className="text-xs text-muted-foreground">In Progress</p>
           </CardContent>
         </Card>
-        <Card className="glass-card">
+        <Card 
+          className={`glass-card cursor-pointer transition-colors ${
+            statusFilter === 'Completed' ? 'bg-primary/10 border-primary' : ''
+          }`}
+          onClick={() => {
+            setStatusFilter(statusFilter === 'Completed' ? null : 'Completed');
+            setPage(1);
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-status-success">{completedCount}</div>
             <p className="text-xs text-muted-foreground">Completed</p>
           </CardContent>
         </Card>
-        <Card className="glass-card">
+        <Card 
+          className={`glass-card cursor-pointer transition-colors ${
+            statusFilter === 'On Hold' ? 'bg-primary/10 border-primary' : ''
+          }`}
+          onClick={() => {
+            setStatusFilter(statusFilter === 'On Hold' ? null : 'On Hold');
+            setPage(1);
+          }}
+        >
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-status-neutral">{onHoldCount}</div>
             <p className="text-xs text-muted-foreground">On Hold</p>
@@ -271,21 +338,29 @@ export default function Projects() {
                   }}
                 />
               </div>
-              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border">
-                <Label htmlFor="view-filter-projects" className="text-sm font-medium cursor-pointer">
-                  All Projects
-                </Label>
-                <Switch
-                  id="view-filter-projects"
-                  checked={viewFilter === 'my'}
-                  onCheckedChange={(checked) => {
-                    setViewFilter(checked ? 'my' : 'all');
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setViewFilter('all');
                     setPage(1);
                   }}
-                />
-                <Label htmlFor="view-filter-projects" className="text-sm font-medium cursor-pointer">
+                  className={viewFilter === 'all' ? '' : ''}
+                >
+                  All Projects
+                </Button>
+                <Button
+                  variant={viewFilter === 'my' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setViewFilter('my');
+                    setPage(1);
+                  }}
+                  className={viewFilter === 'my' ? '' : ''}
+                >
                   My Projects
-                </Label>
+                </Button>
               </div>
             </div>
           </div>
@@ -348,9 +423,13 @@ export default function Projects() {
                 </TableRow>
               ) : (
                 filteredProjects.map((project: Project) => {
+                  // Log projects with invalid IDs for debugging
+                  if (!project.id || project.id <= 0) {
+                    console.warn('Project with invalid ID found:', project);
+                  }
                   return (
                 <TableRow 
-                  key={project.id}
+                  key={project.id || `project-${project.name}`}
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => handleView(project)}
                 >
@@ -359,9 +438,9 @@ export default function Projects() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      {project.logo_url && (
+                      {project.logo_url && getImageUrl(project.logo_url) && (
                         <ProjectImage 
-                          src={project.logo_url} 
+                          src={getImageUrl(project.logo_url)!} 
                           alt={project.name}
                           className="h-10 w-10 rounded object-cover border flex-shrink-0"
                         />

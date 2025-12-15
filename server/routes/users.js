@@ -416,7 +416,13 @@ router.post('/', canManageUsers, async (req, res) => {
     res.status(201).json({ data: newUser[0] });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ error: 'Email already exists' });
+      // Check which field caused the duplicate
+      if (error.message.includes('email') || error.message.includes('idx_user_email')) {
+        return res.status(400).json({ error: `Email "${email}" already exists. Please use a different email address.` });
+      } else if (error.message.includes('mobile') || error.message.includes('idx_user_mobile')) {
+        return res.status(400).json({ error: `Mobile number "${mobile}" already exists. Please use a different mobile number.` });
+      }
+      return res.status(400).json({ error: 'A user with this information already exists.' });
     }
     res.status(500).json({ error: error.message });
   }
@@ -610,7 +616,13 @@ router.put('/:id', canManageUsers, async (req, res) => {
     res.json({ data: updatedUser[0] });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ error: 'Email already exists' });
+      // Check which field caused the duplicate
+      if (error.message.includes('email') || error.message.includes('idx_user_email')) {
+        return res.status(400).json({ error: `Email "${email}" already exists. Please use a different email address.` });
+      } else if (error.message.includes('mobile') || error.message.includes('idx_user_mobile')) {
+        return res.status(400).json({ error: `Mobile number "${mobile}" already exists. Please use a different mobile number.` });
+      }
+      return res.status(400).json({ error: 'A user with this information already exists.' });
     }
     res.status(500).json({ error: error.message });
   }

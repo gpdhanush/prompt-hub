@@ -137,19 +137,41 @@ export default function TaskEdit() {
       return;
     }
 
+    if (!formData.project_id || formData.project_id === "none") {
+      toast({
+        title: "Validation Error",
+        description: "Project is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.priority) {
+      toast({
+        title: "Validation Error",
+        description: "Priority is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.status) {
+      toast({
+        title: "Validation Error",
+        description: "Status is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const updateData: any = {
       title: formData.title,
       description: formData.description,
       priority: formData.priority,
       stage: formData.stage,
       status: formData.status,
+      project_id: parseInt(formData.project_id),
     };
-
-    if (formData.project_id && formData.project_id !== "none") {
-      updateData.project_id = parseInt(formData.project_id);
-    } else {
-      updateData.project_id = null;
-    }
 
     if (formData.assigned_to && formData.assigned_to !== "none") {
       updateData.assigned_to = parseInt(formData.assigned_to);

@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, X, MessageSquare, Save } from "lucide-react";
+import { ArrowLeft, Plus, X, MessageSquare, Save, Upload, FileText, Edit, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,20 @@ import { projectsApi, usersApi, employeesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
 import { Loader2 } from "lucide-react";
+import { ProjectLogoUpload } from "@/components/ui/project-logo-upload";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { getCurrentUser } from "@/lib/auth";
+import { getImageUrl } from "@/lib/imageUtils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Milestone = {
   id?: string;
@@ -64,9 +78,200 @@ const MandatoryLabel = ({ htmlFor, children }: { htmlFor: string; children: Reac
   </Label>
 );
 
-export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
+// Comment Item Component for Edit Mode
+function CommentItemEdit({ comment, projectId, queryClient }: { comment: any; projectId: number; queryClient: any }) {
+  const currentUser = getCurrentUser();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editComment, setEditComment] = useState(comment.comment);
+  const [editCommentType, setEditCommentType] = useState(comment.comment_type);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const canEdit = currentUser?.id === comment.user_id || ['Admin', 'Super Admin', 'Team Lead'].includes(currentUser?.role || '');
+  
+  return (
+    <div className="p-3 border rounded">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="font-medium">{comment.user_name || 'Unknown User'}</div>
+          <div className="text-xs text-muted-foreground">
+            {comment.created_at ? new Date(comment.created_at).toLocaleString() : ''}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge variant="neutral">{comment.comment_type}</StatusBadge>
+          {canEdit && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setIsEditing(!isEditing)}
+              >
+                <Edit className="h-3 w-3" />
+              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive"
+                                onClick={() => setShowDeleteDialog(true)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+      {isEditing ? (
+        <div className="space-y-2 mt-2">
+          <Select value={editCommentType} onValueChange={setEditCommentType}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="General">General</SelectItem>
+              <SelectItem value="Developer">Developer</SelectItem>
+              <SelectItem value="Tester">Tester</SelectItem>
+              <SelectItem value="Designer">Designer</SelectItem>
+              <SelectItem value="Team Lead">Team Lead</SelectItem>
+              <SelectItem value="Client">Client</SelectItem>
+            </SelectContent>
+          </Select>
+          <Textarea
+            value={editComment}
+            onChange={(e) => setEditComment(e.target.value)}
+            rows={3}
+          />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await projectsApi.updateComment(Number(projectId), comment.id, {
+                    comment: editComment,
+                    comment_type: editCommentType
+                  });
+                  toast({
+                    title: "Success",
+                    description: "Comment updated successfully.",
+                  });
+                  setIsEditing(false);
+                  queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
+                } catch (error: any) {
+                  toast({
+                    title: "Error",
+                    description: error.message || "Failed to update comment.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsEditing(false);
+                setEditComment(comment.comment);
+                setEditCommentType(comment.comment_type);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm">{comment.comment}</p>
+      )}
+      
+      {/* Delete Comment Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Comment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this comment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  await projectsApi.deleteComment(Number(projectId), comment.id);
+                  toast({
+                    title: "Success",
+                    description: "Comment deleted successfully.",
+                  });
+                  queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
+                  setShowDeleteDialog(false);
+                } catch (error: any) {
+                  toast({
+                    title: "Error",
+                    description: error.message || "Failed to delete comment.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+export default function ProjectForm({ projectId: propProjectId, mode }: ProjectFormProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const params = useParams<{ id?: string }>();
+  const currentUser = getCurrentUser();
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  
+  // Fallback: Try to get projectId from route params if not provided as prop
+  // This handles cases where the prop might be undefined
+  const routeProjectId = params.id ? parseInt(params.id, 10) : undefined;
+  const projectId = propProjectId ?? routeProjectId;
+  
+  logger.debug('ProjectForm - propProjectId:', propProjectId, 'params.id:', params.id, 'routeProjectId:', routeProjectId, 'final projectId:', projectId);
+  
+  // Early validation for edit mode - check before setting up state
+  if (mode === 'edit' && (projectId === undefined || projectId === null || isNaN(projectId) || projectId <= 0)) {
+    logger.error('ProjectForm - Invalid projectId early check:', projectId);
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+          <div className="text-destructive text-lg font-semibold">
+            Invalid project ID: {projectId === 0 ? '0 (Project ID cannot be 0)' : projectId || 'undefined'}
+          </div>
+          <div className="text-sm text-muted-foreground max-w-md text-center">
+            {projectId === 0 
+              ? 'This project has an invalid ID in the database. Please run the SQL fix script: database/migrations/fix_project_id_zero_all_in_one.sql'
+              : projectId === undefined
+              ? 'Project ID is missing. Please check the URL or go back to the projects list.'
+              : 'Please go back and try again.'}
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => navigate('/projects')} variant="outline">
+              Back to Projects
+            </Button>
+            <Button onClick={() => window.location.reload()} variant="default">
+              Refresh Page
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
   const [formData, setFormData] = useState<ProjectFormData>({
     name: "",
@@ -80,7 +285,7 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
     client_phone: "",
     start_date: "",
     end_date: "",
-    status: "Not Started",
+    status: "not started",
     risk_level: "",
     priority: "",
     technologies_used: [],
@@ -95,13 +300,21 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
 
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [showCommentForm, setShowCommentForm] = useState(false);
-  const [commentForm, setCommentForm] = useState({ comment: '', comment_type: 'General', is_internal: true });
+  const [commentForm, setCommentForm] = useState({ comment: '', comment_type: 'General', is_internal: false });
+  const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch project data for edit mode
   const { data: projectData, isLoading, error } = useQuery({
     queryKey: ['project', projectId],
-    queryFn: () => projectsApi.getById(Number(projectId)),
+    queryFn: () => {
+      if (!projectId || isNaN(Number(projectId)) || Number(projectId) <= 0) {
+        throw new Error('Invalid project ID');
+      }
+      return projectsApi.getById(Number(projectId));
+    },
     enabled: mode === 'edit' && !!projectId && !isNaN(Number(projectId)) && Number(projectId) > 0,
+    retry: false,
   });
 
   // Fetch users for dropdowns
@@ -114,6 +327,13 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
   const { data: employeesData } = useQuery({
     queryKey: ['employees'],
     queryFn: () => employeesApi.getAll({ page: 1, limit: 1000 }),
+  });
+
+  // Fetch comments for edit mode
+  const { data: commentsData } = useQuery({
+    queryKey: ['project-comments', projectId],
+    queryFn: () => projectsApi.getComments(Number(projectId)),
+    enabled: mode === 'edit' && !!projectId && !isNaN(Number(projectId)) && Number(projectId) > 0,
   });
 
   const allUsers = usersData?.data || [];
@@ -139,15 +359,34 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
       return [];
     }
     
-    const teamEmployees = allEmployees.filter((emp: any) => 
-      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
-    );
+    // Get all employees that report to this team lead (recursively get all subordinates)
+    const getSubordinateEmployees = (teamLeadEmpId: number, visited: Set<number> = new Set()): any[] => {
+      if (visited.has(teamLeadEmpId)) {
+        return []; // Prevent infinite loops
+      }
+      visited.add(teamLeadEmpId);
+      
+      const directReports = allEmployees.filter((emp: any) => 
+        emp.team_lead_id && emp.team_lead_id === teamLeadEmpId
+      );
+      
+      // Recursively get subordinates of subordinates
+      const allSubordinates = [...directReports];
+      directReports.forEach((emp: any) => {
+        const subordinates = getSubordinateEmployees(emp.id, visited);
+        allSubordinates.push(...subordinates);
+      });
+      
+      return allSubordinates;
+    };
     
+    const teamEmployees = getSubordinateEmployees(teamLeadEmployee.id);
     const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
     
+    // Return all users that are employees of this team lead, excluding team leads
     return allUsers.filter((user: any) => 
       teamEmployeeUserIds.includes(user.id) && 
-      ['Developer', 'Designer', 'Tester'].includes(user.role)
+      user.role !== 'Team Lead' // Exclude other team leads
     );
   }, [formData.team_lead_id, allUsers, allEmployees]);
 
@@ -167,14 +406,18 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
         client_phone: project.client_phone || "",
         start_date: project.start_date ? project.start_date.split('T')[0] : "",
         end_date: project.end_date ? project.end_date.split('T')[0] : "",
-        status: project.status || "Not Started",
+        status: project.status || "not started",
         risk_level: project.risk_level || "",
         priority: project.priority || "",
         technologies_used: project.technologies_used ? (Array.isArray(project.technologies_used) ? project.technologies_used : JSON.parse(project.technologies_used)) : [],
         team_lead_id: project.team_lead_id?.toString() || "",
         member_ids: project.member_ids || [],
         member_roles: project.member_roles || {},
-        milestones: project.milestones || [],
+        milestones: project.milestones ? project.milestones.map((m: any) => ({
+          ...m,
+          start_date: m.start_date ? (typeof m.start_date === 'string' ? m.start_date.split('T')[0] : m.start_date) : '',
+          end_date: m.end_date ? (typeof m.end_date === 'string' ? m.end_date.split('T')[0] : m.end_date) : '',
+        })) : [],
         comments: [],
         github_repo_url: project.github_repo_url || "",
         bitbucket_repo_url: project.bitbucket_repo_url || "",
@@ -182,17 +425,32 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
     }
   }, [projectData, mode]);
 
+  // Load project files for edit mode
+  useEffect(() => {
+    if (mode === 'edit' && projectId) {
+      projectsApi.getFiles(projectId)
+        .then((response) => {
+          setUploadedFiles(response.data || []);
+        })
+        .catch((error) => {
+          logger.error('Error loading project files:', error);
+        });
+    }
+  }, [mode, projectId]);
+
   // Validation functions
   const validateForm = (): boolean => {
     const newErrors: ValidationErrors = {};
 
+    // Project name is always required (both create and update)
     if (!formData.name.trim()) {
       newErrors.name = "Project name is required";
     }
 
-    if (mode === 'create' && !formData.is_internal) {
+    // Client fields are required for both create and update (if not internal project)
+    if (!formData.is_internal) {
       if (!formData.client_name.trim()) {
-        newErrors.client_name = "Client name is required for external projects";
+        newErrors.client_name = "Client name is required";
       }
       if (!formData.client_contact_person.trim()) {
         newErrors.client_contact_person = "Client contact person is required";
@@ -284,7 +542,14 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
         : null,
       member_ids: memberIds,
       member_roles: memberRoles,
-      milestones: formData.milestones.filter(m => m.name),
+      milestones: formData.milestones
+        .filter(m => m.name)
+        .map(m => ({
+          name: m.name,
+          start_date: m.start_date || null,
+          end_date: m.end_date || null,
+          status: m.status || 'Not Started'
+        })),
       technologies_used: formData.technologies_used,
     };
     
@@ -345,19 +610,8 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
   };
 
   if (mode === 'edit') {
-    // Check if projectId is valid
-    if (!projectId || isNaN(Number(projectId)) || Number(projectId) <= 0) {
-      return (
-        <div className="container mx-auto p-6">
-          <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-            <div className="text-destructive">Invalid project ID.</div>
-            <Button onClick={() => navigate('/projects')} variant="outline">
-              Back to Projects
-            </Button>
-          </div>
-        </div>
-      );
-    }
+    // Note: projectId validation is done early in the component (before state setup)
+    // This is just a safety check in case something was missed
     
     // Check for loading state
     if (isLoading) {
@@ -388,7 +642,7 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={() => navigate('/projects')}>
@@ -406,201 +660,98 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-        {/* Basic Information */}
+        {/* Project Details */}
         <Card>
           <CardHeader>
-            <CardTitle>Basic Information</CardTitle>
-            <CardDescription>Project name, description, and logo</CardDescription>
+            <CardTitle>Project Details</CardTitle>
+            <CardDescription>Project information, timeline, technologies, description, and logo</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              {mode === 'create' ? (
+            {/* First Row: Project Name, Priority, Project Status, Risk Level (4 columns) */}
+            <div className="grid grid-cols-4 gap-4">
+              <div className="grid gap-2">
                 <MandatoryLabel htmlFor="name">Project Name</MandatoryLabel>
-              ) : (
-                <Label htmlFor="name">Project Name</Label>
-              )}
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => {
-                  setFormData({ ...formData, name: e.target.value });
-                  if (errors.name) {
-                    const newErrors = { ...errors };
-                    delete newErrors.name;
-                    setErrors(newErrors);
-                  }
-                }}
-                onBlur={() => {
-                  if (!formData.name.trim() && mode === 'create') {
-                    setErrors({ ...errors, name: "Project name is required" });
-                  }
-                }}
-                placeholder="Enter project name"
-                className={errors.name ? "border-destructive" : ""}
-              />
-              {errors.name && (
-                <p className="text-sm text-destructive">{errors.name}</p>
-              )}
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (errors.name) {
+                      const newErrors = { ...errors };
+                      delete newErrors.name;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!formData.name.trim()) {
+                      setErrors({ ...errors, name: "Project name is required" });
+                    }
+                  }}
+                  placeholder="Enter project name"
+                  className={errors.name ? "border-destructive" : ""}
+                />
+                {errors.name && (
+                  <p className="text-sm text-destructive">{errors.name}</p>
+                )}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="priority">Priority</Label>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(value) => setFormData({ ...formData, priority: value })}
+                >
+                  <SelectTrigger id="priority">
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Low">Low</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="High">High</SelectItem>
+                    <SelectItem value="Critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="status">Project Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value })}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="not started">Not Started</SelectItem>
+                    <SelectItem value="Planning">Planning</SelectItem>
+                    <SelectItem value="In Progress">In Progress</SelectItem>
+                    <SelectItem value="On Hold">On Hold</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                    <SelectItem value="Testing">Testing</SelectItem>
+                    <SelectItem value="Pre-Prod">Pre-Prod</SelectItem>
+                    <SelectItem value="Production">Production</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="risk_level">Risk Level</Label>
+                <Select
+                  value={formData.risk_level}
+                  onValueChange={(value) => setFormData({ ...formData, risk_level: value })}
+                >
+                  <SelectTrigger id="risk_level">
+                    <SelectValue placeholder="Select risk level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Low">Low</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="High">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Enter project description"
-                rows={4}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="estimated_delivery_plan">Estimated Delivery Plan</Label>
-              <Textarea
-                id="estimated_delivery_plan"
-                value={formData.estimated_delivery_plan}
-                onChange={(e) => setFormData({ ...formData, estimated_delivery_plan: e.target.value })}
-                placeholder="Describe the estimated delivery plan"
-                rows={3}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="logo_url">Logo URL</Label>
-              <Input
-                id="logo_url"
-                value={formData.logo_url}
-                onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                placeholder="https://example.com/logo.png"
-              />
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Client Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Client Details</CardTitle>
-            <CardDescription>Client information (optional if internal project)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="is_internal"
-                checked={formData.is_internal}
-                onChange={(e) => setFormData({ ...formData, is_internal: e.target.checked })}
-                className="rounded"
-              />
-              <Label htmlFor="is_internal">Internal Project</Label>
-            </div>
-            {!formData.is_internal && (
-              <>
-                <div className="grid gap-2">
-                  {mode === 'create' ? (
-                    <MandatoryLabel htmlFor="client_name">Client Name</MandatoryLabel>
-                  ) : (
-                    <Label htmlFor="client_name">Client Name</Label>
-                  )}
-                  <Input
-                    id="client_name"
-                    value={formData.client_name}
-                    onChange={(e) => {
-                      setFormData({ ...formData, client_name: e.target.value });
-                      if (errors.client_name) {
-                        const newErrors = { ...errors };
-                        delete newErrors.client_name;
-                        setErrors(newErrors);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!formData.client_name.trim() && mode === 'create' && !formData.is_internal) {
-                        setErrors({ ...errors, client_name: "Client name is required" });
-                      }
-                    }}
-                    placeholder="Enter client name"
-                    className={errors.client_name ? "border-destructive" : ""}
-                  />
-                  {errors.client_name && (
-                    <p className="text-sm text-destructive">{errors.client_name}</p>
-                  )}
-                </div>
-                <div className="grid gap-2">
-                  {mode === 'create' ? (
-                    <MandatoryLabel htmlFor="client_contact_person">Client Contact Person</MandatoryLabel>
-                  ) : (
-                    <Label htmlFor="client_contact_person">Client Contact Person</Label>
-                  )}
-                  <Input
-                    id="client_contact_person"
-                    value={formData.client_contact_person}
-                    onChange={(e) => {
-                      setFormData({ ...formData, client_contact_person: e.target.value });
-                      if (errors.client_contact_person) {
-                        const newErrors = { ...errors };
-                        delete newErrors.client_contact_person;
-                        setErrors(newErrors);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!formData.client_contact_person.trim() && mode === 'create' && !formData.is_internal) {
-                        setErrors({ ...errors, client_contact_person: "Client contact person is required" });
-                      }
-                    }}
-                    placeholder="Enter contact person name"
-                    className={errors.client_contact_person ? "border-destructive" : ""}
-                  />
-                  {errors.client_contact_person && (
-                    <p className="text-sm text-destructive">{errors.client_contact_person}</p>
-                  )}
-                </div>
-                <div className="grid gap-2">
-                  {mode === 'create' ? (
-                    <MandatoryLabel htmlFor="client_email">Client Email</MandatoryLabel>
-                  ) : (
-                    <Label htmlFor="client_email">Client Email</Label>
-                  )}
-                  <Input
-                    id="client_email"
-                    type="text"
-                    value={formData.client_email}
-                    onChange={(e) => {
-                      setFormData({ ...formData, client_email: e.target.value });
-                      if (errors.client_email) {
-                        const newErrors = { ...errors };
-                        delete newErrors.client_email;
-                        setErrors(newErrors);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!formData.client_email.trim() && mode === 'create' && !formData.is_internal) {
-                        setErrors({ ...errors, client_email: "Client email is required" });
-                      }
-                    }}
-                    placeholder="client@example.com"
-                    className={errors.client_email ? "border-destructive" : ""}
-                  />
-                  {errors.client_email && (
-                    <p className="text-sm text-destructive">{errors.client_email}</p>
-                  )}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="client_phone">Client Phone</Label>
-                  <Input
-                    id="client_phone"
-                    value={formData.client_phone}
-                    onChange={(e) => setFormData({ ...formData, client_phone: e.target.value })}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Timeline */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Timeline</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            {/* Second Row: Start Date & End Date */}
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="start_date">Start Date</Label>
@@ -618,6 +769,172 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
                   value={formData.end_date}
                   onChange={(date) => setFormData({ ...formData, end_date: date })}
                   placeholder="Select target end date"
+                />
+              </div>
+            </div>
+
+            {/* Third Row: Technologies Used (separate row) */}
+            <div className="grid gap-2">
+              <Label>Technologies Used</Label>
+              <div>
+                <Input
+                  placeholder="Enter technology (press Enter to add)"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const input = e.target as HTMLInputElement;
+                      const value = input.value.trim();
+                      if (value && !formData.technologies_used.includes(value)) {
+                        setFormData({ ...formData, technologies_used: [...formData.technologies_used, value] });
+                        input.value = '';
+                      }
+                    }
+                  }}
+                />
+              </div>
+              {formData.technologies_used.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.technologies_used.map((tech) => (
+                    <span key={tech} className="px-2 py-1 bg-primary/10 text-primary rounded text-sm flex items-center gap-1">
+                      {tech}
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, technologies_used: formData.technologies_used.filter(t => t !== tech) })}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Enter project description"
+                rows={4}
+              />
+            </div>
+
+            {/* Project Logo */}
+            <ProjectLogoUpload
+              value={formData.logo_url}
+              onChange={(url) => setFormData({ ...formData, logo_url: url })}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Client Details */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Client Details</CardTitle>
+            <CardDescription>Client information</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              {!formData.is_internal ? (
+                <MandatoryLabel htmlFor="client_name">Client Name</MandatoryLabel>
+              ) : (
+                <Label htmlFor="client_name">Client Name</Label>
+              )}
+                <Input
+                  id="client_name"
+                  value={formData.client_name}
+                  onChange={(e) => {
+                    setFormData({ ...formData, client_name: e.target.value });
+                    if (errors.client_name) {
+                      const newErrors = { ...errors };
+                      delete newErrors.client_name;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!formData.client_name.trim() && !formData.is_internal) {
+                      setErrors({ ...errors, client_name: "Client name is required" });
+                    }
+                  }}
+                  placeholder="Enter client name"
+                  className={errors.client_name ? "border-destructive" : ""}
+                />
+                {errors.client_name && (
+                  <p className="text-sm text-destructive">{errors.client_name}</p>
+                )}
+              </div>
+              <div className="grid gap-2">
+                {!formData.is_internal ? (
+                  <MandatoryLabel htmlFor="client_contact_person">Client Contact Person</MandatoryLabel>
+                ) : (
+                  <Label htmlFor="client_contact_person">Client Contact Person</Label>
+                )}
+                <Input
+                  id="client_contact_person"
+                  value={formData.client_contact_person}
+                  onChange={(e) => {
+                    setFormData({ ...formData, client_contact_person: e.target.value });
+                    if (errors.client_contact_person) {
+                      const newErrors = { ...errors };
+                      delete newErrors.client_contact_person;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!formData.client_contact_person.trim() && !formData.is_internal) {
+                      setErrors({ ...errors, client_contact_person: "Client contact person is required" });
+                    }
+                  }}
+                  placeholder="Enter contact person name"
+                  className={errors.client_contact_person ? "border-destructive" : ""}
+                />
+                {errors.client_contact_person && (
+                  <p className="text-sm text-destructive">{errors.client_contact_person}</p>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                {!formData.is_internal ? (
+                  <MandatoryLabel htmlFor="client_email">Client Email</MandatoryLabel>
+                ) : (
+                  <Label htmlFor="client_email">Client Email</Label>
+                )}
+                <Input
+                  id="client_email"
+                  type="text"
+                  value={formData.client_email}
+                  onChange={(e) => {
+                    setFormData({ ...formData, client_email: e.target.value });
+                    if (errors.client_email) {
+                      const newErrors = { ...errors };
+                      delete newErrors.client_email;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!formData.client_email.trim() && !formData.is_internal) {
+                      setErrors({ ...errors, client_email: "Client email is required" });
+                    }
+                  }}
+                  placeholder="client@example.com"
+                  className={errors.client_email ? "border-destructive" : ""}
+                />
+                {errors.client_email && (
+                  <p className="text-sm text-destructive">{errors.client_email}</p>
+                )}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="client_phone">Client Phone</Label>
+                <Input
+                  id="client_phone"
+                  value={formData.client_phone}
+                  onChange={(e) => setFormData({ ...formData, client_phone: e.target.value })}
+                  placeholder="+1 (555) 000-0000"
                 />
               </div>
             </div>
@@ -739,13 +1056,24 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Assigned Employees</Label>
+              <Label>Assigned Employees (Optional)</Label>
               <div className="border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
                 {assignableUsers.length === 0 ? (
-                  <div className="text-center py-4 text-sm text-muted-foreground">
-                    {formData.team_lead_id 
-                      ? "No employees available for the selected team lead. Please assign employees to this team lead first."
-                      : "Please select a team lead to see available employees."}
+                  <div className="text-center py-4 text-sm">
+                    {formData.team_lead_id ? (
+                      <div className="space-y-1">
+                        <p className="text-muted-foreground">
+                          No employees are currently assigned to this team lead.
+                        </p>
+                        <p className="text-xs text-muted-foreground italic">
+                          You can proceed without assigning employees now. Employees can be added later.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        Please select a team lead to see available employees.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   assignableUsers.map((user: any) => {
@@ -790,83 +1118,142 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
           </CardContent>
         </Card>
 
-        {/* Project Status Tracking */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Project Status Tracking</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="status">Current Project Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) => setFormData({ ...formData, status: value })}
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Not Started">Not Started</SelectItem>
-                    <SelectItem value="Planning">Planning</SelectItem>
-                    <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="On Hold">On Hold</SelectItem>
-                    <SelectItem value="Completed">Completed</SelectItem>
-                    <SelectItem value="Cancelled">Cancelled</SelectItem>
-                    <SelectItem value="Testing">Testing</SelectItem>
-                    <SelectItem value="Pre-Prod">Pre-Prod</SelectItem>
-                    <SelectItem value="Production">Production</SelectItem>
-                  </SelectContent>
-                </Select>
+        {/* Documents Upload */}
+        {mode === 'edit' && projectId && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Project Documents
+              </CardTitle>
+              <CardDescription>Upload and manage project documents</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Document
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        const files = Array.from(e.target.files);
+                        setPendingFiles(files);
+                        setShowUploadDialog(true);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </div>
+                {uploadedFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Uploaded Documents</Label>
+                    <div className="border rounded-md divide-y">
+                      {uploadedFiles.map((file: any) => {
+                        const extension = file.file_name.split('.').pop()?.toLowerCase() || '';
+                        const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico'].includes(extension);
+                        const fileUrl = getImageUrl(file.file_url) || file.file_url;
+                        
+                        return (
+                          <div key={file.id} className="p-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {isImage && fileUrl ? (
+                                <img 
+                                  src={fileUrl} 
+                                  alt={file.file_name}
+                                  className="h-8 w-8 rounded object-cover border"
+                                  onError={(e) => {
+                                    // Fallback to icon if image fails
+                                    const parent = e.currentTarget.parentElement;
+                                    if (parent) {
+                                      parent.innerHTML = '<FileText className="h-4 w-4 text-muted-foreground" />';
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              <span className="text-sm">{file.file_name}</span>
+                              {file.description && (
+                                <span className="text-xs text-muted-foreground">- {file.description}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {fileUrl && (
+                                <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                                  <Button type="button" variant="ghost" size="icon">
+                                    <Download className="h-4 w-4" />
+                                  </Button>
+                                </a>
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={async () => {
+                                  try {
+                                    await projectsApi.deleteFile(projectId, file.id);
+                                    toast({
+                                      title: "Success",
+                                      description: "File deleted successfully",
+                                    });
+                                    const filesData = await projectsApi.getFiles(projectId);
+                                    setUploadedFiles(filesData.data || []);
+                                  } catch (error: any) {
+                                    toast({
+                                      title: "Error",
+                                      description: error.message || "Failed to delete file",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="risk_level">Risk Level</Label>
-                <Select
-                  value={formData.risk_level}
-                  onValueChange={(value) => setFormData({ ...formData, risk_level: value })}
-                >
-                  <SelectTrigger id="risk_level">
-                    <SelectValue placeholder="Select risk level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Low">Low</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Select
-                  value={formData.priority}
-                  onValueChange={(value) => setFormData({ ...formData, priority: value })}
-                >
-                  <SelectTrigger id="priority">
-                    <SelectValue placeholder="Select priority" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Low">Low</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Comments */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
-              Comments ({formData.comments.length})
+              Comments ({mode === 'edit' ? (commentsData?.data?.length || 0) : formData.comments.length})
             </CardTitle>
             <CardDescription>Add project comments</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {formData.comments.length > 0 && (
+            {mode === 'edit' && commentsData?.data && commentsData.data.length > 0 && (
+              <div className="space-y-2">
+                {commentsData.data.map((comment: any, index: number) => (
+                  <CommentItemEdit 
+                    key={comment.id || index} 
+                    comment={comment} 
+                    projectId={Number(projectId)!} 
+                    queryClient={queryClient}
+                  />
+                ))}
+              </div>
+            )}
+            {mode === 'create' && formData.comments.length > 0 && (
               <div className="space-y-2">
                 {formData.comments.map((comment, index) => (
                   <div key={index} className="p-3 border rounded">
@@ -907,34 +1294,24 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
               </Button>
             ) : (
               <div className="grid gap-4 border-t pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Comment Type</Label>
-                    <Select
-                      value={commentForm.comment_type}
-                      onValueChange={(value) => setCommentForm({ ...commentForm, comment_type: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="General">General</SelectItem>
-                        <SelectItem value="Issue">Issue</SelectItem>
-                        <SelectItem value="Update">Update</SelectItem>
-                        <SelectItem value="Question">Question</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center space-x-2 pt-8">
-                    <input
-                      type="checkbox"
-                      id="is_internal_comment"
-                      checked={commentForm.is_internal}
-                      onChange={(e) => setCommentForm({ ...commentForm, is_internal: e.target.checked })}
-                      className="rounded"
-                    />
-                    <Label htmlFor="is_internal_comment">Internal Only</Label>
-                  </div>
+                <div className="grid gap-2">
+                  <Label>Comment Type</Label>
+                  <Select
+                    value={commentForm.comment_type}
+                    onValueChange={(value) => setCommentForm({ ...commentForm, comment_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="General">General</SelectItem>
+                      <SelectItem value="Developer">Developer</SelectItem>
+                      <SelectItem value="Tester">Tester</SelectItem>
+                      <SelectItem value="Designer">Designer</SelectItem>
+                      <SelectItem value="Team Lead">Team Lead</SelectItem>
+                      <SelectItem value="Client">Client</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid gap-2">
                   <Label>Comment</Label>
@@ -951,20 +1328,43 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
                     variant="outline"
                     onClick={() => {
                       setShowCommentForm(false);
-                      setCommentForm({ comment: '', comment_type: 'General', is_internal: true });
+                      setCommentForm({ comment: '', comment_type: 'General', is_internal: false });
                     }}
                   >
                     Cancel
                   </Button>
                   <Button
                     type="button"
-                    onClick={() => {
-                      if (commentForm.comment.trim()) {
+                    onClick={async () => {
+                      if (commentForm.comment.trim() && projectId) {
+                        try {
+                          await projectsApi.createComment(Number(projectId), {
+                            comment: commentForm.comment,
+                            comment_type: commentForm.comment_type,
+                            is_internal: commentForm.is_internal
+                          });
+                          toast({
+                            title: "Success",
+                            description: "Comment added successfully.",
+                          });
+                          setCommentForm({ comment: '', comment_type: 'General', is_internal: false });
+                          setShowCommentForm(false);
+                          // Refresh comments to show new comment
+                          queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
+                        } catch (error: any) {
+                          toast({
+                            title: "Error",
+                            description: error.message || "Failed to add comment.",
+                            variant: "destructive",
+                          });
+                        }
+                      } else if (!projectId) {
+                        // For create mode, add to form data
                         setFormData({
                           ...formData,
                           comments: [...formData.comments, { ...commentForm }]
                         });
-                        setCommentForm({ comment: '', comment_type: 'General', is_internal: true });
+                        setCommentForm({ comment: '', comment_type: 'General', is_internal: false });
                         setShowCommentForm(false);
                       }
                     }}
@@ -978,50 +1378,6 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
           </CardContent>
         </Card>
 
-        {/* Technologies Used */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Technologies Used</CardTitle>
-            <CardDescription>Select technologies used in this project</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label>Technologies</Label>
-              <div className="mt-2">
-                <Input
-                  placeholder="Enter technologies used (press Enter to add each technology)"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const input = e.target as HTMLInputElement;
-                      const value = input.value.trim();
-                      if (value && !formData.technologies_used.includes(value)) {
-                        setFormData({ ...formData, technologies_used: [...formData.technologies_used, value] });
-                        input.value = '';
-                      }
-                    }
-                  }}
-                />
-              </div>
-              {formData.technologies_used.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {formData.technologies_used.map((tech) => (
-                    <span key={tech} className="px-2 py-1 bg-primary/10 text-primary rounded text-sm flex items-center gap-1">
-                      {tech}
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, technologies_used: formData.technologies_used.filter(t => t !== tech) })}
-                        className="ml-1 hover:text-destructive"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Integrations */}
         <Card>
@@ -1062,6 +1418,70 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
           </Button>
         </div>
       </form>
+
+      {/* Upload Confirmation Dialog */}
+      {mode === 'edit' && projectId && (
+        <AlertDialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Upload Documents</AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingFiles.length === 1 
+                  ? `Are you sure you want to upload "${pendingFiles[0].name}"?`
+                  : `Are you sure you want to upload ${pendingFiles.length} files?`}
+                <div className="mt-2 space-y-1">
+                  {pendingFiles.map((file, index) => (
+                    <div key={index} className="text-xs text-muted-foreground">
+                      • {file.name} ({(file.size / 1024).toFixed(2)} KB)
+                    </div>
+                  ))}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setShowUploadDialog(false);
+                setPendingFiles([]);
+              }}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={async () => {
+                  try {
+                    for (const file of pendingFiles) {
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      formData.append('file_type', 'Other');
+                      formData.append('file_category', 'project_document');
+                      
+                      await projectsApi.uploadFile(projectId, formData);
+                    }
+                    toast({
+                      title: "Success",
+                      description: pendingFiles.length === 1 
+                        ? `${pendingFiles[0].name} uploaded successfully`
+                        : `${pendingFiles.length} files uploaded successfully`,
+                    });
+                    // Refresh files list
+                    const filesData = await projectsApi.getFiles(projectId);
+                    setUploadedFiles(filesData.data || []);
+                    setShowUploadDialog(false);
+                    setPendingFiles([]);
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "Failed to upload file(s)",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                Upload
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }

@@ -65,6 +65,33 @@ export default function TaskCreate() {
       return;
     }
 
+    if (!formData.project_id || formData.project_id === "none") {
+      toast({
+        title: "Validation Error",
+        description: "Project is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.priority) {
+      toast({
+        title: "Validation Error",
+        description: "Priority is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.status) {
+      toast({
+        title: "Validation Error",
+        description: "Status is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const formDataToSend = new FormData();
     
     formDataToSend.append('title', formData.title);
@@ -72,11 +99,9 @@ export default function TaskCreate() {
     formDataToSend.append('priority', formData.priority);
     formDataToSend.append('stage', formData.stage);
     formDataToSend.append('status', formData.status);
+    formDataToSend.append('project_id', formData.project_id);
     
     // Only append optional fields if they have values
-    if (formData.project_id && formData.project_id !== "none" && formData.project_id.trim() !== "") {
-      formDataToSend.append('project_id', formData.project_id);
-    }
     if (formData.assigned_to && formData.assigned_to !== "none" && formData.assigned_to.trim() !== "") {
       formDataToSend.append('assigned_to', formData.assigned_to);
     }

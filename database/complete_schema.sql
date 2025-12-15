@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `name` VARCHAR(255) NOT NULL,
   `email` VARCHAR(255) NOT NULL UNIQUE,
-  `mobile` VARCHAR(20),
+  `mobile` VARCHAR(20) UNIQUE,
   `password_hash` VARCHAR(255) NOT NULL,
   `role_id` INT UNSIGNED NOT NULL,
   `position_id` INT UNSIGNED,
@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   FOREIGN KEY (`role_id`) REFERENCES `roles`(`id`),
   FOREIGN KEY (`position_id`) REFERENCES `positions`(`id`),
   INDEX `idx_user_email` (`email`),
+  INDEX `idx_user_mobile` (`mobile`),
   INDEX `idx_user_status` (`status`),
   INDEX `idx_user_role` (`role_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -188,7 +189,8 @@ CREATE TABLE IF NOT EXISTS `employee_documents` (
   FOREIGN KEY (`employee_id`) REFERENCES `employees`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`verified_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
   INDEX `idx_emp_doc_employee` (`employee_id`),
-  INDEX `idx_emp_doc_type` (`document_type`)
+  INDEX `idx_emp_doc_type` (`document_type`),
+  UNIQUE KEY `idx_emp_doc_type_per_employee` (`employee_id`, `document_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Attendance table
@@ -938,6 +940,23 @@ VALUES (1, '$', NOW(), NOW())
 ON DUPLICATE KEY UPDATE 
   `currency_symbol` = '$',
   `updated_at` = NOW();
+
+-- Password reset OTP table
+CREATE TABLE IF NOT EXISTS `password_reset_otps` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `email` VARCHAR(255) NOT NULL,
+  `otp` VARCHAR(10) NOT NULL,
+  `expires_at` TIMESTAMP NOT NULL,
+  `used` BOOLEAN DEFAULT FALSE,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  INDEX `idx_otp_email` (`email`),
+  INDEX `idx_otp_user` (`user_id`),
+  INDEX `idx_otp_expires` (`expires_at`),
+  INDEX `idx_otp_used` (`used`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
 -- END OF SCHEMA

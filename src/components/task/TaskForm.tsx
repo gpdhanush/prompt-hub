@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
-import { projectsApi, usersApi } from "@/lib/api";
+import { projectsApi, usersApi, employeesApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 
 interface TaskFormData {
@@ -67,41 +67,113 @@ export function TaskForm({
     queryFn: () => usersApi.getAssignable(),
   });
 
+  // Fetch all employees to get team hierarchy
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees'],
+    queryFn: () => employeesApi.getAll({ page: 1, limit: 1000 }),
+  });
+
   const projects = projectsData?.data || [];
   const allUsers = assignableUsersData?.data || [];
+  const allEmployees = employeesData?.data || [];
 
-  // Filter users by role
-  const developers = useMemo(() => 
-    allUsers.filter((user: any) => user.role === 'Developer'),
+  // Filter team leaders only for "Assigned To" field
+  const teamLeads = useMemo(() => 
+    allUsers.filter((user: any) => 
+      user.role === 'Team Lead' || user.role === 'Team Leader'
+    ),
     [allUsers]
   );
+
+  // Filter users based on selected team leader for Developer, Designer, Tester
+  const developers = useMemo(() => {
+    if (!formData.assigned_to || formData.assigned_to === 'none' || formData.assigned_to === '') {
+      return allUsers.filter((user: any) => user.role === 'Developer');
+    }
+    
+    // Find the selected team lead's employee record
+    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.assigned_to);
+    if (!selectedTeamLeadUser) {
+      return allUsers.filter((user: any) => user.role === 'Developer');
+    }
+    
+    const teamLeadEmployee = allEmployees.find((emp: any) => 
+      emp.user_id === selectedTeamLeadUser.id
+    );
+    
+    if (!teamLeadEmployee) {
+      return allUsers.filter((user: any) => user.role === 'Developer');
+    }
+    
+    // Find employees under this team lead
+    const teamEmployees = allEmployees.filter((emp: any) => 
+      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
+    );
+    
+    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
+    
+    return allUsers.filter((user: any) => 
+      user.role === 'Developer' && teamEmployeeUserIds.includes(user.id)
+    );
+  }, [allUsers, allEmployees, formData.assigned_to]);
   
-  const designers = useMemo(() => 
-    allUsers.filter((user: any) => user.role === 'Designer'),
-    [allUsers]
-  );
+  const designers = useMemo(() => {
+    if (!formData.assigned_to || formData.assigned_to === 'none' || formData.assigned_to === '') {
+      return allUsers.filter((user: any) => user.role === 'Designer');
+    }
+    
+    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.assigned_to);
+    if (!selectedTeamLeadUser) {
+      return allUsers.filter((user: any) => user.role === 'Designer');
+    }
+    
+    const teamLeadEmployee = allEmployees.find((emp: any) => 
+      emp.user_id === selectedTeamLeadUser.id
+    );
+    
+    if (!teamLeadEmployee) {
+      return allUsers.filter((user: any) => user.role === 'Designer');
+    }
+    
+    const teamEmployees = allEmployees.filter((emp: any) => 
+      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
+    );
+    
+    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
+    
+    return allUsers.filter((user: any) => 
+      user.role === 'Designer' && teamEmployeeUserIds.includes(user.id)
+    );
+  }, [allUsers, allEmployees, formData.assigned_to]);
   
-  const testers = useMemo(() => 
-    allUsers.filter((user: any) => user.role === 'Tester'),
-    [allUsers]
-  );
-  
-  const assignableUsers = useMemo(() => 
-    allUsers
-      .filter((user: any) => 
-        ['Developer', 'Designer', 'Tester', 'Team Lead'].includes(user.role)
-      )
-      .sort((a: any, b: any) => {
-        const roleOrder: { [key: string]: number } = {
-          'Team Lead': 1,
-          'Developer': 2,
-          'Designer': 3,
-          'Tester': 4,
-        };
-        return (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99);
-      }),
-    [allUsers]
-  );
+  const testers = useMemo(() => {
+    if (!formData.assigned_to || formData.assigned_to === 'none' || formData.assigned_to === '') {
+      return allUsers.filter((user: any) => user.role === 'Tester');
+    }
+    
+    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.assigned_to);
+    if (!selectedTeamLeadUser) {
+      return allUsers.filter((user: any) => user.role === 'Tester');
+    }
+    
+    const teamLeadEmployee = allEmployees.find((emp: any) => 
+      emp.user_id === selectedTeamLeadUser.id
+    );
+    
+    if (!teamLeadEmployee) {
+      return allUsers.filter((user: any) => user.role === 'Tester');
+    }
+    
+    const teamEmployees = allEmployees.filter((emp: any) => 
+      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
+    );
+    
+    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
+    
+    return allUsers.filter((user: any) => 
+      user.role === 'Tester' && teamEmployeeUserIds.includes(user.id)
+    );
+  }, [allUsers, allEmployees, formData.assigned_to]);
 
   const handleInputChange = (field: keyof TaskFormData, value: string) => {
     // Normalize: convert "none" to empty string, but keep empty strings as-is for required fields
@@ -166,7 +238,7 @@ export function TaskForm({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto max-w-6xl space-y-6">
       {/* Basic Task Information */}
       <Card>
         <CardHeader>
@@ -185,16 +257,16 @@ export function TaskForm({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="project_id">Project</Label>
+              <Label htmlFor="project_id" className="text-red-500">Project *</Label>
               <Select
                 value={formData.project_id || "none"}
                 onValueChange={(value) => handleInputChange("project_id", value)}
+                required
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
                   {projects.map((project: any) => (
                     <SelectItem key={project.id} value={project.id.toString()}>
                       {project.name}
@@ -234,13 +306,14 @@ export function TaskForm({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="priority">Priority</Label>
+              <Label htmlFor="priority" className="text-red-500">Priority *</Label>
               <Select
                 value={formData.priority}
                 onValueChange={(value) => handleInputChange("priority", value)}
+                required
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Low">Low</SelectItem>
@@ -270,13 +343,14 @@ export function TaskForm({
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status" className="text-red-500">Status *</Label>
               <Select
                 value={formData.status}
                 onValueChange={(value) => handleInputChange("status", value)}
+                required
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Open">Open</SelectItem>
@@ -304,27 +378,27 @@ export function TaskForm({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="assigned_to">Assigned To</Label>
+              <Label htmlFor="assigned_to">Assigned To (Team Lead)</Label>
               <Select
                 value={formData.assigned_to || "none"}
                 onValueChange={(value) => handleInputChange("assigned_to", value)}
                 disabled={isLoadingUsers}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={isLoadingUsers ? "Loading..." : "Select user"} />
+                  <SelectValue placeholder={isLoadingUsers ? "Loading..." : "Select team lead"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   {isLoadingUsers ? (
-                    <SelectItem value="__loading__" disabled>Loading users...</SelectItem>
-                  ) : assignableUsers.length > 0 ? (
-                    assignableUsers.map((user: any) => (
+                    <SelectItem value="__loading__" disabled>Loading team leads...</SelectItem>
+                  ) : teamLeads.length > 0 ? (
+                    teamLeads.map((user: any) => (
                       <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name} ({user.role})
+                        {user.name}
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="__no_users__" disabled>No users available</SelectItem>
+                    <SelectItem value="__no_users__" disabled>No team leads available</SelectItem>
                   )}
                 </SelectContent>
               </Select>

@@ -382,6 +382,13 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
     const created_by = req.user.id;
     const final_team_lead_id = team_lead_id || (req.user.role === 'Team Leader' || req.user.role === 'Team Lead' ? req.user.id : null);
     
+    logger.debug('Creating project with data:', {
+      projectCode,
+      name,
+      created_by,
+      final_team_lead_id
+    });
+    
     const [result] = await db.query(`
       INSERT INTO projects (
         project_code, name, description, logo_url, estimated_delivery_plan,
@@ -404,7 +411,54 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
       created_by, final_team_lead_id || null
     ]);
     
-    const projectId = result.insertId;
+    logger.debug('INSERT result:', result);
+    logger.debug('result.insertId:', result.insertId);
+    logger.debug('result.affectedRows:', result.affectedRows);
+    
+    // Check if INSERT was successful
+    if (!result.affectedRows || result.affectedRows === 0) {
+      logger.error('INSERT failed - no rows affected. Result:', result);
+      return res.status(500).json({ 
+        error: 'Failed to create project',
+        details: 'The project could not be inserted into the database.'
+      });
+    }
+    
+    let projectId = result.insertId;
+    
+    // Validate that we got a valid insertId
+    if (!projectId || projectId === 0) {
+      logger.error('Failed to get valid insertId from INSERT. Result:', result);
+      // Try to get LAST_INSERT_ID() as first fallback
+      try {
+        const [lastInsertResult] = await db.query('SELECT LAST_INSERT_ID() as id');
+        if (lastInsertResult && lastInsertResult[0] && lastInsertResult[0].id > 0) {
+          projectId = lastInsertResult[0].id;
+          logger.warn('Using LAST_INSERT_ID() fallback. Project ID:', projectId);
+        } else {
+          // Try to get the project by project_code as second fallback
+          const [fallbackProject] = await db.query('SELECT * FROM projects WHERE project_code = ? ORDER BY id DESC LIMIT 1', [projectCode]);
+          if (fallbackProject.length > 0) {
+            const fallbackId = fallbackProject[0].id;
+            logger.warn('Using project_code fallback. Project ID:', fallbackId);
+            if (fallbackId && fallbackId > 0) {
+              projectId = fallbackId;
+            }
+          }
+        }
+      } catch (fallbackError) {
+        logger.error('Error in fallback ID retrieval:', fallbackError);
+      }
+      
+      if (!projectId || projectId === 0) {
+        return res.status(500).json({ 
+          error: 'Failed to create project - could not retrieve project ID',
+          details: 'The project may have been created but the ID could not be retrieved. Please check the database and ensure the projects table has AUTO_INCREMENT enabled on the id column.'
+        });
+      } else {
+        logger.info('Successfully retrieved project ID using fallback method:', projectId);
+      }
+    }
     
     // Add members to project_users table if provided
     if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
@@ -1182,6 +1236,92 @@ router.get('/:id/comments', async (req, res) => {
     
     const [comments] = await db.query(query, params);
     res.json({ data: comments });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update comment
+router.put('/:id/comments/:commentId', async (req, res) => {
+  try {
+    const { id, commentId } = req.params;
+    const { comment, comment_type } = req.body;
+    const user_id = req.user.id;
+    
+    // Check if comment exists and user owns it or is admin/team lead
+    const [existing] = await db.query(`
+      SELECT user_id FROM project_comments WHERE id = ? AND project_id = ?
+    `, [commentId, id]);
+    
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    
+    const [user] = await db.query(`
+      SELECT r.name as role 
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = ?
+    `, [user_id]);
+    const userRole = user[0]?.role || '';
+    const isOwner = existing[0].user_id === user_id;
+    const isAdmin = ['Admin', 'Super Admin', 'Team Lead'].includes(userRole);
+    
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'You can only edit your own comments' });
+    }
+    
+    await db.query(`
+      UPDATE project_comments 
+      SET comment = ?, comment_type = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND project_id = ?
+    `, [comment, comment_type || 'General', commentId, id]);
+    
+    const [updated] = await db.query(`
+      SELECT c.*, u.name as user_name, u.email as user_email
+      FROM project_comments c
+      LEFT JOIN users u ON c.user_id = u.id
+      WHERE c.id = ?
+    `, [commentId]);
+    
+    res.json({ data: updated[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete comment
+router.delete('/:id/comments/:commentId', async (req, res) => {
+  try {
+    const { id, commentId } = req.params;
+    const user_id = req.user.id;
+    
+    // Check if comment exists and user owns it or is admin/team lead
+    const [existing] = await db.query(`
+      SELECT user_id FROM project_comments WHERE id = ? AND project_id = ?
+    `, [commentId, id]);
+    
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    
+    const [user] = await db.query(`
+      SELECT r.name as role 
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = ?
+    `, [user_id]);
+    const userRole = user[0]?.role || '';
+    const isOwner = existing[0].user_id === user_id;
+    const isAdmin = ['Admin', 'Super Admin', 'Team Lead'].includes(userRole);
+    
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'You can only delete your own comments' });
+    }
+    
+    await db.query('DELETE FROM project_comments WHERE id = ? AND project_id = ?', [commentId, id]);
+    
+    res.json({ message: 'Comment deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

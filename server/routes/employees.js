@@ -711,6 +711,52 @@ router.post('/my-documents', authenticate, uploadDocument.single('file'), async 
 
     const filePath = `/uploads/employee-documents/${req.file.filename}`;
 
+    // Check for duplicate Aadhaar number if document_type is Aadhaar
+    if (document_type === 'Aadhaar' && document_number && document_number.trim() !== '') {
+      // Get all Aadhaar documents and check for duplicates
+      const [allAadhaarDocs] = await db.query(`
+        SELECT id, employee_id, document_number 
+        FROM employee_documents 
+        WHERE document_type = 'Aadhaar' AND document_number IS NOT NULL AND document_number != ''
+      `);
+      
+      for (const doc of allAadhaarDocs) {
+        if (doc.document_number) {
+          try {
+            const decryptedNumber = decryptDocumentNumber(doc.document_number);
+            if (decryptedNumber && decryptedNumber.trim().toUpperCase() === document_number.trim().toUpperCase()) {
+              // Clean up uploaded file
+              if (fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+              }
+              return res.status(400).json({ 
+                error: `Aadhaar number "${document_number}" already exists. Please use a different Aadhaar number.` 
+              });
+            }
+          } catch (decryptError) {
+            // If decryption fails, skip this document (might be corrupted or old format)
+            logger.warn('Failed to decrypt document number for duplicate check:', decryptError);
+          }
+        }
+      }
+    }
+    
+    // Check if employee already has this document type (unique constraint)
+    const [existingDoc] = await db.query(`
+      SELECT id FROM employee_documents 
+      WHERE employee_id = ? AND document_type = ?
+    `, [employeeId, document_type]);
+    
+    if (existingDoc.length > 0) {
+      // Clean up uploaded file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(400).json({ 
+        error: `You already have a ${document_type} document. Please delete the existing document first.` 
+      });
+    }
+
     // Encrypt document_number before saving
     const encryptedDocumentNumber = document_number ? encryptDocumentNumber(document_number) : null;
 
@@ -1301,9 +1347,9 @@ router.post('/', async (req, res) => {
     } catch (userError) {
       if (userError.code === 'ER_DUP_ENTRY') {
         // Check which field caused the duplicate
-        if (userError.message.includes('email')) {
+        if (userError.message.includes('email') || userError.message.includes('idx_user_email')) {
           return res.status(400).json({ error: `Email "${email}" already exists. Please use a different email address.` });
-        } else if (userError.message.includes('mobile')) {
+        } else if (userError.message.includes('mobile') || userError.message.includes('idx_user_mobile')) {
           return res.status(400).json({ error: `Mobile number "${mobile}" already exists. Please use a different mobile number.` });
         }
         return res.status(400).json({ error: 'A user with this information already exists.' });
@@ -2259,6 +2305,52 @@ router.post('/:id/documents', uploadDocument.single('file'), async (req, res) =>
     }
     
     const filePath = `/uploads/employee-documents/${req.file.filename}`;
+    
+    // Check for duplicate Aadhaar number if document_type is Aadhaar
+    if (document_type === 'Aadhaar' && document_number && document_number.trim() !== '') {
+      // Get all Aadhaar documents and check for duplicates
+      const [allAadhaarDocs] = await db.query(`
+        SELECT id, employee_id, document_number 
+        FROM employee_documents 
+        WHERE document_type = 'Aadhaar' AND document_number IS NOT NULL AND document_number != ''
+      `);
+      
+      for (const doc of allAadhaarDocs) {
+        if (doc.document_number) {
+          try {
+            const decryptedNumber = decryptDocumentNumber(doc.document_number);
+            if (decryptedNumber && decryptedNumber.trim().toUpperCase() === document_number.trim().toUpperCase()) {
+              // Clean up uploaded file
+              if (fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+              }
+              return res.status(400).json({ 
+                error: `Aadhaar number "${document_number}" already exists. Please use a different Aadhaar number.` 
+              });
+            }
+          } catch (decryptError) {
+            // If decryption fails, skip this document (might be corrupted or old format)
+            logger.warn('Failed to decrypt document number for duplicate check:', decryptError);
+          }
+        }
+      }
+    }
+    
+    // Check if employee already has this document type (unique constraint)
+    const [existingDoc] = await db.query(`
+      SELECT id FROM employee_documents 
+      WHERE employee_id = ? AND document_type = ?
+    `, [id, document_type]);
+    
+    if (existingDoc.length > 0) {
+      // Clean up uploaded file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(400).json({ 
+        error: `Employee already has a ${document_type} document. Please delete the existing document first.` 
+      });
+    }
     
     // Encrypt document_number before saving
     const encryptedDocumentNumber = document_number ? encryptDocumentNumber(document_number) : null;
