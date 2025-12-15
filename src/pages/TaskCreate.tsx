@@ -16,7 +16,7 @@ export default function TaskCreate() {
   const canCreateTask = hasPermission('tasks.create');
 
   const [formData, setFormData] = useState({
-    project_id: "",
+    project_id: "none",
     title: "",
     description: "",
     priority: "Med",

@@ -8,6 +8,16 @@ import { toast } from "@/hooks/use-toast";
 import { tasksApi } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TaskForm } from "@/components/task/TaskForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function TaskEdit() {
   const navigate = useNavigate();
@@ -32,6 +42,8 @@ export default function TaskEdit() {
 
   const [attachments, setAttachments] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<any[]>([]);
+  const [showDeleteAttachmentDialog, setShowDeleteAttachmentDialog] = useState(false);
+  const [attachmentToDelete, setAttachmentToDelete] = useState<number | null>(null);
 
   // Fetch task data
   const { data: taskData, isLoading, error } = useQuery({
@@ -280,9 +292,8 @@ export default function TaskEdit() {
           onAttachmentsChange={setAttachments}
           existingAttachments={existingAttachments}
           onDeleteAttachment={(attachmentId) => {
-            if (confirm('Are you sure you want to delete this file?')) {
-              deleteAttachmentMutation.mutate(attachmentId);
-            }
+            setAttachmentToDelete(attachmentId);
+            setShowDeleteAttachmentDialog(true);
           }}
           isEdit={true}
         />
@@ -306,6 +317,39 @@ export default function TaskEdit() {
           </Button>
         </div>
       </form>
+
+      {/* Delete Attachment Confirmation Dialog */}
+      <AlertDialog open={showDeleteAttachmentDialog} onOpenChange={setShowDeleteAttachmentDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete File</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this file? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowDeleteAttachmentDialog(false);
+              setAttachmentToDelete(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (attachmentToDelete) {
+                  deleteAttachmentMutation.mutate(attachmentToDelete);
+                  setShowDeleteAttachmentDialog(false);
+                  setAttachmentToDelete(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteAttachmentMutation.isPending}
+            >
+              {deleteAttachmentMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

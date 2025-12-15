@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { employeesApi } from "@/lib/api";
 import { ArrowLeft, Mail, Phone, MapPin, MessageCircle, MessageSquare, User, Briefcase } from "lucide-react";
@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 
 export default function EmployeeView() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
 
   // Fetch employee data from API (using basic endpoint that doesn't require permission)
@@ -113,7 +114,12 @@ export default function EmployeeView() {
           <Button 
             variant="outline" 
             size="icon" 
-            onClick={() => navigate("/employees/list")}
+            onClick={() => {
+              // Check if user came from Employees page or Employee Directory
+              const fromEmployees = location.state?.from === '/employees' || 
+                                    document.referrer.includes('/employees') && !document.referrer.includes('/employees/list');
+              navigate(fromEmployees ? '/employees' : '/employees/list');
+            }}
             className="shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />

@@ -744,6 +744,10 @@ export const bugsApi = {
       headers: {}, // Let browser set Content-Type for FormData
     });
   },
+  deleteAttachment: (id: number, attachmentId: number) =>
+    request<{ message: string }>(`/bugs/${id}/attachments/${attachmentId}`, {
+      method: 'DELETE',
+    }),
 };
 
 

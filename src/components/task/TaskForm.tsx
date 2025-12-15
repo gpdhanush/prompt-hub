@@ -264,7 +264,7 @@ export function TaskForm({
                 required
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select project" />
+                  <SelectValue placeholder="Select Project" />
                 </SelectTrigger>
                 <SelectContent>
                   {projects.map((project: any) => (
@@ -519,9 +519,14 @@ export function TaskForm({
                     </Button>
                     {onDeleteAttachment && (
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={() => onDeleteAttachment(attachment.id)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onDeleteAttachment(attachment.id);
+                        }}
                       >
                         <X className="h-4 w-4 text-destructive" />
                       </Button>

@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi } from "@/lib/api";
 import { BugForm } from "@/components/bug/BugForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface BugFormData {
   title: string;
@@ -13,7 +23,6 @@ interface BugFormData {
   project_id: string;
   task_id: string;
   bug_type: string;
-  severity: string;
   priority: string;
   status: string;
   resolution_type: string;
@@ -43,7 +52,6 @@ export default function BugEdit() {
     project_id: "",
     task_id: "",
     bug_type: "Functional",
-    severity: "Low",
     priority: "P4",
     status: "Open",
     resolution_type: "",
@@ -63,6 +71,9 @@ export default function BugEdit() {
   });
 
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<any[]>([]);
+  const [showDeleteAttachmentDialog, setShowDeleteAttachmentDialog] = useState(false);
+  const [attachmentToDelete, setAttachmentToDelete] = useState<number | null>(null);
 
   // Fetch bug data
   const { data: bugData, isLoading, error } = useQuery({
@@ -82,7 +93,6 @@ export default function BugEdit() {
         project_id: bug.project_id?.toString() || "",
         task_id: bug.task_id?.toString() || "",
         bug_type: bug.bug_type || "Functional",
-        severity: bug.severity || "Low",
         priority: bug.priority || "P4",
         status: bug.status || "Open",
         resolution_type: bug.resolution_type || "",
@@ -100,8 +110,32 @@ export default function BugEdit() {
         actual_fix_date: bug.actual_fix_date ? bug.actual_fix_date.split('T')[0] : "",
         tags: bug.tags || "",
       });
+      
+      // Load existing attachments
+      if (bug.attachments && Array.isArray(bug.attachments)) {
+        setExistingAttachments(bug.attachments);
+      }
     }
   }, [bug]);
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: (attachmentId: number) => bugsApi.deleteAttachment(Number(id), attachmentId),
+    onSuccess: (_, attachmentId) => {
+      setExistingAttachments(prev => prev.filter(att => att.id !== attachmentId));
+      queryClient.invalidateQueries({ queryKey: ['bug', id] });
+      toast({
+        title: "Success",
+        description: "Attachment deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete attachment.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => bugsApi.update(Number(id), data),
@@ -139,10 +173,19 @@ export default function BugEdit() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title || !formData.description) {
+    // Custom validation
+    const errors: string[] = [];
+    if (!formData.title || !formData.title.trim()) {
+      errors.push("Bug Title is required");
+    }
+    if (!formData.description || !formData.description.trim()) {
+      errors.push("Bug Description is required");
+    }
+    
+    if (errors.length > 0) {
       toast({
         title: "Validation Error",
-        description: "Title and description are required.",
+        description: errors.join(", "),
         variant: "destructive",
       });
       return;
@@ -152,18 +195,17 @@ export default function BugEdit() {
       title: formData.title,
       description: formData.description,
       bug_type: formData.bug_type,
-      severity: formData.severity,
       priority: formData.priority,
       status: formData.status,
-      steps_to_reproduce: formData.steps_to_reproduce || null,
-      expected_behavior: formData.expected_behavior || null,
-      actual_behavior: formData.actual_behavior || null,
-      browser: formData.browser || null,
-      device: formData.device || null,
-      os: formData.os || null,
-      app_version: formData.app_version || null,
-      api_endpoint: formData.api_endpoint || null,
-      tags: formData.tags || null,
+      steps_to_reproduce: formData.steps_to_reproduce || '',
+      expected_behavior: formData.expected_behavior || '',
+      actual_behavior: formData.actual_behavior || '',
+      browser: formData.browser || '',
+      device: formData.device || '',
+      os: formData.os || '',
+      app_version: formData.app_version || '',
+      api_endpoint: formData.api_endpoint || '',
+      tags: formData.tags || '',
     };
 
     if (formData.project_id && formData.project_id !== "none") {
@@ -258,6 +300,11 @@ export default function BugEdit() {
           onChange={setFormData}
           attachments={attachments}
           onAttachmentsChange={setAttachments}
+          existingAttachments={existingAttachments}
+          onDeleteAttachment={(attachmentId) => {
+            setAttachmentToDelete(attachmentId);
+            setShowDeleteAttachmentDialog(true);
+          }}
           isEdit={true}
         />
 
@@ -280,6 +327,39 @@ export default function BugEdit() {
           </Button>
         </div>
       </form>
+
+      {/* Delete Attachment Confirmation Dialog */}
+      <AlertDialog open={showDeleteAttachmentDialog} onOpenChange={setShowDeleteAttachmentDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Attachment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this attachment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowDeleteAttachmentDialog(false);
+              setAttachmentToDelete(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (attachmentToDelete) {
+                  deleteAttachmentMutation.mutate(attachmentToDelete);
+                  setShowDeleteAttachmentDialog(false);
+                  setAttachmentToDelete(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteAttachmentMutation.isPending}
+            >
+              {deleteAttachmentMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

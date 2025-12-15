@@ -83,6 +83,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useQueryClient } from "@tanstack/react-query";
 import { clearAuth } from "@/lib/auth";
 import ForgotPassword from "./pages/ForgotPassword";
+import { AlertCircle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 const queryClient = new QueryClient();
 
@@ -123,45 +126,15 @@ function ProtectedRoute({
 
   useEffect(() => {
     if (!isLoading && !hasAccess && !logoutInProgress.current) {
-      // Prevent multiple simultaneous logout calls
-      logoutInProgress.current = true;
-      
-      // Clear cache, logout, and navigate to login
-      const handleAccessDenied = async () => {
-        try {
-          // Show toast notification
-          toast({
-            title: "Access Denied",
-            description: "You don't have permission to access this page. You will be logged out.",
-            variant: "destructive",
-          });
-
-          // Clear authentication data from secure storage
-          await clearAuth();
-          
-          // Clear auth-related items from localStorage (fallback for non-encrypted storage)
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('remember_me');
-          
-          // Clear session storage
-          sessionStorage.clear();
-          
-          // Clear all React Query cache
-          queryClient.clear();
-          
-          // Navigate to login page
-          navigate('/login', { replace: true });
-        } catch (error) {
-          logger.error('Error during access denied logout:', error);
-          // Still navigate to login even if there's an error
-          navigate('/login', { replace: true });
-        }
-      };
-
-      handleAccessDenied();
+      // Show alert instead of redirecting to login
+      toast({
+        title: "Access Denied",
+        description: "You don't have access to this page or function. Please contact your administrator if you believe this is an error.",
+        variant: "destructive",
+        duration: 5000,
+      });
     }
-  }, [hasAccess, isLoading, navigate, queryClient]);
+  }, [hasAccess, isLoading]);
 
   if (isLoading) {
     return (
@@ -174,12 +147,25 @@ function ProtectedRoute({
   }
 
   if (!hasAccess) {
-    // Show loading state while logout is in progress
+    // Show access denied message instead of redirecting
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <p className="text-muted-foreground">Redirecting to login...</p>
-        </div>
+        <Card className="max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <AlertCircle className="h-12 w-12 text-destructive mx-auto" />
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+                <p className="text-muted-foreground">
+                  You don't have access to this page or function. Please contact your administrator if you believe this is an error.
+                </p>
+              </div>
+              <Button onClick={() => navigate(-1)} variant="outline">
+                Go Back
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

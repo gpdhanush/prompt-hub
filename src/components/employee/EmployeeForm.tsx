@@ -361,6 +361,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     if (!formData.name.trim()) errors.name = "Name is required";
     if (!formData.email.trim()) errors.email = "Email is required";
     if (mode === 'create' && !formData.password) errors.password = "Password is required";
+    if (mode === 'create' && !formData.mobile.trim()) errors.mobile = "Mobile number is required";
     if (!formData.empCode.trim()) errors.empCode = "Employee ID is required";
     if (!formData.role) errors.role = "Role is required";
     if (!formData.position) errors.position = "Position is required";
@@ -386,7 +387,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     }
 
     // Mobile validation
-    if (formData.mobile && formData.mobile.length !== 10) {
+    if (mode === 'create' && !formData.mobile.trim()) {
+      errors.mobile = "Mobile number is required";
+    } else if (formData.mobile && formData.mobile.length !== 10) {
       errors.mobile = "Mobile number must be 10 digits";
     }
 
@@ -493,6 +496,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     onSuccess: async () => {
 
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-list'] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({ title: "Success", description: "Employee created successfully." });
       navigate('/employees');
@@ -549,6 +553,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     },
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employees-list'] });
       queryClient.invalidateQueries({ queryKey: ['employee', employeeId] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({ title: "Success", description: "Employee updated successfully." });
@@ -634,6 +639,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     if (!trimmedData.name.trim()) errors.name = "Name is required";
     if (!trimmedData.email.trim()) errors.email = "Email is required";
     if (mode === 'create' && !trimmedData.password) errors.password = "Password is required";
+    if (mode === 'create' && !trimmedData.mobile.trim()) errors.mobile = "Mobile number is required";
     if (!trimmedData.empCode.trim()) errors.empCode = "Employee ID is required";
     if (!trimmedData.role) errors.role = "Role is required";
     if (!trimmedData.position) errors.position = "Position is required";
@@ -659,7 +665,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     }
 
     // Mobile validation
-    if (trimmedData.mobile && trimmedData.mobile.length !== 10) {
+    if (mode === 'create' && !trimmedData.mobile.trim()) {
+      errors.mobile = "Mobile number is required";
+    } else if (trimmedData.mobile && trimmedData.mobile.length !== 10) {
       errors.mobile = "Mobile number must be 10 digits";
     }
 
@@ -722,16 +730,14 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
 
   if (mode === 'edit' && isLoadingEmployee) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading employee data...</p>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Loading employee data...</p>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={() => navigate('/employees')}>
@@ -817,7 +823,11 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="mobile">Mobile</Label>
+                {mode === 'create' ? (
+                  <MandatoryLabel htmlFor="mobile">Mobile</MandatoryLabel>
+                ) : (
+                  <Label htmlFor="mobile">Mobile</Label>
+                )}
                 <Input
                   id="mobile"
                   type="text"
@@ -1054,6 +1064,8 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
                   <SelectContent>
                     <SelectItem value="Active">Active</SelectItem>
                     <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="Resigned">Resigned</SelectItem>
+                    <SelectItem value="Terminated">Terminated</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

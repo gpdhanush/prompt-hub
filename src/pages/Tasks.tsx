@@ -92,7 +92,7 @@ export default function Tasks() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeStage, setActiveStage] = useState("All");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [viewFilter, setViewFilter] = useState<'all' | 'my'>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -132,7 +132,7 @@ export default function Tasks() {
 
   // Fetch tasks from API
   const { data, isLoading, error } = useQuery({
-    queryKey: ['tasks', searchQuery, activeStage, viewFilter, page],
+    queryKey: ['tasks', searchQuery, statusFilter, viewFilter, page],
     queryFn: () => tasksApi.getAll({ page, limit, my_tasks: viewFilter === 'my' ? currentUserId : undefined }),
   });
 
@@ -180,8 +180,8 @@ export default function Tasks() {
     const matchesSearch = task.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.task_code?.includes(searchQuery) ||
       task.id?.toString().includes(searchQuery);
-    const matchesStage = activeStage === "All" || task.stage === activeStage;
-    return matchesSearch && matchesStage;
+    const matchesStatus = statusFilter === "All" || task.stage === statusFilter;
+    return matchesSearch && matchesStatus;
   });
 
   // Mutations
@@ -418,26 +418,6 @@ export default function Tasks() {
         </div>
       </div>
 
-      {/* Stage Stats */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
-        {stages.slice(1).map((stage) => {
-          const count = tasks.filter((t) => t.stage === stage).length;
-          return (
-            <Card
-              key={stage}
-              className={`glass-card cursor-pointer transition-all hover:border-primary/50 ${
-                activeStage === stage ? "border-primary" : ""
-              }`}
-              onClick={() => setActiveStage(stage)}
-            >
-              <CardContent className="p-4">
-                <div className="text-xl font-bold">{count}</div>
-                <p className="text-xs text-muted-foreground truncate">{stage}</p>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
 
       <Card className="glass-card">
         <CardHeader className="pb-4">
@@ -456,6 +436,20 @@ export default function Tasks() {
                   }}
                 />
               </div>
+              <Select value={statusFilter} onValueChange={(value) => {
+                setStatusFilter(value);
+                setPage(1);
+              }}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Filter by Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Status</SelectItem>
+                  {stages.slice(1).map((stage) => (
+                    <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border">
                 <Label htmlFor="view-filter-tasks" className="text-sm font-medium cursor-pointer">
                   All Tasks
@@ -503,7 +497,7 @@ export default function Tasks() {
               ) : filteredTasks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    {searchQuery || activeStage !== "All" ? 'No tasks found matching your filters.' : 'No tasks found. Create your first task to get started.'}
+                    {searchQuery || statusFilter !== "All" ? 'No tasks found matching your filters.' : 'No tasks found. Create your first task to get started.'}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -921,11 +915,16 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
     },
   });
 
+  const [showDeleteTimesheetDialog, setShowDeleteTimesheetDialog] = useState(false);
+  const [timesheetToDelete, setTimesheetToDelete] = useState<number | null>(null);
+
   const deleteTimesheetMutation = useMutation({
     mutationFn: (id: number) => tasksApi.deleteTimesheet(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task-timesheets', taskId] });
       toast({ title: "Success", description: "Timesheet deleted successfully." });
+      setShowDeleteTimesheetDialog(false);
+      setTimesheetToDelete(null);
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to delete timesheet.", variant: "destructive" });
@@ -1014,7 +1013,7 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingTimesheet ? 'Edit Timesheet' : 'Add Timesheet Entry'}</DialogTitle>
+            <DialogTitle>{editingTimesheet ? 'Update Timesheet' : 'Add Timesheet Entry'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -1063,7 +1062,9 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
                 onClick={handleSubmitTimesheet}
                 disabled={!timesheetForm.date || !timesheetForm.hours || createTimesheetMutation.isPending || updateTimesheetMutation.isPending}
               >
-                {createTimesheetMutation.isPending || updateTimesheetMutation.isPending ? 'Saving...' : 'Save'}
+                {createTimesheetMutation.isPending || updateTimesheetMutation.isPending 
+                  ? (editingTimesheet ? 'Updating...' : 'Saving...') 
+                  : (editingTimesheet ? 'Update Timesheet' : 'Save')}
               </Button>
             </div>
           </div>
@@ -1119,8 +1120,10 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
                           onClick={(e) => {
                             e.stopPropagation();
                         setEditingTimesheet(timesheet.id);
+                        // Convert date from ISO string to YYYY-MM-DD format
+                        const dateValue = timesheet.date ? (timesheet.date.includes('T') ? timesheet.date.split('T')[0] : timesheet.date) : '';
                         setTimesheetForm({
-                          date: timesheet.date,
+                          date: dateValue,
                           hours: timesheet.hours.toString(),
                           notes: timesheet.notes || '',
                         });
@@ -1134,10 +1137,9 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
                           className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
                           onClick={(e) => {
                             e.stopPropagation();
-                        if (confirm('Are you sure you want to delete this timesheet entry?')) {
-                          deleteTimesheetMutation.mutate(timesheet.id);
-                        }
-                      }}
+                            setTimesheetToDelete(timesheet.id);
+                            setShowDeleteTimesheetDialog(true);
+                          }}
                     >
                           <Trash2 className="h-4 w-4" />
                     </Button>
@@ -1163,6 +1165,37 @@ export function TaskTimesheetsSection({ taskId }: { taskId: number }) {
           ))}
         </div>
       )}
+
+      {/* Delete Timesheet Confirmation Dialog */}
+      <AlertDialog open={showDeleteTimesheetDialog} onOpenChange={setShowDeleteTimesheetDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Timesheet Entry</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this timesheet entry? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowDeleteTimesheetDialog(false);
+              setTimesheetToDelete(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (timesheetToDelete) {
+                  deleteTimesheetMutation.mutate(timesheetToDelete);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteTimesheetMutation.isPending}
+            >
+              {deleteTimesheetMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

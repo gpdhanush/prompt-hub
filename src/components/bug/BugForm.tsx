@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Upload, X } from "lucide-react";
+import { Upload, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +23,6 @@ interface BugFormData {
   project_id: string;
   task_id: string;
   bug_type: string;
-  severity: string;
   priority: string;
   status: string;
   resolution_type: string;
@@ -47,10 +46,12 @@ interface BugFormProps {
   onChange: (data: BugFormData) => void;
   attachments: File[];
   onAttachmentsChange: (files: File[]) => void;
+  existingAttachments?: any[];
+  onDeleteAttachment?: (attachmentId: number) => void;
   isEdit?: boolean;
 }
 
-export function BugForm({ formData, onChange, attachments, onAttachmentsChange, isEdit = false }: BugFormProps) {
+export function BugForm({ formData, onChange, attachments, onAttachmentsChange, existingAttachments = [], onDeleteAttachment, isEdit = false }: BugFormProps) {
   // Get current user to exclude from assignable list
   const currentUser = getCurrentUser();
   const currentUserId = currentUser?.id;
@@ -255,13 +256,13 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
         <CardContent className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="title">Bug Title *</Label>
+              <Label htmlFor="title" className="text-red-500">Bug Title *</Label>
               <Input
                 id="title"
+                type="text"
                 value={formData.title}
                 onChange={(e) => handleInputChange("title", e.target.value)}
                 placeholder="Enter bug title"
-                required
               />
             </div>
             <div className="grid gap-2">
@@ -318,7 +319,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   {isLoadingAssignable ? (
-                    <SelectItem value="" disabled>Loading team leads...</SelectItem>
+                    <SelectItem value="loading" disabled>Loading team leads...</SelectItem>
                   ) : teamLeads.length > 0 ? (
                     teamLeads.map((user: any) => (
                       <SelectItem key={user.id} value={user.id.toString()}>
@@ -326,7 +327,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="" disabled>No team leads available</SelectItem>
+                    <SelectItem value="no-options" disabled>No team leads available</SelectItem>
                   )}
                 </SelectContent>
               </Select>
@@ -344,7 +345,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
                   {isLoadingAssignable ? (
-                    <SelectItem value="" disabled>Loading users...</SelectItem>
+                    <SelectItem value="loading" disabled>Loading users...</SelectItem>
                   ) : assignableUsers.length > 0 ? (
                     assignableUsers.map((user: any) => (
                       <SelectItem key={user.id} value={user.id.toString()}>
@@ -352,7 +353,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="no-options" disabled>
                       No Level 2 users available
                     </SelectItem>
                   )}
@@ -360,28 +361,8 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
               </Select>
             </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="description">Bug Description *</Label>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => handleInputChange("description", e.target.value)}
-              placeholder="Describe the bug in detail"
-              rows={6}
-              required
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Bug Classification */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Bug Classification</CardTitle>
-          <CardDescription>Type, severity, and status</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          {/* Bug Type, Priority, Bug Status in 3 columns next to Assigned To */}
+          <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="bug_type">Bug Type</Label>
               <Select
@@ -403,41 +384,51 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="severity">Severity</Label>
+              <Label htmlFor="priority">Priority</Label>
               <Select
-                value={formData.severity}
-                onValueChange={(value) => handleInputChange("severity", value)}
+                value={formData.priority}
+                onValueChange={(value) => handleInputChange("priority", value)}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Critical">Critical (application down)</SelectItem>
-                  <SelectItem value="High">High</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="Low">Low</SelectItem>
+                  <SelectItem value="P1">P1 - Critical</SelectItem>
+                  <SelectItem value="P2">P2 - High</SelectItem>
+                  <SelectItem value="P3">P3 - Medium</SelectItem>
+                  <SelectItem value="P4">P4 - Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="status">Bug Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) => handleInputChange("status", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Open">Open</SelectItem>
+                  <SelectItem value="In Progress">In Progress</SelectItem>
+                  <SelectItem value="Fixed">Fixed</SelectItem>
+                  <SelectItem value="Closed">Closed</SelectItem>
+                  <SelectItem value="Blocked">Blocked</SelectItem>
+                  <SelectItem value="Reopened">Reopened</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="status">Bug Status</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(value) => handleInputChange("status", value)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Open">Open</SelectItem>
-                <SelectItem value="In Progress">In Progress</SelectItem>
-                <SelectItem value="Fixed">Fixed</SelectItem>
-                <SelectItem value="Closed">Closed</SelectItem>
-                <SelectItem value="Blocked">Blocked</SelectItem>
-                <SelectItem value="Reopened">Reopened</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label htmlFor="description" className="text-red-500">Bug Description *</Label>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => handleInputChange("description", e.target.value)}
+              placeholder="Describe the bug in detail"
+              rows={6}
+            />
           </div>
         </CardContent>
       </Card>
@@ -560,6 +551,44 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
         <CardContent className="space-y-4">
           <div className="grid gap-2">
             <Label htmlFor="attachments">Screenshots / Attachments</Label>
+            
+            {/* Existing Attachments (for edit mode) */}
+            {isEdit && existingAttachments.length > 0 && (
+              <div className="space-y-2 mb-4">
+                <Label className="text-sm font-semibold">Existing Files</Label>
+                {existingAttachments.map((attachment: any) => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center justify-between p-3 border rounded-lg bg-muted/50"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{attachment.original_filename}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : 'Unknown size'}
+                        </p>
+                      </div>
+                    </div>
+                    {onDeleteAttachment && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onDeleteAttachment(attachment.id);
+                        }}
+                      >
+                        <X className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
             <div className="flex items-center gap-2">
               <Input
                 ref={fileInputRef}

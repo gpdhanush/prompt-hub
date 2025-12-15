@@ -320,10 +320,39 @@ export default function ReimbursementView() {
                         </div>
                         <div className="flex gap-1 shrink-0">
                           <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => window.open(getImageUrl(attachment.path), '_blank')}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const url = getImageUrl(attachment.path);
+                              if (url) {
+                                window.open(url, '_blank');
+                              }
+                            }}
+                            title="View in new tab"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const url = getImageUrl(attachment.path);
+                              if (url) {
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.download = attachment.original_filename;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }
+                            }}
+                            title="Download"
                           >
                             <Download className="h-4 w-4" />
                           </Button>

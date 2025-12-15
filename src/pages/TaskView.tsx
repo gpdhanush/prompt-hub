@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Edit, CheckSquare, User, Clock, CalendarDays, FileText, AlertCircle, Target, Users, Calendar, History, Timer, MessageSquare, Download, Paperclip } from "lucide-react";
+import { ArrowLeft, Edit, CheckSquare, User, Clock, CalendarDays, FileText, AlertCircle, Target, Users, Calendar, History, Timer, MessageSquare, Paperclip } from "lucide-react";
+import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge, taskStageMap, taskPriorityMap } from "@/components/ui/status-badge";
 import { tasksApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
@@ -137,37 +137,19 @@ export default function TaskView() {
       </div>
 
       {/* Main Content */}
-      <Tabs defaultValue="details" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 bg-muted/50">
-          <TabsTrigger value="details" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Details</TabsTrigger>
-          <TabsTrigger value="comments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Comments</TabsTrigger>
-          <TabsTrigger value="history" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">History</TabsTrigger>
-          <TabsTrigger value="timesheets" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Timesheets</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="details" className="space-y-6">
+      <div className="space-y-6">
           {/* Header Card */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    <CheckSquare className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-2xl">{task.title}</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {task.task_code ? `Task #${task.task_code}` : `Task #${task.id}`}
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <CheckSquare className="h-6 w-6 text-primary" />
                 </div>
-                <div className="flex items-center gap-2">
-                  <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]} className="text-sm px-3 py-1.5">
-                    {getPriorityLabel(task.priority)}
-                  </StatusBadge>
-                  <StatusBadge variant={taskStageMap[task.stage || 'Analysis']} className="text-sm px-3 py-1.5">
-                    {task.stage || 'Analysis'}
-                  </StatusBadge>
+                <div>
+                  <CardTitle className="text-2xl">{task.title}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {task.task_code ? `Task #${task.task_code}` : `Task #${task.id}`}
+                  </p>
                 </div>
               </div>
             </CardHeader>
@@ -184,73 +166,53 @@ export default function TaskView() {
 
               <Separator />
 
-              {/* Information Grid */}
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                  <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    Deadline
-                  </Label>
-                  <p className="text-sm font-semibold">
+              {/* First Row: Priority, Stage, Status, Deadline in 4 columns */}
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Priority</Label>
+                  <div className="mt-1">
+                    <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]} className="text-xs">
+                      {getPriorityLabel(task.priority)}
+                    </StatusBadge>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Stage</Label>
+                  <div className="mt-1">
+                    <StatusBadge variant={taskStageMap[task.stage || 'Analysis']} className="text-xs">
+                      {task.stage || 'Analysis'}
+                    </StatusBadge>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Status</Label>
+                  <div className="text-sm font-medium mt-1">{task.status || 'Open'}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Deadline</Label>
+                  <div className="text-sm font-medium mt-1">
                     {formatDate(task.deadline)}
-                  </p>
-                </div>
-                <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                  <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" />
-                    Status
-                  </Label>
-                  <p className="text-sm font-semibold">{task.status || 'Open'}</p>
-                </div>
-                <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                  <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" />
-                    Created At
-                  </Label>
-                  <p className="text-sm font-semibold">
-                    {formatFullDate(task.created_at)}
-                  </p>
-                </div>
-                <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                  <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" />
-                    Last Updated
-                  </Label>
-                  <p className="text-sm font-semibold">
-                    {formatFullDate(task.updated_at)}
-                  </p>
+                  </div>
                 </div>
               </div>
 
               <Separator />
 
               {/* Team Assignment */}
-              <div className="space-y-4">
-                <Label className="text-sm font-semibold flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Team Assignment
-                </Label>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5" />
-                      Developer
-                    </Label>
-                    <p className="text-sm font-medium">{task.developer_name || 'Not assigned'}</p>
+              <div>
+                <Label className="text-muted-foreground text-sm">Team Assignment</Label>
+                <div className="grid grid-cols-3 gap-4 mt-1">
+                  <div>
+                    <Label className="text-muted-foreground text-xs">Developer</Label>
+                    <div className="text-sm font-medium mt-1">{task.developer_name || 'Not assigned'}</div>
                   </div>
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5" />
-                      Designer
-                    </Label>
-                    <p className="text-sm font-medium">{task.designer_name || 'Not assigned'}</p>
+                  <div>
+                    <Label className="text-muted-foreground text-xs">Designer</Label>
+                    <div className="text-sm font-medium mt-1">{task.designer_name || 'Not assigned'}</div>
                   </div>
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <User className="h-3.5 w-3.5" />
-                      Tester
-                    </Label>
-                    <p className="text-sm font-medium">{task.tester_name || 'Not assigned'}</p>
+                  <div>
+                    <Label className="text-muted-foreground text-xs">Tester</Label>
+                    <div className="text-sm font-medium mt-1">{task.tester_name || 'Not assigned'}</div>
                   </div>
                 </div>
               </div>
@@ -264,110 +226,55 @@ export default function TaskView() {
                       <Paperclip className="h-4 w-4" />
                       Attachments ({task.attachments.length})
                     </Label>
-                    <div className="grid gap-2">
-                      {task.attachments.map((attachment: any) => (
-                        <div
-                          key={attachment.id}
-                          className="flex items-center justify-between p-3 border rounded-lg bg-muted/50"
-                        >
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{attachment.original_filename}</p>
-                              <p className="text-xs text-muted-foreground">{formatFileSize(attachment.size || 0)}</p>
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => window.open(attachment.path, '_blank')}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
+                    <AttachmentList
+                      attachments={task.attachments}
+                      showLabel={false}
+                    />
                   </div>
                 </>
               )}
-
-              <Separator />
-
-              {/* Audit Information */}
-              <div className="space-y-4">
-                <Label className="text-sm font-semibold flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  Audit Information
-                </Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground">Created By</Label>
-                    <p className="text-sm font-medium">{task.created_by_name || 'N/A'}</p>
-                    {task.created_at && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatFullDate(task.created_at)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground">Last Updated By</Label>
-                    <p className="text-sm font-medium">
-                      {task.updated_by_name || task.created_by_name || 'N/A'}
-                    </p>
-                    {task.updated_at && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatFullDate(task.updated_at)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="comments" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Comments
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TaskCommentsSection taskId={task.id} />
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* Comments Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              Comments
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TaskCommentsSection taskId={task.id} />
+          </CardContent>
+        </Card>
 
-        <TabsContent value="history" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                History
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TaskHistorySection taskId={task.id} />
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* History Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TaskHistorySection taskId={task.id} />
+          </CardContent>
+        </Card>
 
-        <TabsContent value="timesheets" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Timer className="h-5 w-5" />
-                Timesheets
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TaskTimesheetsSection taskId={task.id} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        {/* Timesheets Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Timer className="h-5 w-5" />
+              Timesheets
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TaskTimesheetsSection taskId={task.id} />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

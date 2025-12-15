@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, Download, FileText, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Edit, Trash2 } from "lucide-react";
+import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,16 +106,14 @@ export default function BugDetail() {
 
   const handleDownloadAttachment = async (attachment: any) => {
     try {
+      const isImage = attachment.mime_type?.startsWith('image/');
       const API_BASE_URL = API_CONFIG.BASE_URL;
       const token = getAuthToken();
-      const currentUser = getCurrentUser();
       const url = `${API_BASE_URL}/bugs/${id}/attachments/${attachment.id}`;
       
       const headers: HeadersInit = {
         'Authorization': `Bearer ${token}`,
       };
-      
-      // Note: user-id header removed - user ID is now in JWT token payload
       
       const response = await fetch(url, {
         headers,
@@ -125,6 +124,7 @@ export default function BugDetail() {
         throw new Error(errorData.error || `Failed to download: ${response.status} ${response.statusText}`);
       }
       
+      // For all files (including images), download directly
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -329,36 +329,16 @@ export default function BugDetail() {
                 <CardTitle>Attachments</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {bug.attachments.map((attachment: any) => (
-                    <div
-                      key={attachment.id}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {attachment.mime_type?.startsWith('image/') ? (
-                          <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                        ) : (
-                          <FileText className="h-5 w-5 text-muted-foreground" />
-                        )}
-                        <div>
-                          <div className="text-sm font-medium">{attachment.original_filename}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {(attachment.size / 1024).toFixed(2)} KB
-                          </div>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDownloadAttachment(attachment)}
-                        title="Download"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                <AttachmentList
+                  attachments={bug.attachments.map((att: any) => ({
+                    ...att,
+                    path: `/bugs/${id}/attachments/${att.id}`, // Add path for bug detection
+                  }))}
+                  onDownload={async (attachment) => {
+                    await handleDownloadAttachment(attachment);
+                  }}
+                  showLabel={false}
+                />
               </CardContent>
             </Card>
           )}

@@ -76,6 +76,7 @@ export default function Bugs() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [viewFilter, setViewFilter] = useState<'all' | 'my'>('all');
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -113,7 +114,7 @@ export default function Bugs() {
 
   // Fetch bugs from API
   const { data, isLoading, error } = useQuery({
-    queryKey: ['bugs', searchQuery, viewFilter, page],
+    queryKey: ['bugs', searchQuery, statusFilter, viewFilter, page],
     queryFn: () => bugsApi.getAll({ page, limit, my_bugs: viewFilter === 'my' ? currentUserId : undefined }),
   });
 
@@ -481,13 +482,18 @@ export default function Bugs() {
     createBugMutation.mutate(formData);
   };
 
-  const filteredBugs = bugs.filter(
-    (bug: any) =>
-      (bug.description?.toLowerCase().includes(searchQuery.toLowerCase()) || '') ||
-      (bug.title?.toLowerCase().includes(searchQuery.toLowerCase()) || '') ||
-      (bug.bug_code?.toLowerCase().includes(searchQuery.toLowerCase()) || '') ||
-      (bug.id?.toString().includes(searchQuery) || '')
-  );
+  // Filter bugs based on search query and status filter
+  const filteredBugs = bugs.filter((bug: any) => {
+    const matchesSearch = bug.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bug.bug_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bug.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      bug.id?.toString().includes(searchQuery);
+    
+    const matchesStatus = statusFilter === "All" || bug.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+   
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -511,48 +517,6 @@ export default function Bugs() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{bugs.length}</div>
-            <p className="text-xs text-muted-foreground">Total Bugs</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-error">
-              {bugs.filter((b: any) => b.status === "Open").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Open</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-warning">
-              {bugs.filter((b: any) => b.status === "Fixing").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Fixing</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-purple">
-              {bugs.filter((b: any) => b.status === "Retesting").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Retesting</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-success">
-              {bugs.filter((b: any) => b.status === "Completed" || b.status === "Passed" || b.status === "Closed").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Completed</p>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="glass-card">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
@@ -570,6 +534,30 @@ export default function Bugs() {
                   }}
                 />
               </div>
+              <Select 
+                value={statusFilter} 
+                onValueChange={(value) => {
+                  setStatusFilter(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Status</SelectItem>
+                  <SelectItem value="Open">Open</SelectItem>
+                  <SelectItem value="In Progress">In Progress</SelectItem>
+                  <SelectItem value="Fixed">Fixed</SelectItem>
+                  <SelectItem value="Closed">Closed</SelectItem>
+                  <SelectItem value="Blocked">Blocked</SelectItem>
+                  <SelectItem value="Reopened">Reopened</SelectItem>
+                  <SelectItem value="Fixing">Fixing</SelectItem>
+                  <SelectItem value="Retesting">Retesting</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                  <SelectItem value="Passed">Passed</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border">
                 <Label htmlFor="view-filter" className="text-sm font-medium cursor-pointer">
                   All Bugs

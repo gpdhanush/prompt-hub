@@ -12,7 +12,8 @@ import {
   Shield,
   Image as ImageIcon,
   FileText,
-  Ticket
+  Ticket,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -195,7 +196,7 @@ export default function AssetTicketDetail() {
     }
   };
 
-  const handleDownloadAttachment = (attachment: any) => {
+  const handleViewAttachment = (attachment: any) => {
     if (attachment.file_url) {
       // Construct full URL if file_url is relative
       const baseUrl = API_CONFIG.SERVER_URL || 'http://localhost:3001';
@@ -203,6 +204,22 @@ export default function AssetTicketDetail() {
         ? attachment.file_url 
         : `${baseUrl}${attachment.file_url}`;
       window.open(url, '_blank');
+    }
+  };
+
+  const handleDownloadAttachment = (attachment: any) => {
+    if (attachment.file_url) {
+      // Construct full URL if file_url is relative
+      const baseUrl = API_CONFIG.SERVER_URL || 'http://localhost:3001';
+      const url = attachment.file_url.startsWith('http') 
+        ? attachment.file_url 
+        : `${baseUrl}${attachment.file_url}`;
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.filename || 'attachment';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -669,9 +686,20 @@ export default function AssetTicketDetail() {
                       </div>
                       <div className="flex items-center gap-1">
                         <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewAttachment(attachment)}
+                          title="View in new tab"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDownloadAttachment(attachment)}
+                          title="Download"
                         >
                           <Download className="h-4 w-4" />
                         </Button>

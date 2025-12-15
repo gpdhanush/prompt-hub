@@ -121,13 +121,18 @@ export function AdminSidebar() {
     // - /bugs, /bugs/new, /bugs/123, /bugs/123/edit
     // - /employees, /employees/new, /employees/123, /employees/123/edit
     // - /it-assets/* routes
-    // Special handling for /employees/list - it should not match /employees
+    // Special handling for /employees - should match /employees, /employees/new, /employees/:id/edit
+    // But NOT /employees/list, /employees/:id/view, or /employee-profile/:id
     if (href === '/employees') {
-      return location.pathname === href || (location.pathname.startsWith(href + '/') && !location.pathname.startsWith('/employees/list') && !location.pathname.startsWith('/employees/') && !location.pathname.match(/^\/employees\/\d+\/view$/));
+      return location.pathname === href || 
+             location.pathname === '/employees/new' ||
+             location.pathname.match(/^\/employees\/\d+\/edit$/);
     }
-    // Special handling for Employee Directory - should match /employees/list and /employees/:id/view
+    // Special handling for Employee Directory - should match /employees/list, /employees/:id/view, and /employee-profile/:id
     if (href === '/employees/list') {
-      return location.pathname === href || location.pathname.match(/^\/employees\/\d+\/view$/);
+      return location.pathname === href || 
+             location.pathname.match(/^\/employees\/\d+\/view$/) ||
+             location.pathname.match(/^\/employee-profile\/\d+$/);
     }
     return location.pathname === href || location.pathname.startsWith(href + '/');
   };

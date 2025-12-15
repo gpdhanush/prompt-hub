@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { employeesApi } from "@/lib/api";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Camera } from "lucide-react";
+import { employeesApi, rolesApi } from "@/lib/api";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Loader2, AlertCircle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,10 +31,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getProfilePhotoUrl } from "@/lib/imageUtils";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -42,14 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  PaginationWrapper as Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -90,8 +82,10 @@ export default function Employees() {
   const isSuperAdmin = currentUser?.role === 'Super Admin';
   
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageLimit, setPageLimit] = useState(10);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [roleFilter, setRoleFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -137,42 +131,56 @@ export default function Employees() {
     return mapping[value] || value;
   };
 
-  // Fetch employees from API
+  // Fetch all employees (fetch large number to get all, then filter client-side)
   const { data, isLoading, error } = useQuery({
-    queryKey: ['employees', currentPage, pageLimit, searchQuery],
-    queryFn: () => employeesApi.getAll({ page: currentPage, limit: pageLimit, search: searchQuery }),
+    queryKey: ['employees'],
+    queryFn: () => employeesApi.getAll({ page: 1, limit: 10000 }),
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
-  // Filter out Super Admin employees if current user is not Super Admin
+  // Fetch roles for filter
+  const { data: rolesData } = useQuery({
+    queryKey: ['roles'],
+    queryFn: () => rolesApi.getAll(),
+  });
+
   const allEmployees = data?.data || [];
-  const employees = isSuperAdmin 
+  const allRoles = rolesData?.data || [];
+
+  // Filter out Super Admin employees if current user is not Super Admin
+  const baseEmployees = isSuperAdmin 
     ? allEmployees 
     : allEmployees.filter((emp: Employee) => emp.role !== 'Super Admin');
-  
-  const pagination = data?.pagination || { total: 0, totalPages: 0 };
-  const totalPages = pagination.totalPages;
 
-  // Reset to page 1 when search query changes
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    setCurrentPage(1);
-  };
+  // Client-side filtering for search, role, and status
+  const filteredEmployees = useMemo(() => {
+    return baseEmployees.filter((employee: Employee) => {
+      const matchesSearch = !searchQuery || 
+        employee.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        employee.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        employee.emp_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        employee.mobile?.includes(searchQuery);
+      
+      const matchesRole = !roleFilter || employee.role === roleFilter;
+      
+      const matchesStatus = !statusFilter || 
+        employee.employee_status === statusFilter ||
+        employee.status === statusFilter;
+      
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [baseEmployees, searchQuery, roleFilter, statusFilter]);
 
-  // Handle page limit change
-  const handlePageLimitChange = (value: string) => {
-    setPageLimit(Number(value));
-    setCurrentPage(1);
-  };
+  // Client-side pagination
+  const paginatedEmployees = useMemo(() => {
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    return filteredEmployees.slice(startIndex, endIndex);
+  }, [filteredEmployees, page, limit]);
 
-  // Generate page numbers to display
-  const getPageNumbers = () => {
-    const pages: number[] = [];
-    const maxPages = Math.min(totalPages, 10);
-    for (let i = 1; i <= maxPages; i++) {
-      pages.push(i);
-    }
-    return pages;
-  };
+  const total = filteredEmployees.length;
+  const totalPages = Math.ceil(total / limit);
 
 
   const deleteMutation = useMutation({
@@ -219,26 +227,43 @@ export default function Employees() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading employees...</div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading employees...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-destructive">Error loading employees. Please try again.</div>
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center py-8">
+            <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
+            <p className="text-destructive font-semibold mb-2">Error loading employees</p>
+            <p className="text-muted-foreground">Please try again later.</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Employees</h1>
-          <p className="text-muted-foreground">Manage employee records</p>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <User className="h-6 w-6 text-primary" />
+            </div>
+            Employees
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Manage employee records
+          </p>
         </div>
         <Button onClick={() => navigate('/employees/new')}>
           <Plus className="mr-2 h-4 w-4" />
@@ -246,116 +271,153 @@ export default function Employees() {
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{pagination.total || 0}</div>
-            <p className="text-xs text-muted-foreground">Total Employees</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-success">
-              {employees.filter((e: Employee) => (e.employee_status || e.status) === "Active").length}
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>Search and filter employees</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, email, employee code, or mobile..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-10"
+              />
             </div>
-            <p className="text-xs text-muted-foreground">Active</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-info">
-              {employees.filter((e: Employee) => (e.employee_status || e.status) === "On Leave").length}
-            </div>
-            <p className="text-xs text-muted-foreground">On Leave</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-warning">
-              {employees.filter((e: Employee) => (e.employee_status || e.status) === "Inactive").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Inactive</p>
-          </CardContent>
-        </Card>
-      </div>
+            <Select 
+              value={roleFilter || "all"} 
+              onValueChange={(value) => {
+                setRoleFilter(value === "all" ? "" : value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                {allRoles.map((role: any) => (
+                  <SelectItem key={role.id} value={role.name}>
+                    {role.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select 
+              value={statusFilter || "all"} 
+              onValueChange={(value) => {
+                setStatusFilter(value === "all" ? "" : value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+                <SelectItem value="Resigned">Resigned</SelectItem>
+                <SelectItem value="Terminated">Terminated</SelectItem>
+                <SelectItem value="Present">Present</SelectItem>
+                <SelectItem value="Absent">Absent</SelectItem>
+                <SelectItem value="On Leave">On Leave</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
-      <Card className="glass-card">
-        <CardHeader className="pb-4">
+      {/* Employees Table */}
+      <Card>
+        <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">All Employees</CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search employees..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                />
-              </div>
-              <Button variant="outline" size="icon">
-                <Filter className="h-4 w-4" />
-              </Button>
+            <div>
+              <CardTitle>Employees ({filteredEmployees.length})</CardTitle>
+              <CardDescription>List of all employees</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {employees.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No employees found. Create your first employee using the "Add Employee" button.
+          {filteredEmployees.length === 0 ? (
+            <div className="text-center py-12">
+              <User className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No employees found</h3>
+              <p className="text-muted-foreground">
+                {searchQuery || roleFilter || statusFilter
+                  ? 'Try adjusting your filters'
+                  : 'No employees available'}
+              </p>
             </div>
           ) : (
-            <>
+            <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee ID</TableHead>
+                    <TableHead className="w-[120px]">Emp. ID</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Mobile</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Team Lead</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {employees.map((emp: Employee) => (
-                    <TableRow key={emp.id}>
-                      <TableCell className="font-mono text-muted-foreground">
-                        <Button
-                          variant="link"
-                          className="p-0 h-auto font-mono text-muted-foreground hover:underline"
-                          onClick={() => navigate(`/employee-profile/${emp.id}`)}
-                        >
-                          {emp.emp_code || `EMP-${emp.id}`}
-                        </Button>
+                  {paginatedEmployees.map((emp: Employee) => (
+                    <TableRow
+                      key={emp.id}
+                      className="hover:bg-muted/50 cursor-pointer"
+                      onClick={() => navigate(`/employee-profile/${emp.id}`, { state: { from: '/employees' } })}
+                    >
+                      <TableCell className="font-medium">
+                        <span className="font-mono text-sm">{emp.emp_code || `EMP-${emp.id}`}</span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {emp.profile_photo_url && String(emp.profile_photo_url).trim() !== '' && (
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={getProfilePhotoUrl(emp.profile_photo_url)} />
-                              <AvatarFallback className="text-xs">
-                                {emp.name.split(" ").map((n) => n[0]).join("")}
-                              </AvatarFallback>
-                            </Avatar>
-                          )}
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={getProfilePhotoUrl(emp.profile_photo_url || null)} />
+                            <AvatarFallback className="text-xs">
+                              {emp.name ? emp.name.split(" ").map((n: string) => n[0]).join("") : "E"}
+                            </AvatarFallback>
+                          </Avatar>
                           <span className="font-medium">{emp.name}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{emp.email}</TableCell>
-                      <TableCell>{emp.role || "N/A"}</TableCell>
-                      <TableCell className="text-muted-foreground">{emp.team_lead_name || "N/A"}</TableCell>
                       <TableCell>
-                        <StatusBadge variant={(emp.employee_status || emp.status) === "Active" ? "success" : (emp.employee_status || emp.status) === "On Leave" ? "info" : "warning"}>
+                        <span className="text-sm">{emp.email}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{emp.mobile || "-"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">
+                          {emp.role || "N/A"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">{emp.team_lead_name || "N/A"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge 
+                          variant={(emp.employee_status || emp.status) === "Active" ? "success" : (emp.employee_status || emp.status) === "On Leave" ? "info" : "warning"}
+                        >
                           {emp.employee_status || emp.status || "Active"}
                         </StatusBadge>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -379,52 +441,60 @@ export default function Employees() {
                   ))}
                 </TableBody>
               </Table>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="page-limit">Rows per page:</Label>
-                    <Select value={pageLimit.toString()} onValueChange={handlePageLimitChange}>
-                      <SelectTrigger className="w-20">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="5">5</SelectItem>
-                        <SelectItem value="10">10</SelectItem>
-                        <SelectItem value="20">20</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious 
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                          className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                        />
-                      </PaginationItem>
-                      {getPageNumbers().map((page) => (
-                        <PaginationItem key={page}>
-                          <PaginationLink
-                            onClick={() => setCurrentPage(page)}
-                            isActive={currentPage === page}
-                            className="cursor-pointer"
-                          >
-                            {page}
-                          </PaginationLink>
-                        </PaginationItem>
-                      ))}
-                      <PaginationItem>
-                        <PaginationNext 
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {total > 0 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} employees
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="page-limit" className="text-sm text-muted-foreground">
+                    Rows per page:
+                  </Label>
+                  <Select
+                    value={limit.toString()}
+                    onValueChange={(value) => {
+                      setLimit(Number(value));
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-20" id="page-limit">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-            </>
+                {totalPages > 1 && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={page >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { employeesApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
@@ -53,6 +53,7 @@ import {
 
 export default function EmployeeProfile() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
 
@@ -151,7 +152,16 @@ export default function EmployeeProfile() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => navigate("/employees/list")}>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => {
+              // Check if user came from Employees page or Employee Directory
+              const fromEmployees = location.state?.from === '/employees' || 
+                                    document.referrer.includes('/employees') && !document.referrer.includes('/employees/list');
+              navigate(fromEmployees ? '/employees' : '/employees/list');
+            }}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

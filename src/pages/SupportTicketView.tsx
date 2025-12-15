@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -168,12 +169,25 @@ export default function SupportTicketView() {
     uploadAttachmentMutation.mutate(selectedFile);
   };
 
-  const handleDownloadFile = (attachment: any) => {
+  const handleViewFile = (attachment: any) => {
     const baseUrl = API_CONFIG.SERVER_URL || 'http://localhost:3001';
     const url = attachment.file_url?.startsWith('http')
       ? attachment.file_url
       : `${baseUrl}${attachment.file_url}`;
     window.open(url, '_blank');
+  };
+
+  const handleDownloadFile = (attachment: any) => {
+    const baseUrl = API_CONFIG.SERVER_URL || 'http://localhost:3001';
+    const url = attachment.file_url?.startsWith('http')
+      ? attachment.file_url
+      : `${baseUrl}${attachment.file_url}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = attachment.original_filename || attachment.filename || 'attachment';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const getStatusIcon = (status: string) => {
@@ -611,10 +625,22 @@ export default function SupportTicketView() {
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleViewFile(attachment)}
+                          title="View in new tab"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => handleDownloadFile(attachment)}
+                          title="Download"
                         >
                           <Download className="h-4 w-4" />
                         </Button>

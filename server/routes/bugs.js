@@ -388,18 +388,13 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
       insertFields.push('team_lead_id');
       insertValues.push(parseInt(team_lead_id) || null);
     }
-    if (steps_to_reproduce) {
-      insertFields.push('steps_to_reproduce');
-      insertValues.push(steps_to_reproduce);
-    }
-    if (expected_behavior) {
-      insertFields.push('expected_behavior');
-      insertValues.push(expected_behavior);
-    }
-    if (actual_behavior) {
-      insertFields.push('actual_behavior');
-      insertValues.push(actual_behavior);
-    }
+    // Always include Steps & Reproduction fields (can be empty)
+    insertFields.push('steps_to_reproduce');
+    insertValues.push(steps_to_reproduce || null);
+    insertFields.push('expected_behavior');
+    insertValues.push(expected_behavior || null);
+    insertFields.push('actual_behavior');
+    insertValues.push(actual_behavior || null);
     if (browser) {
       insertFields.push('browser');
       insertValues.push(browser);
@@ -839,6 +834,44 @@ router.get('/:bugId/attachments/:attachmentId', async (req, res) => {
     res.sendFile(filePath);
   } catch (error) {
     logger.error('Error downloading attachment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete attachment
+router.delete('/:bugId/attachments/:attachmentId', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
+  try {
+    const { bugId, attachmentId } = req.params;
+    const userId = req.user?.id;
+    
+    // Check if attachment exists and belongs to bug
+    const [attachments] = await db.query(
+      'SELECT * FROM attachments WHERE id = ? AND bug_id = ?',
+      [attachmentId, bugId]
+    );
+    
+    if (attachments.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+    
+    const attachment = attachments[0];
+    
+    // Delete file from disk
+    if (attachment.path && fs.existsSync(attachment.path)) {
+      try {
+        fs.unlinkSync(attachment.path);
+      } catch (fileError) {
+        logger.warn('Error deleting file from disk:', fileError);
+        // Continue with database deletion even if file deletion fails
+      }
+    }
+    
+    // Delete from database
+    await db.query('DELETE FROM attachments WHERE id = ?', [attachmentId]);
+    
+    res.json({ message: 'Attachment deleted successfully' });
+  } catch (error) {
+    logger.error('Error deleting attachment:', error);
     res.status(500).json({ error: error.message });
   }
 });

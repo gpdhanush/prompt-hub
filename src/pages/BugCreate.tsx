@@ -13,7 +13,6 @@ interface BugFormData {
   project_id: string;
   task_id: string;
   bug_type: string;
-  severity: string;
   priority: string;
   status: string;
   resolution_type: string;
@@ -42,7 +41,6 @@ export default function BugCreate() {
     project_id: "",
     task_id: "",
     bug_type: "Functional",
-    severity: "Low",
     priority: "P4",
     status: "Open",
     resolution_type: "",
@@ -85,10 +83,19 @@ export default function BugCreate() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.title || !formData.description) {
+    // Custom validation
+    const errors: string[] = [];
+    if (!formData.title || !formData.title.trim()) {
+      errors.push("Bug Title is required");
+    }
+    if (!formData.description || !formData.description.trim()) {
+      errors.push("Bug Description is required");
+    }
+    
+    if (errors.length > 0) {
       toast({
         title: "Validation Error",
-        description: "Title and description are required.",
+        description: errors.join(", "),
         variant: "destructive",
       });
       return;
@@ -108,7 +115,6 @@ export default function BugCreate() {
     
     // Bug Type & Classification
     formDataToSend.append('bug_type', formData.bug_type);
-    formDataToSend.append('severity', formData.severity);
     formDataToSend.append('priority', formData.priority);
     formDataToSend.append('status', formData.status);
     if (formData.resolution_type && formData.resolution_type !== "none") {
@@ -123,16 +129,10 @@ export default function BugCreate() {
       formDataToSend.append('team_lead_id', formData.team_lead_id);
     }
     
-    // Steps & Reproduction
-    if (formData.steps_to_reproduce) {
-      formDataToSend.append('steps_to_reproduce', formData.steps_to_reproduce);
-    }
-    if (formData.expected_behavior) {
-      formDataToSend.append('expected_behavior', formData.expected_behavior);
-    }
-    if (formData.actual_behavior) {
-      formDataToSend.append('actual_behavior', formData.actual_behavior);
-    }
+    // Steps & Reproduction - always send these fields
+    formDataToSend.append('steps_to_reproduce', formData.steps_to_reproduce || '');
+    formDataToSend.append('expected_behavior', formData.expected_behavior || '');
+    formDataToSend.append('actual_behavior', formData.actual_behavior || '');
     
     // Environment Details
     if (formData.browser) {

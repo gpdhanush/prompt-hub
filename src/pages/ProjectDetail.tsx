@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, Download, Image as ImageIcon, File, FileType, Presentation, FileSpreadsheet, Video, Music, Archive, X } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X } from "lucide-react";
+import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -546,63 +547,18 @@ export default function ProjectDetail() {
               {files.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No files uploaded yet</p>
               ) : (
-                <div className="space-y-2">
-                  {files.map((file: any) => {
-                    const extension = file.file_name.split('.').pop()?.toLowerCase() || '';
-                    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico'].includes(extension);
-                    
-                    let FileIcon = File;
-                    if (isImage) FileIcon = ImageIcon;
-                    else if (extension === 'pdf') FileIcon = FileType;
-                    else if (['doc', 'docx', 'txt', 'rtf', 'odt'].includes(extension)) FileIcon = FileText;
-                    else if (['xls', 'xlsx', 'csv', 'ods'].includes(extension)) FileIcon = FileSpreadsheet;
-                    else if (['ppt', 'pptx', 'odp'].includes(extension)) FileIcon = Presentation;
-                    else if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'].includes(extension)) FileIcon = Video;
-                    else if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma'].includes(extension)) FileIcon = Music;
-                    else if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(extension)) FileIcon = Archive;
-                    
-                    return (
-                      <div key={file.id} className="flex items-center justify-between p-3 border rounded">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          {isImage && file.file_url ? (
-                            <div className="h-12 w-12 rounded border overflow-hidden flex-shrink-0 bg-muted">
-                              <img 
-                                src={getImageUrl(file.file_url) || file.file_url} 
-                                alt={file.file_name}
-                                className="h-full w-full object-cover"
-                                onError={(e) => {
-                                  // Fallback to icon if image fails to load
-                                  e.currentTarget.style.display = 'none';
-                                  const parent = e.currentTarget.parentElement;
-                                  if (parent) {
-                                    parent.innerHTML = `<div class="flex items-center justify-center h-12 w-12 rounded border flex-shrink-0 bg-muted"><svg class="h-6 w-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>`;
-                                  }
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center h-12 w-12 rounded border flex-shrink-0 bg-muted">
-                              <FileIcon className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{file.file_name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {file.file_type} {file.file_category && `• ${file.file_category}`}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <a href={getImageUrl(file.file_url) || file.file_url} target="_blank" rel="noopener noreferrer">
-                            <Button variant="ghost" size="icon">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          </a>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <AttachmentList
+                  attachments={files.map((file: any) => ({
+                    id: file.id,
+                    original_filename: file.file_name,
+                    filename: file.file_name,
+                    path: file.file_url,
+                    url: file.file_url,
+                    file_url: file.file_url,
+                    size: 0,
+                  }))}
+                  showLabel={false}
+                />
               )}
             </CardContent>
           </Card>
