@@ -547,6 +547,11 @@ export const projectsApi = {
     request<{ message: string }>(`/projects/${id}/comments/${commentId}`, {
       method: 'DELETE',
     }),
+  // Activities (GitHub/Bitbucket webhooks)
+  getActivities: (id: number, params?: { activity_type?: string; limit?: number }) => {
+    const queryParams = params ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return request<{ data: any[] }>(`/projects/${id}/activities${queryParams}`);
+  },
   // Technologies
   updateTechnologies: (id: number, technologies: string[]) =>
     request<{ data: any }>(`/projects/${id}/technologies`, {

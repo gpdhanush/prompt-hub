@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { employeesApi } from "@/lib/api";
@@ -8,24 +8,13 @@ import {
   User,
   Mail,
   Phone,
-  Lock,
   MapPin,
   Building,
   CreditCard,
   FileText,
-  Upload,
-  Camera,
-  Save,
-  Eye,
-  EyeOff,
-  Download,
-  Trash2,
-  CheckCircle,
-  XCircle,
   Edit,
   Calendar,
   Briefcase,
-  Shield,
   Home,
   Wallet,
   CalendarDays,
@@ -33,9 +22,12 @@ import {
   ArrowLeft,
   MessageCircle,
   MessageSquare,
+  CheckCircle,
+  XCircle,
+  Eye,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -43,13 +35,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { getProfilePhotoUrl, getImageUrl } from "@/lib/imageUtils";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { AttachmentList } from "@/components/ui/attachment-list";
 
 export default function EmployeeProfile() {
   const navigate = useNavigate();
@@ -116,11 +102,11 @@ export default function EmployeeProfile() {
 
   // Format date helper
   const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return "Not provided";
+    if (!dateString) return "Not set";
     try {
       return new Date(dateString).toLocaleDateString('en-US', { 
         year: 'numeric', 
-        month: 'long', 
+        month: 'short', 
         day: 'numeric' 
       });
     } catch {
@@ -130,533 +116,335 @@ export default function EmployeeProfile() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Loading employee profile...</div>
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
       </div>
     );
   }
 
   if (error || !employee) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-destructive">Error loading employee profile. Please try again.</div>
-        <Button variant="outline" onClick={() => navigate("/employees")} className="ml-4">
-          Back to Employees
-        </Button>
+      <div className="container mx-auto p-6">
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+          <div className="text-destructive">Error loading employee profile.</div>
+          <Button variant="outline" onClick={() => {
+            const fromEmployees = location.state?.from === '/employees' || 
+                                  document.referrer.includes('/employees') && !document.referrer.includes('/employees/list');
+            navigate(fromEmployees ? '/employees' : '/employees/list');
+          }}>
+            Back to Employees
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-7xl">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button 
-            variant="outline" 
-            size="icon" 
+          <Button
+            variant="default"
+            size="icon"
             onClick={() => {
-              // Check if user came from Employees page or Employee Directory
               const fromEmployees = location.state?.from === '/employees' || 
                                     document.referrer.includes('/employees') && !document.referrer.includes('/employees/list');
               navigate(fromEmployees ? '/employees' : '/employees/list');
             }}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              Employee Profile
-            </h1>
-            <p className="text-muted-foreground mt-1">View and manage employee information</p>
+            <h1 className="text-3xl font-bold">Employee Details</h1>
+            <p className="font-mono text-primary font-semibold text-xl text-center">
+              {employee.emp_code || `EMP-${String(employee.id).padStart(3, '0')}`}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate(`/employees/${employee.id}/edit`)} className="shadow-md">
+          <Button onClick={() => navigate(`/employees/${employee.id}/edit`)} variant="outline">
             <Edit className="mr-2 h-4 w-4" />
-            Edit Profile
+            Edit Employee
           </Button>
         </div>
       </div>
 
-      {/* Profile Header Card with Gradient */}
-      <Card className="border-0 shadow-lg bg-gradient-to-br from-primary/5 via-background to-primary/5 overflow-hidden">
-        <CardContent className="pt-8 pb-8">
-          <div className="flex items-start gap-6">
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full blur-xl"></div>
-              <Avatar className="h-32 w-32 relative border-4 border-background shadow-xl">
-                <AvatarImage 
-                  src={getProfilePhotoUrl(employee.profile_photo_url || employee.photo || null)} 
-                />
-                <AvatarFallback className="text-3xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground">
-                  {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("") : "E"}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-            <div className="flex-1 space-y-3">
-              <div>
-                <h2 className="text-3xl font-bold mb-1">{employee.name || "N/A"}</h2>
-                <p className="text-muted-foreground text-lg">{employee.emp_code || `EMP-${employee.id}`}</p>
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <StatusBadge variant={(employee.employee_status || employee.status) === "Active" ? "success" : (employee.employee_status || employee.status) === "On Leave" ? "info" : "warning"}>
-                  {employee.employee_status || employee.status || "Active"}
-                </StatusBadge>
-                {employee.role && (
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                    <Briefcase className="h-3.5 w-3.5" />
-                    {employee.role}
-                  </div>
+      <Separator />
+
+      {/* Main Content */}
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* Left Column - Main Details */}
+        <div className="md:col-span-2 space-y-6">
+          {/* Basic Information */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-4">
+                {employee.profile_photo_url && (
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage src={getProfilePhotoUrl(employee.profile_photo_url || null)} />
+                    <AvatarFallback className="text-lg">
+                      {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("") : "E"}
+                    </AvatarFallback>
+                  </Avatar>
                 )}
-                {employee.team_lead_name && (
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-muted text-foreground text-sm">
-                    <User className="h-3.5 w-3.5" />
-                    Reports to: {employee.team_lead_name}
-                  </div>
-                )}
+                <div>
+                  <CardTitle>{employee.name || "N/A"}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {employee.emp_code || `EMP-${employee.id}`}
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-6">
-        {/* Personal Information */}
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Contact Information */}
-            <Card className="shadow-lg border-0 bg-gradient-to-br from-primary/5 via-background to-primary/5">
-              <CardHeader className="border-b bg-gradient-to-r from-primary/10 to-transparent">
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5 text-primary" />
-                  Contact Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <Mail className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Email</p>
-                      <p className="text-base font-semibold break-words">{employee.email || "Not provided"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <Phone className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Mobile Number</p>
-                      <p className="text-base font-semibold">{employee.mobile || "Not provided"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <Calendar className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Date of Birth</p>
-                      <p className="text-base font-semibold">{formatDate(employee.date_of_birth)}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <User className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Gender</p>
-                      <p className="text-base font-semibold">{employee.gender || "Not provided"}</p>
-                    </div>
-                  </div>
-                  {employee.district && (
-                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                      <MapPin className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-muted-foreground mb-1">District</p>
-                        <p className="text-base font-semibold">{employee.district}</p>
-                      </div>
-                    </div>
-                  )}
-                  {employee.teams_id && (
-                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                      <MessageCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-muted-foreground mb-1">Teams ID</p>
-                        <p className="text-base font-semibold">{employee.teams_id}</p>
-                      </div>
-                    </div>
-                  )}
-                  {employee.whatsapp && (
-                    <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                      <MessageSquare className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-muted-foreground mb-1">WhatsApp</p>
-                        <p className="text-base font-semibold">{employee.whatsapp}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Emergency Contact */}
-            <Card className="shadow-lg border-0 bg-gradient-to-br from-orange-500/5 via-background to-orange-500/5">
-              <CardHeader className="border-b bg-gradient-to-r from-orange-500/10 to-transparent">
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5 text-orange-500" />
-                  Emergency Contact
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <User className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Contact Name</p>
-                    <p className="text-base font-semibold">{employee.emergency_contact_name || "Not provided"}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <User className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Relation</p>
-                    <p className="text-base font-semibold">{employee.emergency_contact_relation || "Not provided"}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <Phone className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Contact Number</p>
-                    <p className="text-base font-semibold">{employee.emergency_contact_number || "Not provided"}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Employment Information */}
-        <div className="space-y-6">
-          <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-500/5 via-background to-blue-500/5">
-            <CardHeader className="border-b bg-gradient-to-r from-blue-500/10 to-transparent">
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="h-5 w-5 text-blue-500" />
-                Employment Details
-              </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <Calendar className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Date of Joining</p>
-                    <p className="text-base font-semibold">{formatDate(employee.date_of_joining)}</p>
-                  </div>
+            <CardContent className="space-y-4">
+              {/* First Row: Name, Status, Role, Position in 4 columns */}
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Employee Name</Label>
+                  <div className="text-sm font-medium mt-1">{employee.name || "N/A"}</div>
                 </div>
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <CheckCircle className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Employee Status</p>
-                    <StatusBadge variant={(employee.employee_status || employee.status) === "Active" ? "success" : "warning"}>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Status</Label>
+                  <div className="mt-1">
+                    <StatusBadge 
+                      variant={(employee.employee_status || employee.status) === "Active" ? "success" : (employee.employee_status || employee.status) === "On Leave" ? "info" : "warning"}
+                      className="text-xs"
+                    >
                       {employee.employee_status || employee.status || "Active"}
                     </StatusBadge>
                   </div>
                 </div>
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <Briefcase className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Role</p>
-                    <p className="text-base font-semibold">{employee.role || "Not assigned"}</p>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Role</Label>
+                  <div className="text-sm font-medium mt-1">{employee.role || "Not assigned"}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Position</Label>
+                  <div className="text-sm font-medium mt-1">{employee.position || "Not assigned"}</div>
+                </div>
+              </div>
+
+              {/* Second Row: Date of Joining, Date of Birth in 2 columns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Date of Joining</Label>
+                  <div className="text-sm font-medium mt-1">{formatDate(employee.date_of_joining)}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Date of Birth</Label>
+                  <div className="text-sm font-medium mt-1">{formatDate(employee.date_of_birth)}</div>
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              <div>
+                <Label className="text-muted-foreground text-sm">Contact Information</Label>
+                <div className="grid grid-cols-2 gap-4 mt-1">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Email</div>
+                    <div className="text-sm font-medium">{employee.email || "Not provided"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Mobile</div>
+                    <div className="text-sm font-medium">{employee.mobile || "Not provided"}</div>
                   </div>
                 </div>
-                {employee.team_lead_name && (
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors md:col-span-3">
-                    <User className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Reports To</p>
-                      <p className="text-base font-semibold">{employee.team_lead_name}</p>
-                    </div>
-                  </div>
-                )}
-                {employee.is_team_lead && (
-                  <div className="flex items-center gap-3 p-4 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 md:col-span-3">
-                    <Shield className="h-5 w-5 text-primary" />
-                    <StatusBadge variant="info">Team Lead</StatusBadge>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Address */}
-        <div className="space-y-6">
-          <Card className="shadow-lg border-0 bg-gradient-to-br from-green-500/5 via-background to-green-500/5">
-            <CardHeader className="border-b bg-gradient-to-r from-green-500/10 to-transparent">
+          {/* Employment Details */}
+          <Card>
+            <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Home className="h-5 w-5 text-green-500" />
-                Address & Emergency Details
+                <Briefcase className="h-5 w-5" />
+                Employment Details
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Address Line 1</p>
-                      <p className="text-base font-semibold">{employee.address1 || "Not provided"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Address Line 2</p>
-                      <p className="text-base font-semibold">{employee.address2 || "Not provided"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Landmark</p>
-                      <p className="text-base font-semibold">{employee.landmark || "Not provided"}</p>
-                    </div>
-                  </div>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Role</Label>
+                  <div className="text-sm font-medium mt-1">{employee.role || "Not assigned"}</div>
                 </div>
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">State</p>
-                      <p className="text-base font-semibold">{employee.state || "Not provided"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">District</p>
-                      <p className="text-base font-semibold">{employee.district || "Not provided"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                    <MapPin className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">Pincode</p>
-                      <p className="text-base font-semibold">{employee.pincode || "Not provided"}</p>
-                    </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Position</Label>
+                  <div className="text-sm font-medium mt-1">{employee.position || "Not assigned"}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Date of Joining</Label>
+                  <div className="text-sm font-medium mt-1">{formatDate(employee.date_of_joining)}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Employee Status</Label>
+                  <div className="mt-1">
+                    <StatusBadge 
+                      variant={(employee.employee_status || employee.status) === "Active" ? "success" : (employee.employee_status || employee.status) === "On Leave" ? "info" : "warning"}
+                      className="text-xs"
+                    >
+                      {employee.employee_status || employee.status || "Active"}
+                    </StatusBadge>
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Bank Details */}
-        <div className="space-y-6">
-          <Card className="shadow-lg border-0 bg-gradient-to-br from-purple-500/5 via-background to-purple-500/5">
-            <CardHeader className="border-b bg-gradient-to-r from-purple-500/10 to-transparent">
+          {/* Address */}
+          <Card>
+            <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-purple-500" />
+                <Home className="h-5 w-5" />
+                Address
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-muted-foreground text-sm">Address Line 1</Label>
+                <div className="text-sm mt-1">{employee.address1 || "Not provided"}</div>
+              </div>
+              {employee.address2 && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">Address Line 2</Label>
+                  <div className="text-sm mt-1">{employee.address2}</div>
+                </div>
+              )}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">State</Label>
+                  <div className="text-sm mt-1">{employee.state || "Not provided"}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">District</Label>
+                  <div className="text-sm mt-1">{employee.district || "Not provided"}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Pincode</Label>
+                  <div className="text-sm mt-1">{employee.pincode || "Not provided"}</div>
+                </div>
+              </div>
+              {employee.landmark && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">Landmark</Label>
+                  <div className="text-sm mt-1">{employee.landmark}</div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Bank Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
                 Bank Details
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <Building className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Bank Name</p>
-                    <p className="text-base font-semibold">{employee.bank_name || "Not provided"}</p>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Bank Name</Label>
+                  <div className="text-sm font-medium mt-1">{employee.bank_name || "Not provided"}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Account Number</Label>
+                  <div className="text-sm font-medium font-mono mt-1">
+                    {employee.bank_account_number ? "••••" + employee.bank_account_number.slice(-4) : "Not provided"}
                   </div>
                 </div>
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <CreditCard className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Account Number</p>
-                    <p className="text-base font-semibold font-mono">{employee.bank_account_number ? "••••" + employee.bank_account_number.slice(-4) : "Not provided"}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 hover:bg-background transition-colors">
-                  <FileText className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">IFSC Code</p>
-                    <p className="text-base font-semibold font-mono">{employee.ifsc_code || "Not provided"}</p>
-                  </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">IFSC Code</Label>
+                  <div className="text-sm font-medium font-mono mt-1">{employee.ifsc_code || "Not provided"}</div>
                 </div>
               </div>
+              {employee.pf_uan_number && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">PF UAN Number</Label>
+                  <div className="text-sm font-medium mt-1">{employee.pf_uan_number}</div>
+                </div>
+              )}
             </CardContent>
           </Card>
-        </div>
 
-        {/* Leaves */}
-        <div className="space-y-6">
-          <Card className="shadow-md border-0">
-            <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent">
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-primary" />
-                Leave Balance
-              </CardTitle>
-              <CardDescription>Current leave balances</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-3 gap-6">
-                <div className="rounded-xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-6 hover:border-primary/40 transition-all hover:shadow-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <CalendarDays className="h-8 w-8 text-primary/60" />
-                  </div>
-                  <div className="text-4xl font-bold text-primary mb-1">
-                    {employee.annual_leave_count || 0}
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">Annual Leaves</p>
-                </div>
-                <div className="rounded-xl border-2 border-orange-500/20 bg-gradient-to-br from-orange-500/5 to-orange-500/10 p-6 hover:border-orange-500/40 transition-all hover:shadow-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <CalendarDays className="h-8 w-8 text-orange-500/60" />
-                  </div>
-                  <div className="text-4xl font-bold text-orange-500 mb-1">
-                    {employee.sick_leave_count || 0}
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">Sick Leaves</p>
-                </div>
-                <div className="rounded-xl border-2 border-green-500/20 bg-gradient-to-br from-green-500/5 to-green-500/10 p-6 hover:border-green-500/40 transition-all hover:shadow-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <CalendarDays className="h-8 w-8 text-green-500/60" />
-                  </div>
-                  <div className="text-4xl font-bold text-green-500 mb-1">
-                    {employee.casual_leave_count || 0}
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">Casual Leaves</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Documents */}
-        <div className="space-y-6">
-          <Card className="shadow-md border-0">
-            <CardHeader className="border-b bg-gradient-to-r from-primary/5 to-transparent">
-              <CardTitle className="flex items-center gap-2">
-                <FileCheck className="h-5 w-5 text-primary" />
-                Uploaded Documents
-              </CardTitle>
-              <CardDescription>View and manage your uploaded documents</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              {documents.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium">No documents uploaded yet</p>
-                  <p className="text-sm mt-2">Documents will appear here once uploaded</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Documents */}
+          {documents.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Documents ({documents.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
                   {documents.map((doc: any) => {
-                    const formatFileSize = (bytes: number) => {
-                      if (bytes === 0) return '0 Bytes';
-                      const k = 1024;
-                      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-                      const i = Math.floor(Math.log(bytes) / Math.log(k));
-                      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-                    };
-
-                    const getFileUrl = (filePath: string) => {
-                      return getImageUrl(filePath);
-                    };
-
-                    const isImage = doc.mime_type?.startsWith('image/');
-                    const fileUrl = getFileUrl(doc.file_path);
-
+                    const fileUrl = getImageUrl(doc.file_path);
                     return (
-                      <div
-                        key={doc.id}
-                        className="flex items-start justify-between rounded-xl border-2 border-border p-5 hover:border-primary/40 hover:shadow-md transition-all bg-card"
-                      >
-                        <div className="flex items-start gap-4 flex-1">
-                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 flex-shrink-0">
-                            {isImage ? (
-                              <FileText className="h-7 w-7 text-primary" />
-                            ) : (
-                              <FileText className="h-7 w-7 text-primary" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-lg">{doc.document_type}</p>
+                      <div key={doc.id} className="flex items-center justify-between p-3 border rounded">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium text-sm">{doc.document_type}</div>
                             {doc.document_number && (
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {doc.document_number}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              <span className="text-xs text-muted-foreground">
-                                {doc.file_name}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                • {formatFileSize(doc.file_size || 0)}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                • {new Date(doc.uploaded_at).toLocaleDateString()}
-                              </span>
-                            </div>
-                            {doc.verified ? (
-                              <StatusBadge variant="success" className="text-xs mt-2">
-                                <CheckCircle className="mr-1 h-3 w-3" />
-                                Verified
-                              </StatusBadge>
-                            ) : (
-                              <StatusBadge variant="warning" className="text-xs mt-2">
-                                <XCircle className="mr-1 h-3 w-3" />
-                                Pending Verification
-                              </StatusBadge>
+                              <div className="text-xs text-muted-foreground">{doc.document_number}</div>
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-2 ml-4">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shadow-sm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (fileUrl) {
-                                window.open(fileUrl, '_blank');
-                              }
-                            }}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            View
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shadow-sm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (fileUrl) {
-                                const link = document.createElement('a');
-                                link.href = fileUrl;
-                                link.download = doc.file_name;
-                                link.target = '_blank';
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                              }
-                            }}
-                          >
-                            <Download className="mr-2 h-4 w-4" />
-                            Download
-                          </Button>
+                        <div className="flex items-center gap-2">
+                          {doc.verified ? (
+                            <StatusBadge variant="success" className="text-xs">
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              Verified
+                            </StatusBadge>
+                          ) : (
+                            <StatusBadge variant="warning" className="text-xs">
+                              <XCircle className="mr-1 h-3 w-3" />
+                              Pending
+                            </StatusBadge>
+                          )}
+                          {fileUrl && (
+                            <>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => window.open(fileUrl, '_blank')}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  fetch(fileUrl)
+                                    .then(res => res.blob())
+                                    .then(blob => {
+                                      const url = window.URL.createObjectURL(blob);
+                                      const a = document.createElement('a');
+                                      a.href = url;
+                                      a.download = doc.file_name;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      window.URL.revokeObjectURL(url);
+                                      document.body.removeChild(a);
+                                    });
+                                }}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
                           {canManage && (
                             <>
                               {!doc.verified ? (
                                 <Button
                                   type="button"
-                                  variant="default"
+                                  variant="outline"
                                   size="sm"
-                                  className="shadow-sm"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    verifyDocumentMutation.mutate(doc.id);
-                                  }}
+                                  onClick={() => verifyDocumentMutation.mutate(doc.id)}
                                   disabled={verifyDocumentMutation.isPending}
                                 >
                                   {verifyDocumentMutation.isPending ? (
@@ -671,12 +459,7 @@ export default function EmployeeProfile() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="shadow-sm"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    unverifyDocumentMutation.mutate(doc.id);
-                                  }}
+                                  onClick={() => unverifyDocumentMutation.mutate(doc.id)}
                                   disabled={unverifyDocumentMutation.isPending}
                                 >
                                   {unverifyDocumentMutation.isPending ? (
@@ -694,7 +477,116 @@ export default function EmployeeProfile() {
                     );
                   })}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Right Column - Sidebar */}
+        <div className="space-y-6">
+          {/* Personal Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Personal Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label className="text-muted-foreground text-sm">Date of Birth</Label>
+                <div className="text-sm font-medium mt-1">{formatDate(employee.date_of_birth)}</div>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-sm">Gender</Label>
+                <div className="text-sm font-medium mt-1">{employee.gender || "Not provided"}</div>
+              </div>
+              {employee.district && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">District</Label>
+                  <div className="text-sm font-medium mt-1">{employee.district}</div>
+                </div>
               )}
+              {employee.teams_id && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">Teams ID</Label>
+                  <div className="text-sm font-medium mt-1">{employee.teams_id}</div>
+                </div>
+              )}
+              {employee.whatsapp && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">WhatsApp</Label>
+                  <div className="text-sm font-medium mt-1">{employee.whatsapp}</div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Team Lead */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Team Lead</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">{employee.team_lead_name || 'Unassigned'}</div>
+                  {employee.team_lead_email && (
+                    <div className="text-xs text-muted-foreground">{employee.team_lead_email}</div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Leave Balance */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5" />
+                Leave Balance
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label className="text-muted-foreground text-sm">Annual Leaves</Label>
+                <div className="text-2xl font-bold mt-1">{employee.annual_leave_count || 0}</div>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-sm">Sick Leaves</Label>
+                <div className="text-2xl font-bold mt-1">{employee.sick_leave_count || 0}</div>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-sm">Casual Leaves</Label>
+                <div className="text-2xl font-bold mt-1">{employee.casual_leave_count || 0}</div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Emergency Contact */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="h-5 w-5" />
+                Emergency Contact
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label className="text-muted-foreground text-sm">Contact Name</Label>
+                <div className="text-sm font-medium mt-1">{employee.emergency_contact_name || "Not provided"}</div>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-sm">Relation</Label>
+                <div className="text-sm font-medium mt-1">{employee.emergency_contact_relation || "Not provided"}</div>
+              </div>
+              <div>
+                <Label className="text-muted-foreground text-sm">Contact Number</Label>
+                <div className="text-sm font-medium mt-1">{employee.emergency_contact_number || "Not provided"}</div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -702,4 +594,3 @@ export default function EmployeeProfile() {
     </div>
   );
 }
-

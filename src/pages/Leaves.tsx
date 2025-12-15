@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, MoreHorizontal, Check, X, Eye, Filter, Calendar, Edit, Trash2, Loader2, User, Clock, CalendarDays, FileText, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -45,9 +45,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { StatusBadge, leaveStatusMap } from "@/components/ui/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pagination } from "@/components/ui/pagination";
 import { Separator } from "@/components/ui/separator";
 import { leavesApi, employeesApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
@@ -65,7 +64,8 @@ export default function Leaves() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [selectedLeave, setSelectedLeave] = useState<any>(null);
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
+  const [statusFilter, setStatusFilter] = useState<string>("");
 
   // Get current user info
   const currentUser = getCurrentUser();
@@ -96,14 +96,15 @@ export default function Leaves() {
 
   const currentEmployeeId = currentEmployeeData?.data?.id;
 
-  // Fetch leaves
+  // Fetch all leaves (fetch large number to get all, then filter client-side)
   const { data: leavesData, isLoading } = useQuery({
-    queryKey: ['leaves', page],
-    queryFn: () => leavesApi.getAll({ page, limit }),
+    queryKey: ['leaves'],
+    queryFn: () => leavesApi.getAll({ page: 1, limit: 10000 }),
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
-  const leaves = leavesData?.data || [];
-  const pagination = leavesData?.pagination || { total: 0, totalPages: 0 };
+  const allLeaves = leavesData?.data || [];
   
   // Helper function to check if current user can approve/reject a leave
   const canApproveRejectLeave = (leave: any) => {
@@ -263,31 +264,35 @@ export default function Leaves() {
     setShowViewDialog(true);
   };
 
-  const filteredLeaves = leaves.filter(
-    (l: any) =>
-      (l.employee_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (l.emp_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (l.id?.toString() || '').includes(searchQuery)
-  );
+  // Client-side filtering for search and status
+  const filteredLeaves = allLeaves.filter((leave: any) => {
+    const matchesSearch = !searchQuery || 
+      (leave.employee_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (leave.emp_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (leave.id?.toString() || '').includes(searchQuery);
+    
+    const matchesStatus = !statusFilter || leave.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
 
-  const stats = {
-    total: pagination.total || 0,
-    pending: leaves.filter((l: any) => l.status === 'Pending').length,
-    approved: leaves.filter((l: any) => l.status === 'Approved').length,
-    totalDays: leaves
-      .filter((l: any) => l.status === 'Approved')
-      .reduce((acc: number, l: any) => acc + (l.duration || 0), 0),
-  };
+  // Client-side pagination
+  const paginatedLeaves = filteredLeaves.slice((page - 1) * limit, page * limit);
+  const total = filteredLeaves.length;
+  const totalPages = Math.ceil(total / limit);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Calendar className="h-8 w-8 text-primary" />
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Calendar className="h-6 w-6 text-primary" />
+            </div>
             Leave Management
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-2">
             {canApproveLeaves ? "Track and approve employee leave requests" : "View and manage your leave requests"}
           </p>
         </div>
@@ -364,186 +369,234 @@ export default function Leaves() {
         </Dialog>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-xs text-muted-foreground">Total Requests</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-warning">{stats.pending}</div>
-            <p className="text-xs text-muted-foreground">Pending</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-success">{stats.approved}</div>
-            <p className="text-xs text-muted-foreground">Approved</p>
-          </CardContent>
-        </Card>
-        <Card className="glass-card">
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.totalDays}</div>
-            <p className="text-xs text-muted-foreground">Total Days (Approved)</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="glass-card">
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">All Leave Requests</CardTitle>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search leaves..."
-                  className="pl-9"
-                  value={searchQuery}
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>Search and filter leave requests</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by employee name, employee code, or leave ID..."
+                value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setPage(1);
                 }}
-                />
+                className="pl-10"
+              />
+            </div>
+            <Select 
+              value={statusFilter || "all"} 
+              onValueChange={(value) => {
+                setStatusFilter(value === "all" ? "" : value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="Pending">Pending</SelectItem>
+                <SelectItem value="Approved">Approved</SelectItem>
+                <SelectItem value="Rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Leaves Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Leave Requests ({filteredLeaves.length})</CardTitle>
+              <CardDescription>List of all leave requests</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : filteredLeaves.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No leave requests found
+            <div className="text-center py-12">
+              <Calendar className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No leave requests found</h3>
+              <p className="text-muted-foreground">
+                {searchQuery || statusFilter
+                  ? 'Try adjusting your filters'
+                  : 'No leave requests available'}
+              </p>
             </div>
           ) : (
-            <>
+            <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Leave ID</TableHead>
+                    <TableHead className="w-[120px]">Leave ID</TableHead>
                     {canApproveLeaves && <TableHead>Employee</TableHead>}
                     <TableHead>Type</TableHead>
                     <TableHead>Start Date</TableHead>
                     <TableHead>End Date</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLeaves.map((l: any) => (
+                  {paginatedLeaves.map((l: any) => (
                     <TableRow 
                       key={l.id}
-                      className="cursor-pointer hover:bg-muted/50"
+                      className="hover:bg-muted/50 cursor-pointer"
                       onClick={() => handleView(l)}
                     >
-                      <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
-                        LV-{String(l.id).padStart(4, '0')}
+                      <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
+                        <span className="font-mono text-sm">LV-{String(l.id).padStart(4, '0')}</span>
                       </TableCell>
                       {canApproveLeaves && (
-                        <TableCell className="font-medium">{l.employee_name || 'N/A'}</TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium">{l.employee_name || 'N/A'}</span>
+                        </TableCell>
                       )}
                       <TableCell>
-                        <StatusBadge variant={l.leave_type === "Sick" ? "error" : l.leave_type === "Annual" ? "info" : "neutral"}>
+                        <Badge variant="outline" className="capitalize">
                           {l.leave_type}
-                        </StatusBadge>
+                        </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(l.start_date).toLocaleDateString("en-US", {
+                      <TableCell>
+                        <span className="text-sm">{new Date(l.start_date).toLocaleDateString("en-US", {
                           month: "short",
                           day: "numeric",
                           year: "numeric",
-                        })}
+                        })}</span>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(l.end_date).toLocaleDateString("en-US", {
+                      <TableCell>
+                        <span className="text-sm">{new Date(l.end_date).toLocaleDateString("en-US", {
                           month: "short",
                           day: "numeric",
                           year: "numeric",
-                        })}
+                        })}</span>
                       </TableCell>
-                      <TableCell>{l.duration || 0} day{(l.duration || 0) > 1 ? "s" : ""}</TableCell>
+                      <TableCell>
+                        <span className="text-sm">{l.duration || 0} day{(l.duration || 0) > 1 ? "s" : ""}</span>
+                      </TableCell>
                       <TableCell>
                         <StatusBadge variant={leaveStatusMap[l.status as keyof typeof leaveStatusMap] || 'neutral'}>
                           {l.status}
                         </StatusBadge>
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          {l.status === "Pending" && canApproveRejectLeave(l) && (
-                            <>
-                              {canAcceptLeaves && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-status-success hover:text-status-success"
-                                  onClick={() => handleApprove(l)}
-                                  disabled={approveRejectMutation.isPending}
-                                >
-                                  <Check className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {canRejectLeaves && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-status-error hover:text-status-error"
-                                  onClick={() => handleReject(l)}
-                                  disabled={approveRejectMutation.isPending}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleView(l)}>
-                                <Eye className="mr-2 h-4 w-4" />
-                                View Details
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleView(l)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            {l.status === "Pending" && canApproveRejectLeave(l) && (
+                              <>
+                                {canAcceptLeaves && (
+                                  <DropdownMenuItem onClick={() => handleApprove(l)}>
+                                    <Check className="mr-2 h-4 w-4" />
+                                    Approve
+                                  </DropdownMenuItem>
+                                )}
+                                {canRejectLeaves && (
+                                  <DropdownMenuItem onClick={() => handleReject(l)} className="text-destructive">
+                                    <X className="mr-2 h-4 w-4" />
+                                    Reject
+                                  </DropdownMenuItem>
+                                )}
+                              </>
+                            )}
+                            {l.status === 'Pending' && (
+                              <DropdownMenuItem onClick={() => handleEdit(l)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
                               </DropdownMenuItem>
-                              {l.status === 'Pending' && (
-                                <DropdownMenuItem onClick={() => handleEdit(l)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                              )}
-                              {l.status === 'Pending' && (
-                                <DropdownMenuItem 
-                                  onClick={() => handleDelete(l)}
-                                  className="text-destructive"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
+                            )}
+                            {l.status === 'Pending' && (
+                              <DropdownMenuItem 
+                                onClick={() => handleDelete(l)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              {pagination.totalPages > 1 && (
-                <Pagination
-                  currentPage={page}
-                  totalPages={pagination.totalPages}
-                  onPageChange={setPage}
-                  total={pagination.total}
-                  limit={limit}
-                />
-              )}
-            </>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {total > 0 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} leave requests
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="page-limit" className="text-sm text-muted-foreground">
+                    Rows per page:
+                  </Label>
+                  <Select
+                    value={limit.toString()}
+                    onValueChange={(value) => {
+                      setLimit(Number(value));
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-20" id="page-limit">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={page >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

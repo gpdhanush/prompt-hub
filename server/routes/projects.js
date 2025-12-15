@@ -1214,6 +1214,35 @@ router.post('/:id/comments', async (req, res) => {
 });
 
 // Get comments
+// Get project activities (commits, PRs, issues from GitHub/Bitbucket)
+router.get('/:id/activities', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { activity_type, limit = 50 } = req.query;
+    
+    let query = `
+      SELECT * FROM project_activities 
+      WHERE project_id = ?
+    `;
+    const params = [id];
+    
+    if (activity_type) {
+      query += ' AND activity_type = ?';
+      params.push(activity_type);
+    }
+    
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(parseInt(limit));
+    
+    const [activities] = await db.query(query, params);
+    
+    res.json({ data: activities || [] });
+  } catch (error) {
+    logger.error('Error fetching project activities:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;

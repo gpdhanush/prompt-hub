@@ -1,0 +1,32 @@
+-- Create table to store GitHub/Bitbucket activity (commits, pushes, etc.)
+CREATE TABLE IF NOT EXISTS `project_activities` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `project_id` INT UNSIGNED NOT NULL,
+  `activity_type` ENUM('push', 'commit', 'pull_request', 'issue', 'branch_created', 'branch_deleted', 'tag_created') NOT NULL,
+  `repository_url` VARCHAR(500) NOT NULL,
+  `branch` VARCHAR(255) DEFAULT NULL,
+  `commit_sha` VARCHAR(40) DEFAULT NULL,
+  `commit_message` TEXT DEFAULT NULL,
+  `commit_author` VARCHAR(255) DEFAULT NULL,
+  `commit_author_email` VARCHAR(255) DEFAULT NULL,
+  `commit_url` VARCHAR(500) DEFAULT NULL,
+  `files_changed` INT DEFAULT 0,
+  `additions` INT DEFAULT 0,
+  `deletions` INT DEFAULT 0,
+  `pull_request_number` INT DEFAULT NULL,
+  `pull_request_title` VARCHAR(500) DEFAULT NULL,
+  `pull_request_url` VARCHAR(500) DEFAULT NULL,
+  `issue_number` INT DEFAULT NULL,
+  `issue_title` VARCHAR(500) DEFAULT NULL,
+  `issue_url` VARCHAR(500) DEFAULT NULL,
+  `raw_payload` JSON DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON DELETE CASCADE,
+  INDEX `idx_project_id` (`project_id`),
+  INDEX `idx_activity_type` (`activity_type`),
+  INDEX `idx_created_at` (`created_at`),
+  INDEX `idx_repository_url` (`repository_url`(255))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

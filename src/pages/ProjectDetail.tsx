@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X, GitCommit, GitBranch, GitPullRequest, GitMerge } from "lucide-react";
 import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
@@ -233,6 +234,20 @@ export default function ProjectDetail() {
   const { data: commentsData } = useQuery({
     queryKey: ['project-comments', id],
     queryFn: () => projectsApi.getComments(Number(id)),
+    enabled: !!id,
+  });
+
+  // Fetch project activities (GitHub/Bitbucket commits, PRs, etc.)
+  const { data: activitiesData } = useQuery({
+    queryKey: ['project-activities', id],
+    queryFn: () => projectsApi.getActivities(Number(id), undefined, 20),
+    enabled: !!id,
+  });
+
+  // Fetch project activities (GitHub/Bitbucket commits, PRs, etc.)
+  const { data: activitiesData } = useQuery({
+    queryKey: ['project-activities', id],
+    queryFn: () => projectsApi.getActivities(Number(id), undefined, 20),
     enabled: !!id,
   });
 
@@ -597,6 +612,67 @@ export default function ProjectDetail() {
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Repository Activity */}
+          {activitiesData?.data && activitiesData.data.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Github className="h-5 w-5" />
+                  Repository Activity ({activitiesData.data.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {activitiesData.data.map((activity: any) => (
+                  <div key={activity.id} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                    <div className="mt-0.5">
+                      {activity.activity_type === 'push' && <GitCommit className="h-4 w-4 text-primary" />}
+                      {activity.activity_type === 'pull_request' && <GitPullRequest className="h-4 w-4 text-blue-500" />}
+                      {activity.activity_type === 'issue' && <AlertTriangle className="h-4 w-4 text-orange-500" />}
+                      {activity.activity_type === 'branch_created' && <GitBranch className="h-4 w-4 text-green-500" />}
+                      {activity.activity_type === 'branch_deleted' && <GitBranch className="h-4 w-4 text-red-500" />}
+                      {activity.activity_type === 'tag_created' && <Flag className="h-4 w-4 text-purple-500" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">
+                          {activity.activity_type === 'push' && activity.commit_message}
+                          {activity.activity_type === 'pull_request' && `PR #${activity.pull_request_number}: ${activity.pull_request_title}`}
+                          {activity.activity_type === 'issue' && `Issue #${activity.issue_number}: ${activity.issue_title}`}
+                          {activity.activity_type === 'branch_created' && `Branch created: ${activity.branch}`}
+                          {activity.activity_type === 'branch_deleted' && `Branch deleted: ${activity.branch}`}
+                          {activity.activity_type === 'tag_created' && `Tag created: ${activity.branch}`}
+                        </span>
+                        {activity.branch && (
+                          <Badge variant="outline" className="text-xs">
+                            {activity.branch}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        <span>{activity.commit_author || 'Unknown'}</span>
+                        <span>•</span>
+                        <span>{formatDate(activity.created_at)}</span>
+                        {(activity.commit_url || activity.pull_request_url || activity.issue_url) && (
+                          <>
+                            <span>•</span>
+                            <a
+                              href={activity.commit_url || activity.pull_request_url || activity.issue_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              View
+                            </a>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
