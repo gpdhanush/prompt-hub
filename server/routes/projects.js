@@ -67,6 +67,7 @@ router.get('/', async (req, res) => {
     const userRole = req.user?.role || '';
     
     logger.debug('=== PROJECTS LIST REQUEST ===');
+    logger.debug('Full query params:', req.query);
     logger.debug('my_projects query param:', my_projects);
     logger.debug('my_projects type:', typeof my_projects);
     logger.debug('userId:', userId);
@@ -103,14 +104,19 @@ router.get('/', async (req, res) => {
     
     // Filter by user's projects only if my_projects filter is explicitly set and truthy
     // Check for string values like 'true', '1', or actual truthy values
-    const shouldFilterMyProjects = my_projects && 
-      my_projects !== 'false' && 
-      my_projects !== '0' && 
-      my_projects !== '' &&
-      my_projects !== 'undefined' &&
+    // Convert to string for consistent comparison
+    const myProjectsStr = String(my_projects || '');
+    const shouldFilterMyProjects = my_projects !== undefined && 
+      my_projects !== null &&
+      myProjectsStr !== 'false' && 
+      myProjectsStr !== '0' && 
+      myProjectsStr !== '' &&
+      myProjectsStr !== 'undefined' &&
+      (myProjectsStr === 'true' || myProjectsStr === '1' || Number(myProjectsStr) === 1) &&
       userId;
     
     logger.debug('shouldFilterMyProjects:', shouldFilterMyProjects);
+    logger.debug('my_projects value:', my_projects, 'type:', typeof my_projects);
     
     if (shouldFilterMyProjects) {
       logger.debug('Applying "My Projects" filter');
@@ -156,11 +162,14 @@ router.get('/', async (req, res) => {
     const countParams = [];
     
     // Use same filter logic for count query
-    const shouldFilterMyProjectsCount = my_projects && 
-      my_projects !== 'false' && 
-      my_projects !== '0' && 
-      my_projects !== '' &&
-      my_projects !== 'undefined' &&
+    const myProjectsStrCount = String(my_projects || '');
+    const shouldFilterMyProjectsCount = my_projects !== undefined && 
+      my_projects !== null &&
+      myProjectsStrCount !== 'false' && 
+      myProjectsStrCount !== '0' && 
+      myProjectsStrCount !== '' &&
+      myProjectsStrCount !== 'undefined' &&
+      (myProjectsStrCount === 'true' || myProjectsStrCount === '1' || Number(myProjectsStrCount) === 1) &&
       userId;
     
     if (shouldFilterMyProjectsCount) {
@@ -463,6 +472,14 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
 router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    
+    logger.debug('=== PROJECT UPDATE REQUEST ===');
+    logger.debug('Project ID:', id);
+    logger.debug('User ID:', userId);
+    logger.debug('User Role:', userRole);
+    logger.debug('Request body keys:', Object.keys(req.body));
     
     // Validate and sanitize text inputs
     const textFields = ['name', 'description', 'client_name', 'client_contact_person', 'client_email', 
@@ -584,21 +601,30 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
     updateValues.push(id);
     
     if (updateFields.length > 2) { // More than just updated_by and updated_at
+      logger.debug('Updating project with fields:', updateFields);
+      logger.debug('Update values count:', updateValues.length);
       const [result] = await db.query(`
         UPDATE projects 
         SET ${updateFields.join(', ')}
         WHERE id = ?
       `, updateValues);
       
+      logger.debug('Update result - affectedRows:', result.affectedRows);
+      
       if (result.affectedRows === 0) {
         return res.status(404).json({ error: 'Project not found' });
       }
+    } else {
+      logger.debug('No fields to update (only updated_by and updated_at)');
     }
     
     // Update project members if provided
     // Get existing members before update for notification comparison
     let existingMemberIds = [];
+    logger.debug('Processing member_ids - provided:', member_ids !== undefined, 'isArray:', Array.isArray(member_ids));
     if (member_ids !== undefined && Array.isArray(member_ids)) {
+      logger.debug('member_ids array length:', member_ids.length);
+      logger.debug('member_ids values:', member_ids);
       const [existingMembers] = await db.query(
         'SELECT user_id FROM project_users WHERE project_id = ?',
         [id]
@@ -610,17 +636,24 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
       
       // Add new members with roles
       if (member_ids.length > 0) {
+        logger.debug('Adding', member_ids.length, 'members to project');
         const memberPromises = member_ids
           .filter(memberId => memberId && memberId !== '')
           .map(userId => {
-            const role = (member_roles && member_roles[userId]) || 'employee';
+            const role = (member_roles && member_roles[userId]) || (member_roles && member_roles[userId.toString()]) || 'employee';
+            logger.debug(`Adding member - userId: ${userId} (type: ${typeof userId}), role: ${role}`);
             return db.query(`
               INSERT INTO project_users (project_id, user_id, role_in_project)
               VALUES (?, ?, ?)
             `, [id, userId, role]);
           });
         await Promise.all(memberPromises);
+        logger.debug('All members added successfully');
+      } else {
+        logger.debug('No members to add (empty array)');
       }
+    } else {
+      logger.debug('member_ids not provided or not an array - skipping member update');
     }
     
     // Update milestones if provided
@@ -671,9 +704,11 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
       }
     }
     
+    logger.debug('Project updated successfully');
     res.json({ data: updated[0] });
   } catch (error) {
     logger.error('Update project error:', error);
+    logger.error('Error stack:', error.stack);
     res.status(500).json({ error: error.message });
   }
 });

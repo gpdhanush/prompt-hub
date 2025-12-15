@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,6 +39,34 @@ import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 
+// Component to handle project image with error fallback
+const ProjectImage = ({ src, alt, className }: { src: string; alt: string; className?: string }) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  if (imageError) {
+    return (
+      <div className={`${className} bg-muted flex items-center justify-center`}>
+        <ImageIcon className="h-5 w-5 text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => {
+        setImageError(true);
+        setImageLoading(false);
+      }}
+      onLoad={() => setImageLoading(false)}
+      style={{ display: imageLoading ? 'none' : 'block' }}
+    />
+  );
+};
+
 type Project = {
   id: number;
   project_code?: string;
@@ -57,6 +85,7 @@ type Project = {
   team_lead_name?: string;
   team_lead_email?: string;
   member_count?: number;
+  logo_url?: string;
 };
 
 export default function Projects() {
@@ -328,7 +357,18 @@ export default function Projects() {
                   <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
                         {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
                   </TableCell>
-                  <TableCell className="font-medium">{project.name}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      {project.logo_url && (
+                        <ProjectImage 
+                          src={project.logo_url} 
+                          alt={project.name}
+                          className="h-10 w-10 rounded object-cover border flex-shrink-0"
+                        />
+                      )}
+                      <span className="font-medium">{project.name}</span>
+                    </div>
+                  </TableCell>
                       <TableCell className="text-muted-foreground">
                         {project.team_lead_name || '-'}
                       </TableCell>

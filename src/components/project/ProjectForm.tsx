@@ -101,7 +101,7 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
   const { data: projectData, isLoading, error } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => projectsApi.getById(Number(projectId)),
-    enabled: mode === 'edit' && !!projectId,
+    enabled: mode === 'edit' && !!projectId && !isNaN(Number(projectId)) && Number(projectId) > 0,
   });
 
   // Fetch users for dropdowns
@@ -235,9 +235,15 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
       navigate(`/projects/${projectId}`);
     },
     onError: (error: any) => {
+      logger.error('Project update error:', error);
+      const errorMessage = error?.response?.data?.error || 
+                          error?.response?.data?.message || 
+                          error?.message || 
+                          "Failed to update project.";
+      const errorDetails = error?.response?.data?.details || '';
       toast({ 
         title: "Error", 
-        description: error.message || "Failed to update project.",
+        description: errorDetails ? `${errorMessage}: ${errorDetails}` : errorMessage,
         variant: "destructive",
       });
     },
@@ -255,13 +261,35 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
       return;
     }
 
-    const submitData = {
+    // Convert member_ids from strings to numbers for API
+    const memberIds = formData.member_ids
+      .filter(id => id && id !== '')
+      .map(id => Number(id))
+      .filter(id => !isNaN(id));
+
+    // Ensure member_roles has both string and number keys for compatibility
+    const memberRoles: Record<string, string> = {};
+    memberIds.forEach(userId => {
+      const userIdStr = userId.toString();
+      const role = formData.member_roles[userIdStr] || formData.member_roles[userId] || 'employee';
+      // Store with both string and number keys
+      memberRoles[userIdStr] = role;
+      memberRoles[userId] = role;
+    });
+
+    const submitData: any = {
       ...formData,
-      member_ids: formData.member_ids.filter(id => id),
+      team_lead_id: formData.team_lead_id && formData.team_lead_id.trim() !== '' 
+        ? Number(formData.team_lead_id) 
+        : null,
+      member_ids: memberIds,
+      member_roles: memberRoles,
       milestones: formData.milestones.filter(m => m.name),
       technologies_used: formData.technologies_used,
-      comments: formData.comments.filter(c => c.comment.trim()),
     };
+    
+    // Remove comments as they're not part of project update
+    delete submitData.comments;
 
     if (mode === 'create') {
       createMutation.mutate(submitData);
@@ -316,27 +344,47 @@ export default function ProjectForm({ projectId, mode }: ProjectFormProps) {
     setFormData({ ...formData, member_ids: memberIds, member_roles: memberRoles });
   };
 
-  if (mode === 'edit' && isLoading) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  if (mode === 'edit') {
+    // Check if projectId is valid
+    if (!projectId || isNaN(Number(projectId)) || Number(projectId) <= 0) {
+      return (
+        <div className="container mx-auto p-6">
+          <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+            <div className="text-destructive">Invalid project ID.</div>
+            <Button onClick={() => navigate('/projects')} variant="outline">
+              Back to Projects
+            </Button>
+          </div>
         </div>
-      </div>
-    );
-  }
-
-  if (mode === 'edit' && (error || !projectData?.data)) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-          <div className="text-destructive">Error loading project details.</div>
-          <Button onClick={() => navigate('/projects')} variant="outline">
-            Back to Projects
-          </Button>
+      );
+    }
+    
+    // Check for loading state
+    if (isLoading) {
+      return (
+        <div className="container mx-auto p-6">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    
+    // Check for error state
+    if (error || !projectData?.data) {
+      return (
+        <div className="container mx-auto p-6">
+          <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+            <div className="text-destructive">
+              {error ? `Error loading project details: ${error instanceof Error ? error.message : 'Unknown error'}` : 'Project not found.'}
+            </div>
+            <Button onClick={() => navigate('/projects')} variant="outline">
+              Back to Projects
+            </Button>
+          </div>
+        </div>
+      );
+    }
   }
 
   return (
