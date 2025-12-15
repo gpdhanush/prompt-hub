@@ -1,0 +1,80 @@
+# Apache Configuration for Vite SPA Deployment
+# Place this file in the same directory as your index.html (dist folder)
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # Handle Angular and React Router - redirect all requests to index.html
+  # But exclude actual files and directories
+  RewriteBase /
+  
+  # Don't rewrite files that exist
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  
+  # Don't rewrite assets, API calls, or other static resources
+  RewriteCond %{REQUEST_URI} !^/assets/
+  RewriteCond %{REQUEST_URI} !^/manifest.json
+  RewriteCond %{REQUEST_URI} !^/sw.js
+  RewriteCond %{REQUEST_URI} !^/firebase-messaging-sw.js
+  RewriteCond %{REQUEST_URI} !^/robots.txt
+  RewriteCond %{REQUEST_URI} !^/favicon.ico
+  RewriteCond %{REQUEST_URI} !^/offline.html
+  
+  # Rewrite everything else to index.html
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Set proper MIME types
+<IfModule mod_mime.c>
+  # JavaScript
+  AddType application/javascript js mjs
+  AddType application/json json
+  
+  # CSS
+  AddType text/css css
+  
+  # Images
+  AddType image/png png
+  AddType image/jpeg jpg jpeg
+  AddType image/svg+xml svg
+  AddType image/x-icon ico
+  
+  # Fonts
+  AddType font/woff woff
+  AddType font/woff2 woff2
+  AddType application/font-woff woff
+  AddType application/font-woff2 woff2
+  
+  # Manifest
+  AddType application/manifest+json webmanifest json
+</IfModule>
+
+# Enable compression
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+  AddOutputFilterByType DEFLATE application/javascript application/json
+  AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# Cache static assets
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresByType application/javascript "access plus 1 month"
+  ExpiresByType application/json "access plus 0 seconds"
+  ExpiresByType text/html "access plus 0 seconds"
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+  # Prevent MIME type sniffing
+  Header set X-Content-Type-Options "nosniff"
+  # XSS Protection
+  Header set X-XSS-Protection "1; mode=block"
+  # Prevent clickjacking
+  Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
