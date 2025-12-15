@@ -55,8 +55,9 @@ services:
         value: "image/jpeg,image/png,image/jpg,application/pdf"
 
   # Frontend Service (Static Site)
-  - type: static
+  - type: web
     name: prompt-hub-frontend
+    env: static
     plan: starter
     region: oregon
     buildCommand: npm install && npm run build
