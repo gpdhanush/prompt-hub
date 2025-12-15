@@ -37,36 +37,143 @@ function verifyGitHubSignature(req, res, next) {
   next();
 }
 
+// Normalize repository URL for comparison
+function normalizeRepoUrl(url) {
+  if (!url) return '';
+  return url
+    .replace(/\.git$/, '')           // Remove .git suffix
+    .replace(/\/$/, '')              // Remove trailing slash
+    .toLowerCase()                   // Convert to lowercase
+    .trim();                         // Remove whitespace
+}
+
+// Extract repository path from URL (e.g., "gpdhanush/prompt-hub" from "https://github.com/gpdhanush/prompt-hub")
+function extractRepoPath(url) {
+  if (!url) return '';
+  try {
+    const normalized = normalizeRepoUrl(url);
+    // Match patterns like:
+    // - https://github.com/owner/repo
+    // - https://bitbucket.org/owner/repo
+    // - git@github.com:owner/repo
+    const patterns = [
+      /github\.com[\/:]([^\/]+)\/([^\/\s]+)/,
+      /bitbucket\.org[\/:]([^\/]+)\/([^\/\s]+)/,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = normalized.match(pattern);
+      if (match) {
+        return `${match[1]}/${match[2]}`;
+      }
+    }
+    return normalized;
+  } catch (error) {
+    return normalizeRepoUrl(url);
+  }
+}
+
 // Find project by repository URL
 async function findProjectByRepoUrl(repoUrl) {
   try {
-    // Normalize the URL (remove .git, trailing slashes, etc.)
-    const normalizedUrl = repoUrl
-      .replace(/\.git$/, '')
-      .replace(/\/$/, '')
-      .toLowerCase();
-
-    // Search in both github_repo_url and bitbucket_repo_url fields
-    const [projects] = await db.query(
-      `SELECT id, name, project_code, github_repo_url, bitbucket_repo_url 
-       FROM projects 
-       WHERE LOWER(REPLACE(REPLACE(github_repo_url, '.git', ''), '/', '')) = ? 
-          OR LOWER(REPLACE(REPLACE(bitbucket_repo_url, '.git', ''), '/', '')) = ?`,
-      [normalizedUrl.replace(/\//g, ''), normalizedUrl.replace(/\//g, '')]
-    );
-
-    // Also try exact match
-    if (projects.length === 0) {
-      const [exactProjects] = await db.query(
-        `SELECT id, name, project_code, github_repo_url, bitbucket_repo_url 
-         FROM projects 
-         WHERE github_repo_url = ? OR bitbucket_repo_url = ?`,
-        [repoUrl, repoUrl]
-      );
-      return exactProjects[0] || null;
+    if (!repoUrl) {
+      logger.warn('Empty repository URL provided');
+      return null;
     }
 
-    return projects[0] || null;
+    const normalizedUrl = normalizeRepoUrl(repoUrl);
+    const repoPath = extractRepoPath(repoUrl);
+    
+    logger.debug('Finding project for repo URL:', repoUrl);
+    logger.debug('Normalized URL:', normalizedUrl);
+    logger.debug('Extracted repo path:', repoPath);
+
+    // Strategy 1: Try exact match (case-insensitive)
+    let [projects] = await db.query(
+      `SELECT id, name, project_code, github_repo_url, bitbucket_repo_url 
+       FROM projects 
+       WHERE LOWER(TRIM(github_repo_url)) = ? 
+          OR LOWER(TRIM(bitbucket_repo_url)) = ?`,
+      [normalizedUrl, normalizedUrl]
+    );
+
+    // Strategy 2: Try normalized match (remove .git, trailing slashes)
+    if (projects.length === 0) {
+      [projects] = await db.query(
+        `SELECT id, name, project_code, github_repo_url, bitbucket_repo_url 
+         FROM projects 
+         WHERE LOWER(REPLACE(REPLACE(TRIM(github_repo_url), '.git', ''), '/', '')) = LOWER(REPLACE(REPLACE(?, '.git', ''), '/', ''))
+            OR LOWER(REPLACE(REPLACE(TRIM(bitbucket_repo_url), '.git', ''), '/', '')) = LOWER(REPLACE(REPLACE(?, '.git', ''), '/', ''))`,
+        [repoUrl, repoUrl]
+      );
+    }
+
+    // Strategy 3: Try matching by repository path (owner/repo)
+    if (projects.length === 0 && repoPath) {
+      [projects] = await db.query(
+        `SELECT id, name, project_code, github_repo_url, bitbucket_repo_url 
+         FROM projects 
+         WHERE LOWER(github_repo_url) LIKE ? 
+            OR LOWER(bitbucket_repo_url) LIKE ?
+            OR LOWER(REPLACE(REPLACE(REPLACE(github_repo_url, 'https://', ''), 'http://', ''), '.git', '')) LIKE ?
+            OR LOWER(REPLACE(REPLACE(REPLACE(bitbucket_repo_url, 'https://', ''), 'http://', ''), '.git', '')) LIKE ?`,
+        [`%${repoPath}%`, `%${repoPath}%`, `%${repoPath}%`, `%${repoPath}%`]
+      );
+    }
+
+    // Strategy 4: Try partial match (contains the repo path)
+    if (projects.length === 0 && repoPath) {
+      const repoParts = repoPath.split('/');
+      if (repoParts.length === 2) {
+        const [owner, repo] = repoParts;
+        [projects] = await db.query(
+          `SELECT id, name, project_code, github_repo_url, bitbucket_repo_url 
+           FROM projects 
+           WHERE (github_repo_url IS NOT NULL AND (
+             LOWER(github_repo_url) LIKE ? OR 
+             LOWER(github_repo_url) LIKE ? OR
+             LOWER(github_repo_url) LIKE ?
+           ))
+           OR (bitbucket_repo_url IS NOT NULL AND (
+             LOWER(bitbucket_repo_url) LIKE ? OR 
+             LOWER(bitbucket_repo_url) LIKE ? OR
+             LOWER(bitbucket_repo_url) LIKE ?
+           ))`,
+          [
+            `%${owner}/${repo}%`,
+            `%${owner}%${repo}%`,
+            `%${repo}%`,
+            `%${owner}/${repo}%`,
+            `%${owner}%${repo}%`,
+            `%${repo}%`
+          ]
+        );
+      }
+    }
+
+    if (projects.length > 0) {
+      logger.info(`Found project: ${projects[0].project_code} (${projects[0].name}) for repo: ${repoUrl}`);
+      logger.debug('Matched URL:', projects[0].github_repo_url || projects[0].bitbucket_repo_url);
+      return projects[0];
+    }
+
+    logger.warn(`No project found for repository: ${repoUrl}`);
+    logger.debug('Tried matching with:', { normalizedUrl, repoPath });
+    
+    // Log all projects with repo URLs for debugging
+    const [allProjects] = await db.query(
+      `SELECT id, project_code, name, github_repo_url, bitbucket_repo_url 
+       FROM projects 
+       WHERE github_repo_url IS NOT NULL OR bitbucket_repo_url IS NOT NULL
+       LIMIT 10`
+    );
+    logger.debug('Available projects with repo URLs:', allProjects.map(p => ({
+      code: p.project_code,
+      github: p.github_repo_url,
+      bitbucket: p.bitbucket_repo_url
+    })));
+
+    return null;
   } catch (error) {
     logger.error('Error finding project by repo URL:', error);
     return null;
@@ -239,9 +346,32 @@ router.post('/github', express.json({ verify: (req, res, buf) => { req.rawBody =
     const project = await findProjectByRepoUrl(repoUrl);
     if (!project) {
       logger.warn(`No project found for repository: ${repoUrl}`);
+      
+      // Get all projects with repo URLs for debugging
+      try {
+        const [allProjects] = await db.query(
+          `SELECT id, project_code, name, github_repo_url, bitbucket_repo_url 
+           FROM projects 
+           WHERE github_repo_url IS NOT NULL OR bitbucket_repo_url IS NOT NULL
+           LIMIT 20`
+        );
+        logger.debug('Available projects with repository URLs:', 
+          allProjects.map(p => ({
+            code: p.project_code,
+            name: p.name,
+            github: p.github_repo_url,
+            bitbucket: p.bitbucket_repo_url
+          }))
+        );
+      } catch (err) {
+        logger.error('Error fetching projects for debugging:', err);
+      }
+      
       return res.status(404).json({ 
         error: 'Project not found',
-        message: `No project found matching repository URL: ${repoUrl}`
+        message: `No project found matching repository URL: ${repoUrl}`,
+        hint: 'Please ensure the repository URL is correctly configured in the project settings (Integrations section)',
+        received_url: repoUrl
       });
     }
 

@@ -240,16 +240,11 @@ export default function ProjectDetail() {
   // Fetch project activities (GitHub/Bitbucket commits, PRs, etc.)
   const { data: activitiesData } = useQuery({
     queryKey: ['project-activities', id],
-    queryFn: () => projectsApi.getActivities(Number(id), undefined, 20),
+    queryFn: () => projectsApi.getActivities(Number(id), { limit: 20 }),
     enabled: !!id,
   });
 
-  // Fetch project activities (GitHub/Bitbucket commits, PRs, etc.)
-  const { data: activitiesData } = useQuery({
-    queryKey: ['project-activities', id],
-    queryFn: () => projectsApi.getActivities(Number(id), undefined, 20),
-    enabled: !!id,
-  });
+
 
   const project = projectData?.data;
   const allUsers = usersData?.data || [];
@@ -625,52 +620,189 @@ export default function ProjectDetail() {
                   Repository Activity ({activitiesData.data.length})
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
                 {activitiesData.data.map((activity: any) => (
-                  <div key={activity.id} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="mt-0.5">
-                      {activity.activity_type === 'push' && <GitCommit className="h-4 w-4 text-primary" />}
-                      {activity.activity_type === 'pull_request' && <GitPullRequest className="h-4 w-4 text-blue-500" />}
-                      {activity.activity_type === 'issue' && <AlertTriangle className="h-4 w-4 text-orange-500" />}
-                      {activity.activity_type === 'branch_created' && <GitBranch className="h-4 w-4 text-green-500" />}
-                      {activity.activity_type === 'branch_deleted' && <GitBranch className="h-4 w-4 text-red-500" />}
-                      {activity.activity_type === 'tag_created' && <Flag className="h-4 w-4 text-purple-500" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">
-                          {activity.activity_type === 'push' && activity.commit_message}
-                          {activity.activity_type === 'pull_request' && `PR #${activity.pull_request_number}: ${activity.pull_request_title}`}
-                          {activity.activity_type === 'issue' && `Issue #${activity.issue_number}: ${activity.issue_title}`}
-                          {activity.activity_type === 'branch_created' && `Branch created: ${activity.branch}`}
-                          {activity.activity_type === 'branch_deleted' && `Branch deleted: ${activity.branch}`}
-                          {activity.activity_type === 'tag_created' && `Tag created: ${activity.branch}`}
-                        </span>
-                        {activity.branch && (
-                          <Badge variant="outline" className="text-xs">
-                            {activity.branch}
-                          </Badge>
-                        )}
+                  <div key={activity.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                    {activity.activity_type === 'push' ? (
+                      // Detailed Commit View
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5">
+                            <GitCommit className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 flex-wrap">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className="text-sm font-semibold text-foreground">
+                                    {activity.commit_message || 'No commit message'}
+                                  </span>
+                                  {activity.branch && (
+                                    <Badge variant="outline" className="text-xs">
+                                      <GitBranch className="h-3 w-3 mr-1" />
+                                      {activity.branch}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {activity.commit_sha && (
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <code className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-muted-foreground">
+                                      {activity.commit_sha.substring(0, 7)}
+                                    </code>
+                                    {activity.commit_url && (
+                                      <a
+                                        href={activity.commit_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                                      >
+                                        <LinkIcon className="h-3 w-3" />
+                                        View on GitHub
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Commit Stats */}
+                            {(activity.files_changed > 0 || activity.additions > 0 || activity.deletions > 0) && (
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2 pt-2 border-t">
+                                {activity.files_changed > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <FileText className="h-3 w-3" />
+                                    {activity.files_changed} file{activity.files_changed !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {activity.additions > 0 && (
+                                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                    <span className="font-semibold">+{activity.additions}</span>
+                                    additions
+                                  </span>
+                                )}
+                                {activity.deletions > 0 && (
+                                  <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                                    <span className="font-semibold">-{activity.deletions}</span>
+                                    deletions
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Author and Date */}
+                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                <span className="font-medium">{activity.commit_author || 'Unknown'}</span>
+                                {activity.commit_author_email && (
+                                  <span className="text-muted-foreground/70">({activity.commit_author_email})</span>
+                                )}
+                              </div>
+                              <span>•</span>
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                <span>{formatFullDate(activity.created_at)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                        <span>{activity.commit_author || 'Unknown'}</span>
-                        <span>•</span>
-                        <span>{formatDate(activity.created_at)}</span>
-                        {(activity.commit_url || activity.pull_request_url || activity.issue_url) && (
-                          <>
+                    ) : activity.activity_type === 'pull_request' ? (
+                      // Pull Request View
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5">
+                          <GitPullRequest className="h-5 w-5 text-blue-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-sm font-semibold">
+                              PR #{activity.pull_request_number}: {activity.pull_request_title}
+                            </span>
+                            {activity.branch && (
+                              <Badge variant="outline" className="text-xs">
+                                {activity.branch}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                            <span>{activity.commit_author || 'Unknown'}</span>
                             <span>•</span>
-                            <a
-                              href={activity.commit_url || activity.pull_request_url || activity.issue_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              View
-                            </a>
-                          </>
-                        )}
+                            <span>{formatDate(activity.created_at)}</span>
+                            {activity.pull_request_url && (
+                              <>
+                                <span>•</span>
+                                <a
+                                  href={activity.pull_request_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  View PR
+                                </a>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ) : activity.activity_type === 'issue' ? (
+                      // Issue View
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5">
+                          <AlertTriangle className="h-5 w-5 text-orange-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-sm font-semibold">
+                              Issue #{activity.issue_number}: {activity.issue_title}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                            <span>{activity.commit_author || 'Unknown'}</span>
+                            <span>•</span>
+                            <span>{formatDate(activity.created_at)}</span>
+                            {activity.issue_url && (
+                              <>
+                                <span>•</span>
+                                <a
+                                  href={activity.issue_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  View Issue
+                                </a>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      // Other activity types (branch, tag, etc.)
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5">
+                          {activity.activity_type === 'branch_created' && <GitBranch className="h-5 w-5 text-green-500" />}
+                          {activity.activity_type === 'branch_deleted' && <GitBranch className="h-5 w-5 text-red-500" />}
+                          {activity.activity_type === 'tag_created' && <Flag className="h-5 w-5 text-purple-500" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-sm font-semibold">
+                              {activity.activity_type === 'branch_created' && `Branch created: ${activity.branch}`}
+                              {activity.activity_type === 'branch_deleted' && `Branch deleted: ${activity.branch}`}
+                              {activity.activity_type === 'tag_created' && `Tag created: ${activity.branch}`}
+                            </span>
+                            {activity.branch && (
+                              <Badge variant="outline" className="text-xs">
+                                {activity.branch}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                            <span>{formatDate(activity.created_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </CardContent>
