@@ -14,37 +14,23 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Ensure React is properly resolved
+    dedupe: ['react', 'react-dom'],
   },
   build: {
     // Disable source maps in production to prevent reverse engineering
     sourcemap: mode === 'development',
-    // Improve build stability and prevent initialization errors
-    rollupOptions: {
-      output: {
-        // Manual chunk splitting to prevent circular dependency issues
-        manualChunks: (id) => {
-          // Split vendor chunks
-          if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom')) {
-              return 'react-vendor';
-            }
-            if (id.includes('@tanstack')) {
-              return 'query-vendor';
-            }
-            if (id.includes('firebase')) {
-              return 'firebase-vendor';
-            }
-            return 'vendor';
-          }
-        },
-      },
-    },
     // Increase chunk size warning limit
     chunkSizeWarningLimit: 1000,
     // Use esbuild for faster builds
     minify: 'esbuild',
     // Target modern browsers for better optimization
     target: 'esnext',
+    // CommonJS options for better compatibility
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true,
+    },
   },
   // Optimize dependencies
   optimizeDeps: {
