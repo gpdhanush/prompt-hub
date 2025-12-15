@@ -1,0 +1,91 @@
+services:
+  # Backend API Service
+  - type: web
+    name: prompt-hub-backend
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      # Database Configuration
+      - key: DB_HOST
+        sync: false  # Set in Render dashboard
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_CONNECTION_LIMIT
+        value: "10"
+      # JWT Configuration
+      - key: JWT_SECRET
+        sync: false  # Generate a strong secret
+      - key: JWT_EXPIRES_IN
+        value: "7d"
+      # API Configuration
+      - key: API_BASE_URL
+        sync: false  # Set to your backend URL: https://your-backend.onrender.com/api
+      # CORS Configuration
+      - key: CORS_ORIGIN
+        sync: false  # Set to your frontend URL: https://your-frontend.onrender.com
+      - key: CORS_CREDENTIALS
+        value: "true"
+      # Firebase Configuration (Backend)
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false  # JSON string or path
+      - key: FIREBASE_SERVICE_ACCOUNT_PATH
+        sync: false
+      # Encryption
+      - key: ENCRYPTION_KEY
+        sync: false  # 64 character hex string
+      # File Upload
+      - key: MAX_FILE_SIZE
+        value: "10485760"
+      - key: UPLOAD_DIR
+        value: "./uploads"
+      - key: ALLOWED_FILE_TYPES
+        value: "image/jpeg,image/png,image/jpg,application/pdf"
+
+  # Frontend Service (Static Site)
+  - type: static
+    name: prompt-hub-frontend
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # API Configuration
+      - key: VITE_API_URL
+        sync: false  # Set to: https://your-backend.onrender.com/api
+      # Static Assets
+      - key: VITE_STATIC_URL
+        sync: false  # Optional: Set if using CDN
+      # Firebase Configuration (Frontend)
+      - key: VITE_FIREBASE_API_KEY
+        sync: false
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: VITE_FIREBASE_PROJECT_ID
+        sync: false
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: VITE_FIREBASE_APP_ID
+        sync: false
+      - key: VITE_FIREBASE_MEASUREMENT_ID
+        sync: false
+      - key: VITE_FIREBASE_VAPID_KEY
+        sync: false
+      - key: VITE_APP_VERSION
+        value: "1.0.0"
