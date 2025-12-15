@@ -490,11 +490,41 @@ router.post('/github', express.json({ verify: (req, res, buf) => { req.rawBody =
       case 'issues':
         result = await handleIssuesEvent(payload, project);
         break;
-      default:
-        logger.info(`Unhandled GitHub event type: ${event}`);
+      case 'deployment_status':
+      case 'deployment':
+        // Deployment events are informational - acknowledge but don't store
+        logger.info(`Deployment event received for project ${project.project_code}: ${payload.deployment?.environment || payload.deployment_status?.state || 'unknown'}`);
         return res.status(200).json({ 
+          success: true,
+          message: 'Deployment event received',
+          event: event,
+          project: project.project_code,
+          note: 'Deployment events are acknowledged but not stored in activity log'
+        });
+      case 'create':
+      case 'delete':
+      case 'fork':
+      case 'watch':
+      case 'star':
+      case 'release':
+      case 'status':
+        // Other informational events - acknowledge but don't process
+        logger.info(`Informational event received: ${event} for project ${project.project_code}`);
+        return res.status(200).json({ 
+          success: true,
+          message: 'Event received and acknowledged',
+          event: event,
+          project: project.project_code,
+          note: 'This event type is acknowledged but not stored'
+        });
+      default:
+        logger.info(`Unhandled GitHub event type: ${event} for project ${project.project_code}`);
+        return res.status(200).json({ 
+          success: true,
           message: 'Event received but not processed',
-          event: event 
+          event: event,
+          project: project.project_code,
+          note: `Event type '${event}' is not currently supported. Supported events: push, pull_request, issues`
         });
     }
 
