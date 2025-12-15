@@ -6,7 +6,8 @@
  * IMPORTANT: All values must be set in .env file. No hardcoded defaults.
  */
 
-import { logger } from './logger';
+// Note: Don't import logger here to avoid circular dependency
+// Logger imports ENV_CONFIG from this file, so we use console directly
 
 /**
  * API Configuration
@@ -70,7 +71,7 @@ export function validateConfig() {
   required.forEach(({ key, value }) => {
     if (!value || value === '') {
       if (ENV_CONFIG.IS_DEV) {
-        logger.warn(`⚠️  ${key} not set in .env file`);
+        console.warn(`⚠️  ${key} not set in .env file`);
       } else {
         missing.push(key);
       }
@@ -80,12 +81,12 @@ export function validateConfig() {
   // Security: Enforce HTTPS in production
   if (ENV_CONFIG.IS_PROD && API_CONFIG.BASE_URL && !API_CONFIG.BASE_URL.startsWith('https://')) {
     const errorMsg = 'Security Error: API URL must use HTTPS in production. Current URL: ' + API_CONFIG.BASE_URL;
-    logger.error('❌ ' + errorMsg);
+    console.error('❌ ' + errorMsg);
     throw new Error(errorMsg);
   }
 
   if (missing.length > 0 && ENV_CONFIG.IS_PROD) {
-    logger.error('❌ Missing required environment variables:', missing.join(', '));
+    console.error('❌ Missing required environment variables:', missing.join(', '));
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
