@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { 
   Package, 
   ClipboardList, 
@@ -34,7 +35,7 @@ export default function ITAssetDashboard() {
     queryFn: () => assetsApi.getDashboardStats(),
   });
 
-  const stats = statsData?.data || {
+  const stats = useMemo(() => statsData?.data || {
     total_assets: 0,
     assigned_assets: 0,
     available_assets: 0,
@@ -42,7 +43,14 @@ export default function ITAssetDashboard() {
     pending_tickets: 0,
     warranty_expiring: 0,
     recent_assignments: [],
-  };
+  }, [statsData]);
+
+  const utilizationRate = useMemo(() => 
+    stats.total_assets > 0 
+      ? Math.round((stats.assigned_assets / stats.total_assets) * 100) 
+      : 0,
+    [stats.total_assets, stats.assigned_assets]
+  );
 
   if (isLoading) {
     return (
@@ -51,10 +59,6 @@ export default function ITAssetDashboard() {
       </div>
     );
   }
-
-  const utilizationRate = stats.total_assets > 0 
-    ? Math.round((stats.assigned_assets / stats.total_assets) * 100) 
-    : 0;
 
   return (
     <div className="mx-auto p-6 space-y-6">
