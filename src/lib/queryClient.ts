@@ -16,6 +16,8 @@ export const queryClient = new QueryClient({
       gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
       // Don't refetch on window focus by default (can be overridden per query)
       refetchOnWindowFocus: false,
+      // Don't refetch on reconnect by default (can be overridden per query)
+      refetchOnReconnect: false,
       // Don't refetch on mount if data exists
       refetchOnMount: true,
       // Retry failed requests once
