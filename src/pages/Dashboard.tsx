@@ -273,13 +273,34 @@ export default function Dashboard() {
 
   const reminders = remindersData?.data || [];
   
+  // Normalize reminder dates to yyyy-MM-dd format for comparison
+  const normalizeDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    // Handle both date strings and Date objects
+    const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+    return format(date, 'yyyy-MM-dd');
+  };
+  
   // Get reminders for selected date
   const selectedDateReminders = selectedDate
-    ? reminders.filter((r: any) => r.reminder_date === format(selectedDate, 'yyyy-MM-dd'))
+    ? reminders.filter((r: any) => {
+        const reminderDate = normalizeDate(r.reminder_date);
+        const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
+        return reminderDate === selectedDateStr;
+      })
     : [];
 
   // Create modifiers for calendar to mark dates with reminders
-  const reminderDates = reminders.map((r: any) => new Date(r.reminder_date));
+  const reminderDates = reminders
+    .map((r: any) => {
+      try {
+        const dateStr = normalizeDate(r.reminder_date);
+        return dateStr ? new Date(dateStr) : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter((date): date is Date => date !== null);
 
   const stats = dashboardData?.data || {
     employees: 0,
@@ -565,53 +586,75 @@ export default function Dashboard() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Calendar
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={setSelectedDate}
-                      className="rounded-md border-0"
-                      modifiers={{
-                        hasReminder: reminderDates,
-                      }}
-                      modifiersClassNames={{
-                        hasReminder: "bg-primary/20 text-primary font-semibold",
-                      }}
-                    />
-                    {selectedDateReminders.length > 0 && (
-                      <div className="mt-4 pt-4 border-t">
-                        <p className="text-sm font-semibold mb-2">Reminders for {format(selectedDate!, 'MMM d, yyyy')}</p>
-                        <div className="space-y-2">
-                          {selectedDateReminders.map((reminder: any) => (
-                            <div
-                              key={reminder.id}
-                              className="flex items-start gap-2 p-2 rounded-lg bg-muted/50"
-                            >
-                              <Clock className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium">{reminder.title}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {reminder.reminder_time} • {reminder.reminder_type}
-                                </p>
-                                {reminder.description && (
-                                  <p className="text-xs text-muted-foreground mt-1">{reminder.description}</p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                    <div className="flex flex-col lg:flex-row gap-6">
+                      {/* Calendar on the left */}
+                      <div className="flex flex-col lg:w-1/2">
+                        <Calendar
+                          mode="single"
+                          selected={selectedDate}
+                          onSelect={setSelectedDate}
+                          className="rounded-md border-0"
+                          modifiers={{
+                            hasReminder: reminderDates,
+                          }}
+                          modifiersClassNames={{
+                            hasReminder: "bg-primary/20 text-primary font-semibold",
+                          }}
+                        />
+                        <div className="mt-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={handleAddReminder}
+                            disabled={!selectedDate}
+                          >
+                            <Clock className="mr-2 h-4 w-4" />
+                            Add Reminder
+                          </Button>
                         </div>
                       </div>
-                    )}
-                    <div className="mt-4 pt-4 border-t">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={handleAddReminder}
-                        disabled={!selectedDate}
-                      >
-                        <Clock className="mr-2 h-4 w-4" />
-                        Add Reminder
-                      </Button>
+                      {/* Reminders on the right */}
+                      <div className="lg:w-1/2 lg:border-l lg:pl-6 pt-4 lg:pt-0">
+                        {selectedDate ? (
+                          <>
+                            <p className="text-sm font-semibold mb-3">Reminders for {format(selectedDate, 'MMM d, yyyy')}</p>
+                            {selectedDateReminders.length > 0 ? (
+                              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                                {selectedDateReminders.map((reminder: any) => (
+                                  <div
+                                    key={reminder.id}
+                                    className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors border"
+                                  >
+                                    <Clock className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium">{reminder.title}</p>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {reminder.reminder_time} • {reminder.reminder_type}
+                                      </p>
+                                      {reminder.description && (
+                                        <p className="text-xs text-muted-foreground mt-2 whitespace-pre-wrap">{reminder.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center py-8">
+                                <p className="text-sm text-muted-foreground text-center">
+                                  No reminders for {format(selectedDate, 'MMM d, yyyy')}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="flex items-center justify-center py-8">
+                            <p className="text-sm text-muted-foreground text-center">
+                              Select a date to view reminders
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -754,53 +797,75 @@ export default function Dashboard() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Calendar
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={setSelectedDate}
-                      className="rounded-md border-0"
-                      modifiers={{
-                        hasReminder: reminderDates,
-                      }}
-                      modifiersClassNames={{
-                        hasReminder: "bg-primary/20 text-primary font-semibold",
-                      }}
-                    />
-                    {selectedDateReminders.length > 0 && (
-                      <div className="mt-4 pt-4 border-t">
-                        <p className="text-sm font-semibold mb-2">Reminders for {format(selectedDate!, 'MMM d, yyyy')}</p>
-                        <div className="space-y-2">
-                          {selectedDateReminders.map((reminder: any) => (
-                            <div
-                              key={reminder.id}
-                              className="flex items-start gap-2 p-2 rounded-lg bg-muted/50"
-                            >
-                              <Clock className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium">{reminder.title}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {reminder.reminder_time} • {reminder.reminder_type}
-                                </p>
-                                {reminder.description && (
-                                  <p className="text-xs text-muted-foreground mt-1">{reminder.description}</p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                    <div className="flex flex-col lg:flex-row gap-6">
+                      {/* Calendar on the left */}
+                      <div className="flex flex-col lg:w-1/2">
+                        <Calendar
+                          mode="single"
+                          selected={selectedDate}
+                          onSelect={setSelectedDate}
+                          className="rounded-md border-0"
+                          modifiers={{
+                            hasReminder: reminderDates,
+                          }}
+                          modifiersClassNames={{
+                            hasReminder: "bg-primary/20 text-primary font-semibold",
+                          }}
+                        />
+                        <div className="mt-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={handleAddReminder}
+                            disabled={!selectedDate}
+                          >
+                            <Clock className="mr-2 h-4 w-4" />
+                            Add Reminder
+                          </Button>
                         </div>
                       </div>
-                    )}
-                    <div className="mt-4 pt-4 border-t">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={handleAddReminder}
-                        disabled={!selectedDate}
-                      >
-                        <Clock className="mr-2 h-4 w-4" />
-                        Add Reminder
-                      </Button>
+                      {/* Reminders on the right */}
+                      <div className="lg:w-1/2 lg:border-l lg:pl-6 pt-4 lg:pt-0">
+                        {selectedDate ? (
+                          <>
+                            <p className="text-sm font-semibold mb-3">Reminders for {format(selectedDate, 'MMM d, yyyy')}</p>
+                            {selectedDateReminders.length > 0 ? (
+                              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                                {selectedDateReminders.map((reminder: any) => (
+                                  <div
+                                    key={reminder.id}
+                                    className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors border"
+                                  >
+                                    <Clock className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium">{reminder.title}</p>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {reminder.reminder_time} • {reminder.reminder_type}
+                                      </p>
+                                      {reminder.description && (
+                                        <p className="text-xs text-muted-foreground mt-2 whitespace-pre-wrap">{reminder.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center py-8">
+                                <p className="text-sm text-muted-foreground text-center">
+                                  No reminders for {format(selectedDate, 'MMM d, yyyy')}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="flex items-center justify-center py-8">
+                            <p className="text-sm text-muted-foreground text-center">
+                              Select a date to view reminders
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
