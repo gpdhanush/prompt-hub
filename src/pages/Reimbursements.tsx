@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageTitle } from "@/components/ui/page-title";
+import { PageSlug } from "@/components/ui/page-slug";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
@@ -180,13 +182,11 @@ export default function Reimbursements() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10">
-              <DollarSign className="h-8 w-8 text-primary" />
-            </div>
-            Reimbursements
-          </h1>
-          <p className="text-muted-foreground mt-1">Manage expense claims and multi-level approvals</p>
+          <PageTitle 
+            title="Reimbursements" 
+            icon={DollarSign}
+            description="Manage expense claims and multi-level approvals"
+          />
         </div>
         {canCreate && (
           <Button 
@@ -199,55 +199,66 @@ export default function Reimbursements() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="glass-card border-l-4 border-l-blue-500">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="border-2 border-blue-500/20 shadow-lg bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent hover:shadow-xl transition-all">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Total Claims</p>
-                <div className="text-2xl font-bold">{formatCurrency(stats.total)}</div>
+                <Label className="text-muted-foreground text-sm font-medium">Total Claims</Label>
+                <div className="text-3xl font-bold text-blue-600 mt-2">
+                  {formatCurrency(stats.total)}
+                </div>
               </div>
-              <div className="p-3 rounded-lg bg-blue-500/10">
-                <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              <div className="p-3 rounded-xl bg-blue-500/20">
+                <TrendingUp className="h-6 w-6 text-blue-600" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="glass-card border-l-4 border-l-amber-500">
+
+        <Card className="border-2 border-amber-500/20 shadow-lg bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent hover:shadow-xl transition-all">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Pending Amount</p>
-                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">{formatCurrency(stats.pending)}</div>
+                <Label className="text-muted-foreground text-sm font-medium">Pending Amount</Label>
+                <div className="text-3xl font-bold text-amber-600 mt-2">
+                  {formatCurrency(stats.pending)}
+                </div>
               </div>
-              <div className="p-3 rounded-lg bg-amber-500/10">
-                <Clock className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+              <div className="p-3 rounded-xl bg-amber-500/20">
+                <Clock className="h-6 w-6 text-amber-600" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="glass-card border-l-4 border-l-primary">
+
+        <Card className="border-2 border-primary/20 shadow-lg bg-gradient-to-br from-primary/10 via-primary/5 to-transparent hover:shadow-xl transition-all">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Approved</p>
-                <div className="text-2xl font-bold text-primary">{stats.approved}</div>
+                <Label className="text-muted-foreground text-sm font-medium">Approved</Label>
+                <div className="text-3xl font-bold text-primary mt-2">
+                  {stats.approved}
+                </div>
               </div>
-              <div className="p-3 rounded-lg bg-primary/10">
+              <div className="p-3 rounded-xl bg-primary/20">
                 <CheckCircle2 className="h-6 w-6 text-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="glass-card border-l-4 border-l-red-500">
+
+        <Card className="border-2 border-red-500/20 shadow-lg bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent hover:shadow-xl transition-all">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Rejected</p>
-                <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.rejected}</div>
+                <Label className="text-muted-foreground text-sm font-medium">Rejected</Label>
+                <div className="text-3xl font-bold text-red-600 mt-2">
+                  {stats.rejected}
+                </div>
               </div>
-              <div className="p-3 rounded-lg bg-red-500/10">
-                <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+              <div className="p-3 rounded-xl bg-red-500/20">
+                <XCircle className="h-6 w-6 text-red-600" />
               </div>
             </div>
           </CardContent>

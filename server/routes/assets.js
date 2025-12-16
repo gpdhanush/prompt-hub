@@ -3168,6 +3168,12 @@ router.put('/tickets/:id', requireAdmin, async (req, res) => {
     const ticket = tickets[0];
     const oldStatus = ticket.status;
     
+    // Handle reopen status - convert to 'open'
+    let finalStatus = status;
+    if (status === 'reopen') {
+      finalStatus = 'open';
+    }
+    
     // Update ticket
     await db.query(`
       UPDATE asset_tickets SET
@@ -3177,10 +3183,10 @@ router.put('/tickets/:id', requireAdmin, async (req, res) => {
         resolved_at = ?
       WHERE id = ?
     `, [
-      status,
-      admin_comment,
+      finalStatus,
+      admin_comment || ticket.admin_comment,
       userId,
-      ['resolved', 'closed'].includes(status) ? new Date() : null,
+      ['resolved', 'closed'].includes(finalStatus) ? new Date() : null,
       id
     ]);
     
@@ -3200,6 +3206,68 @@ router.put('/tickets/:id', requireAdmin, async (req, res) => {
     res.json({ message: 'Ticket updated successfully' });
   } catch (error) {
     logger.error('Error updating ticket:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// User reopen ticket (for ticket owner)
+router.put('/tickets/:id/reopen', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    
+    // Get ticket
+    const [tickets] = await db.query(`
+      SELECT t.*, e.user_id as employee_user_id
+      FROM asset_tickets t
+      LEFT JOIN employees e ON t.employee_id = e.id
+      WHERE t.id = ?
+    `, [id]);
+    
+    if (tickets.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+    
+    const ticket = tickets[0];
+    
+    // Check if user is the ticket owner
+    if (ticket.employee_user_id !== userId) {
+      return res.status(403).json({ error: 'You can only reopen your own tickets' });
+    }
+    
+    // Only allow reopen if ticket is closed or resolved
+    if (ticket.status !== 'closed' && ticket.status !== 'resolved') {
+      return res.status(400).json({ error: 'Only closed or resolved tickets can be reopened' });
+    }
+    
+    const oldStatus = ticket.status;
+    
+    // Update ticket to open and clear resolved fields
+    await db.query(`
+      UPDATE asset_tickets SET
+        status = 'open',
+        resolved_by = NULL,
+        resolved_at = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [id]);
+    
+    // Notify ticket owner
+    if (ticket.employee_user_id) {
+      const { notifyTicketStatusUpdated } = await import('../utils/notificationService.js');
+      await notifyTicketStatusUpdated(
+        ticket.employee_user_id,
+        ticket.id,
+        ticket.ticket_number,
+        oldStatus,
+        'open',
+        userId
+      );
+    }
+    
+    res.json({ message: 'Ticket reopened successfully' });
+  } catch (error) {
+    logger.error('Error reopening ticket:', error);
     res.status(500).json({ error: error.message });
   }
 });

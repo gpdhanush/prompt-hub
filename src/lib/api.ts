@@ -619,6 +619,13 @@ export const tasksApi = {
     const queryString = queryParams.toString();
     return request<{ data: any[] }>(`/tasks/timesheets/by-project${queryString ? `?${queryString}` : ''}`);
   },
+  getTodaySummary: () =>
+    request<{ data: any }>('/tasks/timesheets/today-summary'),
+  createTimesheetGeneral: (data: { project_id?: number; task_id?: number; bug_id?: number; date: string; hours: number; notes?: string }) =>
+    request<{ data: any }>('/tasks/timesheets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   createTimesheet: (id: number, data: { date: string; hours: number; notes?: string }) =>
     request<{ data: any }>(`/tasks/${id}/timesheets`, {
       method: 'POST',
@@ -1363,6 +1370,10 @@ export const assetsApi = {
     request<{ message: string }>(`/assets/tickets/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    }),
+  reopenTicket: (id: number) =>
+    request<{ message: string }>(`/assets/tickets/${id}/reopen`, {
+      method: 'PUT',
     }),
   getTicketComments: (ticketId: number) =>
     request<{ data: any[] }>(`/assets/tickets/${ticketId}/comments`),

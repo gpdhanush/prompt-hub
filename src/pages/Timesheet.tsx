@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Calendar, FolderKanban, ChevronDown, ChevronUp, Loader2, TrendingUp, Users, FileText, Sparkles } from "lucide-react";
+import { Clock, Calendar, FolderKanban, ChevronDown, ChevronUp, Loader2, TrendingUp, Users, FileText, Sparkles, Bug, CheckSquare2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { tasksApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
+import { PageTitle } from "@/components/ui/page-title";
 
 export default function Timesheet() {
   const currentUser = getCurrentUser();
@@ -49,7 +50,19 @@ export default function Timesheet() {
     }),
   });
 
+  const { data: todaySummaryData } = useQuery({
+    queryKey: ['timesheets-today-summary'],
+    queryFn: () => tasksApi.getTodaySummary(),
+  });
+
   const timesheets = timesheetsData?.data || [];
+  const todaySummary = todaySummaryData?.data || {
+    total_hours: 0,
+    projects_count: 0,
+    tasks_count: 0,
+    bugs_count: 0,
+    entries: []
+  };
 
   const toggleProject = (projectId: number) => {
     setExpandedProjects(prev => {
@@ -114,19 +127,13 @@ export default function Timesheet() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10">
-              <Clock className="h-8 w-8 text-primary" />
-            </div>
-            Timesheet
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            {isSuperAdmin 
-              ? "View all timesheet entries across all projects and employees"
-              : "Track your daily work hours by project"}
-          </p>
-        </div>
+        <PageTitle
+          title="Timesheet"
+          icon={Clock}
+          description={isSuperAdmin 
+            ? "View all timesheet entries across all projects and employees"
+            : "Track your daily work hours by project"}
+        />
       </div>
 
       {/* Filters */}
@@ -178,6 +185,47 @@ export default function Timesheet() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Today's Summary */}
+      {todaySummary && (todaySummary.projects_count > 0 || todaySummary.tasks_count > 0 || todaySummary.bugs_count > 0) && (
+        <Card className="border-2 border-primary/30 shadow-lg bg-gradient-to-br from-primary/10 via-primary/5 to-transparent">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Today's Work Summary
+            </CardTitle>
+            <CardDescription>Your work activity for today</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 bg-background/50 rounded-lg">
+                <div className="text-2xl font-bold text-primary">
+                  {parseFloat(todaySummary.total_hours || 0).toFixed(2)}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">Total Hours</div>
+              </div>
+              <div className="text-center p-4 bg-background/50 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600">
+                  {todaySummary.projects_count || 0}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">Projects</div>
+              </div>
+              <div className="text-center p-4 bg-background/50 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">
+                  {todaySummary.tasks_count || 0}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">Tasks</div>
+              </div>
+              <div className="text-center p-4 bg-background/50 rounded-lg">
+                <div className="text-2xl font-bold text-red-600">
+                  {todaySummary.bugs_count || 0}
+                </div>
+                <div className="text-sm text-muted-foreground mt-1">Bugs</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -311,6 +359,18 @@ export default function Timesheet() {
                         <div className="text-xs text-muted-foreground font-medium">Total Hours</div>
                       </div>
                       <div className="text-right">
+                        <div className="text-xl font-semibold text-blue-600">
+                          {project.task_count || 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground font-medium">Tasks</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xl font-semibold text-red-600">
+                          {project.bug_count || 0}
+                        </div>
+                        <div className="text-xs text-muted-foreground font-medium">Bugs</div>
+                      </div>
+                      <div className="text-right">
                         <div className="text-xl font-semibold text-foreground">
                           {dailySummary.length}
                         </div>
@@ -387,8 +447,21 @@ export default function Timesheet() {
                                           className="flex items-start justify-between p-2 bg-muted/30 rounded-lg text-xs"
                                         >
                                           <div className="flex-1">
-                                            <div className="font-medium text-foreground">
-                                              {entry.task_title}
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              {entry.bug_code && (
+                                                <div className="flex items-center gap-1">
+                                                  <Bug className="h-3 w-3 text-red-500" />
+                                                  <span className="font-medium text-red-600">{entry.bug_code}</span>
+                                                  {entry.bug_title && <span className="text-muted-foreground">- {entry.bug_title}</span>}
+                                                </div>
+                                              )}
+                                              {entry.task_title && (
+                                                <div className="flex items-center gap-1">
+                                                  <CheckSquare2 className="h-3 w-3 text-blue-500" />
+                                                  <span className="font-medium text-blue-600">{entry.task_title}</span>
+                                                  {entry.task_code && <Badge variant="outline" className="text-xs">{entry.task_code}</Badge>}
+                                                </div>
+                                              )}
                                             </div>
                                             {isSuperAdmin && (
                                               <div className="text-muted-foreground mt-0.5">
@@ -419,6 +492,41 @@ export default function Timesheet() {
                       </div>
                     )}
 
+                    {/* Tasks Summary */}
+                    {project.tasks && project.tasks.length > 0 && (
+                      <div className="space-y-2 pt-4 border-t mb-4">
+                        <Label className="text-sm font-semibold flex items-center gap-2 mb-3">
+                          <CheckSquare2 className="h-4 w-4 text-blue-500" />
+                          Tasks Summary
+                        </Label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {project.tasks.map((task: any) => (
+                            <Card key={task.task_id} className="border border-blue-200/50">
+                              <CardContent className="pt-4">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1">
+                                    <div className="font-semibold text-sm">{task.task_title}</div>
+                                    {task.task_code && (
+                                      <Badge variant="outline" className="text-xs mt-1">{task.task_code}</Badge>
+                                    )}
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {task.bug_count || 0} {task.bug_count === 1 ? 'bug' : 'bugs'} • {task.task_entries || 0} {task.task_entries === 1 ? 'entry' : 'entries'}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-lg font-bold text-blue-600">
+                                      {parseFloat(task.task_hours || 0).toFixed(2)}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">hrs</div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* All Entries List */}
                     {project.entries && project.entries.length > 0 && (
                       <div className="space-y-2 pt-4 border-t">
@@ -433,12 +541,24 @@ export default function Timesheet() {
                               className="flex items-center justify-between p-4 bg-gradient-to-r from-muted/50 via-muted/30 to-transparent rounded-lg border border-border/50 hover:border-primary/30 hover:shadow-sm transition-all"
                             >
                               <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="font-semibold text-sm">{entry.task_title}</span>
-                                  {entry.task_code && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {entry.task_code}
-                                    </Badge>
+                                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                  {entry.bug_code && (
+                                    <div className="flex items-center gap-1">
+                                      <Bug className="h-4 w-4 text-red-500" />
+                                      <span className="font-semibold text-sm text-red-600">{entry.bug_code}</span>
+                                      {entry.bug_title && <span className="text-sm text-muted-foreground">- {entry.bug_title}</span>}
+                                    </div>
+                                  )}
+                                  {entry.task_title && (
+                                    <div className="flex items-center gap-1">
+                                      <CheckSquare2 className="h-4 w-4 text-blue-500" />
+                                      <span className="font-semibold text-sm">{entry.task_title}</span>
+                                      {entry.task_code && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {entry.task_code}
+                                        </Badge>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-4 text-xs text-muted-foreground">

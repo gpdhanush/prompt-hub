@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Mail, Lock, KeyRound, CheckCircle2, Shield, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
+import { useSecurityValidation } from "@/hooks/useSecurityValidation";
+import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
@@ -22,6 +24,7 @@ export default function ForgotPassword() {
   const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [emailExists, setEmailExists] = useState<boolean | null>(null);
+  const { securityAlertProps } = useSecurityValidation();
 
   // Pre-fill email from location state if available
   useEffect(() => {
@@ -332,8 +335,9 @@ export default function ForgotPassword() {
                     <Label htmlFor="email" className="text-base font-medium">Email Address</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                      <Input
+                      <SecureInput
                         id="email"
+                        fieldName="Email Address"
                         type="email"
                         placeholder="user@naethra.com"
                         value={email}
@@ -386,8 +390,9 @@ export default function ForgotPassword() {
                     <Label htmlFor="otp" className="text-base font-medium">Verification Code</Label>
                     <div className="relative">
                       <KeyRound className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                      <Input
+                      <SecureInput
                         id="otp"
+                        fieldName="Verification Code"
                         type="text"
                         placeholder="000000"
                         value={otp}
@@ -453,8 +458,9 @@ export default function ForgotPassword() {
                     <Label htmlFor="new-password" className="text-base font-medium">New Password</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                      <Input
+                      <SecureInput
                         id="new-password"
+                        fieldName="New Password"
                         type="password"
                         placeholder="Enter new password"
                         value={newPassword}
@@ -473,8 +479,9 @@ export default function ForgotPassword() {
                     <Label htmlFor="confirm-password" className="text-base font-medium">Confirm Password</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                      <Input
+                      <SecureInput
                         id="confirm-password"
+                        fieldName="Confirm Password"
                         type="password"
                         placeholder="Confirm new password"
                         value={confirmPassword}
@@ -570,6 +577,7 @@ export default function ForgotPassword() {
           )}
         </div>
       </div>
+      <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );
 }

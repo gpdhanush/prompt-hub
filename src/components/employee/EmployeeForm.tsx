@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Save, Info, Eye, EyeOff, Upload, FileText, Trash2, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
+import { useSecurityValidation } from "@/hooks/useSecurityValidation";
+import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -22,7 +24,6 @@ import {
 import { employeesApi, usersApi, rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
-import { sanitizeInput, containsHtmlOrScript } from "@/lib/validation";
 import { getImageUrl } from "@/lib/imageUtils";
 import { API_CONFIG } from "@/lib/config";
 import { logger } from "@/lib/logger";
@@ -96,6 +97,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
 
   const [showPassword, setShowPassword] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const { securityAlertProps } = useSecurityValidation();
   
   // Document upload state
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -419,18 +421,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
       });
     }
 
-    // Sanitize input
-    if (containsHtmlOrScript(value)) {
-      toast({
-        title: "Invalid Input",
-        description: "Input cannot contain HTML or script tags.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const sanitized = sanitizeInput(value);
-    setFormData(prev => ({ ...prev, [field]: sanitized }));
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   // Handle leave count input (numbers only, no decimals)
@@ -781,8 +772,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <MandatoryLabel htmlFor="name">Full Name</MandatoryLabel>
-                <Input
+                <SecureInput
                   id="name"
+                  fieldName="Full Name"
                   value={formData.name}
                   onChange={(e) => handleInputChange('name', e.target.value.toUpperCase())}
                   onBlur={(e) => {
@@ -828,8 +820,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
                 ) : (
                   <Label htmlFor="mobile">Mobile</Label>
                 )}
-                <Input
+                <SecureInput
                   id="mobile"
+                  fieldName="Mobile"
                   type="text"
                   value={formData.mobile}
                   onChange={(e) => {
@@ -845,8 +838,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="whatsapp">WhatsApp Number</Label>
-                <Input
+                <SecureInput
                   id="whatsapp"
+                  fieldName="WhatsApp"
                   type="text"
                   value={formData.whatsapp}
                   onChange={(e) => {
@@ -859,8 +853,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="teams_id">Teams ID</Label>
-                <Input
+                <SecureInput
                   id="teams_id"
+                  fieldName="Teams ID"
                   type="text"
                   value={formData.teams_id}
                   onChange={(e) => handleInputChange('teams_id', e.target.value)}
@@ -871,8 +866,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <MandatoryLabel htmlFor="email">Email</MandatoryLabel>
-                <Input
+                <SecureInput
                   id="email"
+                  fieldName="Email"
                   type="text"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
@@ -926,8 +922,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
                   )}
                 </div>
                 <div className="relative">
-                  <Input
+                  <SecureInput
                     id="password"
+                    fieldName="Password"
                     type={showPassword ? "text" : "password"}
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
@@ -960,8 +957,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <MandatoryLabel htmlFor="empCode">Employee ID</MandatoryLabel>
-                <Input
+                <SecureInput
                   id="empCode"
+                  fieldName="Employee ID"
                   value={formData.empCode}
                   onChange={(e) => handleInputChange('empCode', e.target.value.toUpperCase())}
                   placeholder="NTPL0001"
@@ -1083,8 +1081,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             <div className="grid grid-cols-4 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="bank_name">Bank Name</Label>
-                <Input
+                <SecureInput
                   id="bank_name"
+                  fieldName="Bank Name"
                   value={formData.bank_name}
                   onChange={(e) => handleInputChange('bank_name', e.target.value.toUpperCase())}
                   placeholder="Enter bank name"
@@ -1092,8 +1091,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="bank_account_number">Bank Account Number</Label>
-                <Input
+                <SecureInput
                   id="bank_account_number"
+                  fieldName="Bank Account Number"
                   value={formData.bank_account_number}
                   onChange={(e) => handleInputChange('bank_account_number', e.target.value.toUpperCase())}
                   placeholder="Enter account number"
@@ -1101,8 +1101,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="ifsc_code">IFSC Code</Label>
-                <Input
+                <SecureInput
                   id="ifsc_code"
+                  fieldName="IFSC Code"
                   value={formData.ifsc_code}
                   onChange={(e) => handleInputChange('ifsc_code', e.target.value.toUpperCase())}
                   placeholder="Enter IFSC code"
@@ -1111,8 +1112,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="pf_uan_number">UAN Number</Label>
-                <Input
+                <SecureInput
                   id="pf_uan_number"
+                  fieldName="UAN Number"
                   value={formData.pf_uan_number}
                   onChange={(e) => handleInputChange('pf_uan_number', e.target.value.toUpperCase())}
                   placeholder="Enter UAN number"
@@ -1132,8 +1134,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="address1">Address Line 1</Label>
-                <Input
+                <SecureInput
                   id="address1"
+                  fieldName="Address Line 1"
                   value={formData.address1}
                   onChange={(e) => handleInputChange('address1', e.target.value.toUpperCase())}
                   onBlur={(e) => {
@@ -1147,8 +1150,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="address2">Address Line 2</Label>
-                <Input
+                <SecureInput
                   id="address2"
+                  fieldName="Address Line 2"
                   value={formData.address2}
                   onChange={(e) => handleInputChange('address2', e.target.value.toUpperCase())}
                   onBlur={(e) => {
@@ -1162,8 +1166,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="landmark">Landmark</Label>
-                <Input
+                <SecureInput
                   id="landmark"
+                  fieldName="Landmark"
                   value={formData.landmark}
                   onChange={(e) => handleInputChange('landmark', e.target.value.toUpperCase())}
                   onBlur={(e) => {
@@ -1179,8 +1184,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="state">State</Label>
-                <Input
+                <SecureInput
                   id="state"
+                  fieldName="State"
                   value={formData.state}
                   onChange={(e) => handleInputChange('state', e.target.value.toUpperCase())}
                   onBlur={(e) => {
@@ -1194,8 +1200,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="district">District</Label>
-                <Input
+                <SecureInput
                   id="district"
+                  fieldName="District"
                   value={formData.district}
                   onChange={(e) => handleInputChange('district', e.target.value.toUpperCase())}
                   onBlur={(e) => {
@@ -1209,8 +1216,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="pincode">Pincode</Label>
-                <Input
+                <SecureInput
                   id="pincode"
+                  fieldName="Pincode"
                   value={formData.pincode}
                   onChange={(e) => {
                     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 6);
@@ -1224,8 +1232,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
-                <Input
+                <SecureInput
                   id="emergency_contact_name"
+                  fieldName="Emergency Contact Name"
                   value={formData.emergency_contact_name}
                   onChange={(e) => handleInputChange('emergency_contact_name', e.target.value.toUpperCase())}
                   placeholder="Enter emergency contact name"
@@ -1254,8 +1263,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="emergency_contact_number">Emergency Contact Number</Label>
-                <Input
+                <SecureInput
                   id="emergency_contact_number"
+                  fieldName="Emergency Contact Number"
                   type="text"
                   value={formData.emergency_contact_number}
                   onChange={(e) => {
@@ -1280,8 +1290,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="annual_leave_count">Annual Leave Count</Label>
-                <Input
+                <SecureInput
                   id="annual_leave_count"
+                  fieldName="Annual Leave Count"
                   type="text"
                   value={formData.annual_leave_count}
                   onChange={(e) => handleLeaveCountChange('annual_leave_count', e.target.value)}
@@ -1293,8 +1304,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="sick_leave_count">Sick Leave Count</Label>
-                <Input
+                <SecureInput
                   id="sick_leave_count"
+                  fieldName="Sick Leave Count"
                   type="text"
                   value={formData.sick_leave_count}
                   onChange={(e) => handleLeaveCountChange('sick_leave_count', e.target.value)}
@@ -1306,8 +1318,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="casual_leave_count">Casual Leave Count</Label>
-                <Input
+                <SecureInput
                   id="casual_leave_count"
+                  fieldName="Casual Leave Count"
                   type="text"
                   value={formData.casual_leave_count}
                   onChange={(e) => handleLeaveCountChange('casual_leave_count', e.target.value)}
@@ -1447,8 +1460,9 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="document_number">Document Number</Label>
-              <Input
+              <SecureInput
                 id="document_number"
+                fieldName="Document Number"
                 value={uploadDocumentNumber}
                 onChange={(e) => setUploadDocumentNumber(e.target.value.toUpperCase())}
                 placeholder="Enter document number (optional)"
@@ -1456,7 +1470,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="document_file">File *</Label>
-              <Input
+              <input
                 id="document_file"
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
@@ -1512,6 +1526,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );
 }

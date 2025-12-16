@@ -3,9 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, X, MessageSquare, Save, Upload, FileText, Edit, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { SecureTextarea } from "@/components/ui/secure-textarea";
+import { useSecurityValidation } from "@/hooks/useSecurityValidation";
+import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -138,7 +140,8 @@ function CommentItemEdit({ comment, projectId, queryClient }: { comment: any; pr
               <SelectItem value="Client">Client</SelectItem>
             </SelectContent>
           </Select>
-          <Textarea
+          <SecureTextarea
+            fieldName="Comment"
             value={editComment}
             onChange={(e) => setEditComment(e.target.value)}
             rows={3}
@@ -237,6 +240,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   const currentUser = getCurrentUser();
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const { securityAlertProps } = useSecurityValidation();
   
   // Fallback: Try to get projectId from route params if not provided as prop
   // This handles cases where the prop might be undefined
@@ -672,8 +676,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
             <div className="grid grid-cols-4 gap-4">
               <div className="grid gap-2">
                 <MandatoryLabel htmlFor="name">Project Name</MandatoryLabel>
-                <Input
+                <SecureInput
                   id="name"
+                  fieldName="Project Name"
                   value={formData.name}
                   onChange={(e) => {
                     setFormData({ ...formData, name: e.target.value });
@@ -778,7 +783,8 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
             <div className="grid gap-2">
               <Label>Technologies Used</Label>
               <div>
-                <Input
+                <SecureInput
+                  fieldName="Technologies Used"
                   placeholder="Enter technology (press Enter to add)"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -844,8 +850,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
               ) : (
                 <Label htmlFor="client_name">Client Name</Label>
               )}
-                <Input
+                <SecureInput
                   id="client_name"
+                  fieldName="Client Name"
                   value={formData.client_name}
                   onChange={(e) => {
                     setFormData({ ...formData, client_name: e.target.value });
@@ -873,8 +880,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 ) : (
                   <Label htmlFor="client_contact_person">Client Contact Person</Label>
                 )}
-                <Input
+                <SecureInput
                   id="client_contact_person"
+                  fieldName="Client Contact Person"
                   value={formData.client_contact_person}
                   onChange={(e) => {
                     setFormData({ ...formData, client_contact_person: e.target.value });
@@ -904,8 +912,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 ) : (
                   <Label htmlFor="client_email">Client Email</Label>
                 )}
-                <Input
+                <SecureInput
                   id="client_email"
+                  fieldName="Client Email"
                   type="text"
                   value={formData.client_email}
                   onChange={(e) => {
@@ -930,8 +939,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="client_phone">Client Phone</Label>
-                <Input
+                <SecureInput
                   id="client_phone"
+                  fieldName="Client Phone"
                   value={formData.client_phone}
                   onChange={(e) => setFormData({ ...formData, client_phone: e.target.value })}
                   placeholder="+1 (555) 000-0000"
@@ -975,7 +985,8 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   <div className="grid gap-4">
                     <div className="grid gap-2">
                       <Label>Milestone Name</Label>
-                      <Input
+                      <SecureInput
+                        fieldName="Milestone Name"
                         value={milestone.name}
                         onChange={(e) => updateMilestone(index, 'name', e.target.value)}
                         placeholder="Enter milestone name"
@@ -1315,7 +1326,8 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 </div>
                 <div className="grid gap-2">
                   <Label>Comment</Label>
-                  <Textarea
+                  <SecureTextarea
+                    fieldName="Comment"
                     value={commentForm.comment}
                     onChange={(e) => setCommentForm({ ...commentForm, comment: e.target.value })}
                     rows={4}
@@ -1387,8 +1399,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
           <CardContent className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="github_repo_url">Code Repo URL (Frontend)</Label>
-              <Input
+              <SecureInput
                 id="github_repo_url"
+                fieldName="GitHub Repo URL"
                 value={formData.github_repo_url}
                 onChange={(e) => setFormData({ ...formData, github_repo_url: e.target.value })}
                 placeholder="https://github.com/username/repo or https://bitbucket.org/username/repo"
@@ -1396,8 +1409,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
             </div>
             <div className="grid gap-2">
               <Label htmlFor="bitbucket_repo_url">Code Repo URL (Backend)</Label>
-              <Input
+              <SecureInput
                 id="bitbucket_repo_url"
+                fieldName="Bitbucket Repo URL"
                 value={formData.bitbucket_repo_url}
                 onChange={(e) => setFormData({ ...formData, bitbucket_repo_url: e.target.value })}
                 placeholder="https://github.com/username/repo or https://bitbucket.org/username/repo"
@@ -1482,6 +1496,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
           </AlertDialogContent>
         </AlertDialog>
       )}
+      <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );
 }

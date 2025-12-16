@@ -52,22 +52,9 @@ export function useFCM() {
 
         logger.info('✅ User logged in, initializing FCM...');
 
-        // Request permission if not granted
-        // Note: Browser will only show permission prompt if user hasn't been asked before
-        // If permission was previously denied, user must enable it manually in browser settings
-        if (Notification.permission === 'default') {
-          logger.debug('📱 Requesting notification permission...');
-          const permissionResult = await Notification.requestPermission();
-          setPermission(permissionResult);
-          logger.debug('📱 Permission result:', permissionResult);
-          logAnalyticsEvent('notification_permission_requested', { result: permissionResult });
-          
-          if (permissionResult === 'denied') {
-            logger.warn('⚠️  Notification permission denied. User must enable it in browser settings.');
-          }
-        } else {
-          logger.debug('📱 Notification permission status:', Notification.permission);
-        }
+        // Don't auto-request permission - let the NotificationPermissionDialog handle it
+        // This provides a better UX with a custom dialog explaining the benefits
+        logger.debug('📱 Notification permission status:', Notification.permission);
 
         if (Notification.permission === 'granted') {
           logger.info('✅ Notification permission granted, getting FCM token...');

@@ -590,20 +590,23 @@ router.get('/timesheets/by-project', async (req, res) => {
       params.push(employeeId);
     }
     
+    // Updated query to support timesheets with project_id, task_id, or bug_id
     const query = `
       SELECT 
-        p.id as project_id,
+        COALESCE(ts.project_id, t.project_id, b.project_id) as project_id,
         p.name as project_name,
         p.project_code as project_code,
         SUM(ts.hours) as total_hours,
         COUNT(ts.id) as entry_count,
-        GROUP_CONCAT(DISTINCT t.title ORDER BY t.title SEPARATOR ', ') as task_titles
+        COUNT(DISTINCT ts.task_id) as task_count,
+        COUNT(DISTINCT ts.bug_id) as bug_count
       FROM timesheets ts
-      INNER JOIN tasks t ON ts.task_id = t.id
-      INNER JOIN projects p ON t.project_id = p.id
-      WHERE ts.task_id IS NOT NULL
+      LEFT JOIN tasks t ON ts.task_id = t.id
+      LEFT JOIN bugs b ON ts.bug_id = b.id
+      LEFT JOIN projects p ON COALESCE(ts.project_id, t.project_id, b.project_id) = p.id
+      WHERE (ts.project_id IS NOT NULL OR ts.task_id IS NOT NULL OR ts.bug_id IS NOT NULL)
         ${dateFilter}
-      GROUP BY p.id, p.name, p.project_code
+      GROUP BY COALESCE(ts.project_id, t.project_id, b.project_id), p.name, p.project_code
       ORDER BY total_hours DESC, p.name ASC
     `;
     
@@ -619,8 +622,9 @@ router.get('/timesheets/by-project', async (req, res) => {
             SUM(ts.hours) as daily_hours,
             COUNT(ts.id) as daily_entries
           FROM timesheets ts
-          INNER JOIN tasks t ON ts.task_id = t.id
-          WHERE t.project_id = ?
+          LEFT JOIN tasks t ON ts.task_id = t.id
+          LEFT JOIN bugs b ON ts.bug_id = b.id
+          WHERE COALESCE(ts.project_id, t.project_id, b.project_id) = ?
         `;
         const dailyParams = [project.project_id];
         
@@ -645,23 +649,30 @@ router.get('/timesheets/by-project', async (req, res) => {
         
         const [dailySummary] = await db.query(dailySummaryQuery, dailyParams);
         
-        // Get detailed entries
+        // Get hierarchical entries: Project -> Task -> Bug
         let detailQuery = `
           SELECT 
             ts.id,
             ts.date,
             ts.hours,
             ts.notes,
-            t.id as task_id,
+            ts.task_id,
+            ts.bug_id,
+            ts.project_id,
+            t.id as task_id_full,
             t.title as task_title,
             t.task_code,
+            b.id as bug_id_full,
+            b.bug_code,
+            b.title as bug_title,
             u.name as employee_name,
             e.emp_code
           FROM timesheets ts
-          INNER JOIN tasks t ON ts.task_id = t.id
-          INNER JOIN employees e ON ts.employee_id = e.id
-          INNER JOIN users u ON e.user_id = u.id
-          WHERE t.project_id = ?
+          LEFT JOIN tasks t ON ts.task_id = t.id
+          LEFT JOIN bugs b ON ts.bug_id = b.id
+          LEFT JOIN employees e ON ts.employee_id = e.id
+          LEFT JOIN users u ON e.user_id = u.id
+          WHERE COALESCE(ts.project_id, t.project_id, b.project_id) = ?
         `;
         const detailParams = [project.project_id];
         
@@ -686,10 +697,49 @@ router.get('/timesheets/by-project', async (req, res) => {
         
         const [entries] = await db.query(detailQuery, detailParams);
         
+        // Get task-level aggregation
+        let taskQuery = `
+          SELECT 
+            t.id as task_id,
+            t.title as task_title,
+            t.task_code,
+            SUM(ts.hours) as task_hours,
+            COUNT(ts.id) as task_entries,
+            COUNT(DISTINCT ts.bug_id) as bug_count
+          FROM timesheets ts
+          LEFT JOIN tasks t ON ts.task_id = t.id
+          LEFT JOIN bugs b ON ts.bug_id = b.id
+          WHERE COALESCE(ts.project_id, t.project_id, b.project_id) = ?
+            AND ts.task_id IS NOT NULL
+        `;
+        const taskParams = [project.project_id];
+        
+        if (month && year) {
+          const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+          const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+          taskQuery += ' AND ts.date >= ? AND ts.date <= ?';
+          taskParams.push(startDate, endDate);
+        } else if (year) {
+          const startDate = `${year}-01-01`;
+          const endDate = `${year}-12-31`;
+          taskQuery += ' AND ts.date >= ? AND ts.date <= ?';
+          taskParams.push(startDate, endDate);
+        }
+        
+        if (employeeId) {
+          taskQuery += ' AND ts.employee_id = ?';
+          taskParams.push(employeeId);
+        }
+        
+        taskQuery += ' GROUP BY t.id, t.title, t.task_code ORDER BY task_hours DESC';
+        
+        const [tasks] = await db.query(taskQuery, taskParams);
+        
         return {
           ...project,
           dailySummary: dailySummary || [],
-          entries: entries || []
+          entries: entries || [],
+          tasks: tasks || []
         };
       })
     );
@@ -697,6 +747,184 @@ router.get('/timesheets/by-project', async (req, res) => {
     res.json({ data: detailedResults });
   } catch (error) {
     logger.error('Error fetching timesheets by project:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get today's timesheet summary
+router.get('/timesheets/today-summary', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    const isSuperAdmin = userRole === 'Super Admin';
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Get employee ID for non-Super Admin users
+    let employeeId = null;
+    if (!isSuperAdmin) {
+      const [employee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
+      if (employee.length > 0) {
+        employeeId = employee[0].id;
+      } else {
+        return res.json({ 
+          data: {
+            total_hours: 0,
+            projects_count: 0,
+            tasks_count: 0,
+            bugs_count: 0,
+            entries: []
+          }
+        });
+      }
+    }
+    
+    let query = `
+      SELECT 
+        COUNT(DISTINCT COALESCE(ts.project_id, t.project_id, b.project_id)) as projects_count,
+        COUNT(DISTINCT ts.task_id) as tasks_count,
+        COUNT(DISTINCT ts.bug_id) as bugs_count,
+        SUM(ts.hours) as total_hours,
+        COUNT(ts.id) as entries_count
+      FROM timesheets ts
+      LEFT JOIN tasks t ON ts.task_id = t.id
+      LEFT JOIN bugs b ON ts.bug_id = b.id
+      WHERE ts.date = ?
+    `;
+    const params = [today];
+    
+    if (employeeId) {
+      query += ' AND ts.employee_id = ?';
+      params.push(employeeId);
+    }
+    
+    const [summary] = await db.query(query, params);
+    
+    // Get detailed entries for today
+    let detailQuery = `
+      SELECT 
+        ts.id,
+        ts.date,
+        ts.hours,
+        ts.notes,
+        ts.task_id,
+        ts.bug_id,
+        ts.project_id,
+        t.title as task_title,
+        t.task_code,
+        b.bug_code,
+        b.title as bug_title,
+        p.name as project_name,
+        p.project_code as project_code,
+        u.name as employee_name,
+        e.emp_code
+      FROM timesheets ts
+      LEFT JOIN tasks t ON ts.task_id = t.id
+      LEFT JOIN bugs b ON ts.bug_id = b.id
+      LEFT JOIN projects p ON COALESCE(ts.project_id, t.project_id, b.project_id) = p.id
+      LEFT JOIN employees e ON ts.employee_id = e.id
+      LEFT JOIN users u ON e.user_id = u.id
+      WHERE ts.date = ?
+    `;
+    const detailParams = [today];
+    
+    if (employeeId) {
+      detailQuery += ' AND ts.employee_id = ?';
+      detailParams.push(employeeId);
+    }
+    
+    detailQuery += ' ORDER BY ts.created_at DESC';
+    
+    const [entries] = await db.query(detailQuery, detailParams);
+    
+    res.json({
+      data: {
+        ...summary[0],
+        entries: entries || []
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching today\'s timesheet summary:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// General timesheet creation endpoint (supports project_id, task_id, or bug_id)
+router.post('/timesheets', async (req, res) => {
+  try {
+    const { project_id, task_id, bug_id, date, hours, notes } = req.body;
+    const userId = req.user?.id;
+    
+    if (!date || !hours) {
+      return res.status(400).json({ error: 'Date and hours are required' });
+    }
+    
+    if (!project_id && !task_id && !bug_id) {
+      return res.status(400).json({ error: 'At least one of project_id, task_id, or bug_id is required' });
+    }
+    
+    // Get employee ID
+    const [employee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
+    if (employee.length === 0) {
+      return res.status(404).json({ error: 'Employee record not found' });
+    }
+    
+    let finalProjectId = project_id;
+    let finalTaskId = task_id;
+    let finalBugId = bug_id;
+    
+    // If bug_id is provided, get its project_id and task_id
+    if (bug_id) {
+      const [bug] = await db.query('SELECT project_id, task_id FROM bugs WHERE id = ?', [bug_id]);
+      if (bug.length === 0) {
+        return res.status(404).json({ error: 'Bug not found' });
+      }
+      if (!finalProjectId) finalProjectId = bug[0].project_id;
+      if (!finalTaskId) finalTaskId = bug[0].task_id;
+    }
+    
+    // If task_id is provided, get its project_id
+    if (task_id && !finalProjectId) {
+      const [task] = await db.query('SELECT project_id FROM tasks WHERE id = ?', [task_id]);
+      if (task.length === 0) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+      finalProjectId = task[0].project_id;
+    }
+    
+    // Verify project_id exists
+    if (finalProjectId) {
+      const [project] = await db.query('SELECT id FROM projects WHERE id = ?', [finalProjectId]);
+      if (project.length === 0) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+    }
+    
+    const [result] = await db.query(`
+      INSERT INTO timesheets (employee_id, project_id, task_id, bug_id, date, hours, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [employee[0].id, finalProjectId, finalTaskId, finalBugId, date, hours, notes || null]);
+    
+    const [newTimesheet] = await db.query(`
+      SELECT 
+        ts.*,
+        e.emp_code,
+        u.name as employee_name,
+        p.name as project_name,
+        t.title as task_title,
+        b.bug_code,
+        b.title as bug_title
+      FROM timesheets ts
+      LEFT JOIN employees e ON ts.employee_id = e.id
+      LEFT JOIN users u ON e.user_id = u.id
+      LEFT JOIN projects p ON ts.project_id = p.id
+      LEFT JOIN tasks t ON ts.task_id = t.id
+      LEFT JOIN bugs b ON ts.bug_id = b.id
+      WHERE ts.id = ?
+    `, [result.insertId]);
+    
+    res.status(201).json({ data: newTimesheet[0] });
+  } catch (error) {
+    logger.error('Error creating timesheet:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -749,7 +977,7 @@ router.get('/:id/timesheets', async (req, res) => {
 router.post('/:id/timesheets', async (req, res) => {
   try {
     const { id } = req.params;
-    const { date, hours, notes } = req.body;
+    const { date, hours, notes, bug_id } = req.body;
     const userId = req.user?.id;
     
     if (!date || !hours) {
@@ -762,10 +990,31 @@ router.post('/:id/timesheets', async (req, res) => {
       return res.status(404).json({ error: 'Employee record not found' });
     }
     
+    // Get task details to determine project_id
+    const [task] = await db.query('SELECT project_id FROM tasks WHERE id = ?', [id]);
+    if (task.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    const projectId = task[0].project_id;
+    
+    // If bug_id is provided, verify it belongs to the task
+    let bugProjectId = null;
+    if (bug_id) {
+      const [bug] = await db.query('SELECT project_id, task_id FROM bugs WHERE id = ?', [bug_id]);
+      if (bug.length === 0) {
+        return res.status(404).json({ error: 'Bug not found' });
+      }
+      if (bug[0].task_id && bug[0].task_id != id) {
+        return res.status(400).json({ error: 'Bug does not belong to this task' });
+      }
+      bugProjectId = bug[0].project_id || projectId;
+    }
+    
     const [result] = await db.query(`
-      INSERT INTO timesheets (employee_id, task_id, date, hours, notes)
-      VALUES (?, ?, ?, ?, ?)
-    `, [employee[0].id, id, date, hours, notes || null]);
+      INSERT INTO timesheets (employee_id, task_id, bug_id, project_id, date, hours, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [employee[0].id, id, bug_id || null, bugProjectId || projectId, date, hours, notes || null]);
     
     const [newTimesheet] = await db.query(`
       SELECT 

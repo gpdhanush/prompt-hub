@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -287,7 +288,6 @@ export default function AssetTicketDetail() {
             onClick={() => navigate('/it-assets/tickets')}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Tickets
           </Button>
           <div>
             <div className="flex items-center gap-3">
@@ -301,23 +301,6 @@ export default function AssetTicketDetail() {
             </div>
           </div>
         </div>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <StatusBadge
-              variant={
-                ticket.status === "closed"
-                  ? "success"
-                  : ticket.status === "open"
-                  ? "info"
-                  : ticket.status === "rejected"
-                  ? "error"
-                  : "warning"
-              }
-            >
-              {ticket.status}
-            </StatusBadge>
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -402,9 +385,7 @@ export default function AssetTicketDetail() {
                 <div className="space-y-2 pt-4 border-t">
                   <Label className="text-sm font-medium">Description</Label>
                   <div className="p-4 bg-muted/50 rounded-lg">
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                      {ticket.description}
-                    </p>
+                    <MarkdownRenderer content={ticket.description} />
                   </div>
                 </div>
               )}
@@ -436,6 +417,9 @@ export default function AssetTicketDetail() {
                         <SelectItem value="in_progress">In Progress</SelectItem>
                         <SelectItem value="resolved">Resolved</SelectItem>
                         <SelectItem value="closed">Closed</SelectItem>
+                        {(ticket.status === 'closed' || ticket.status === 'resolved') && (
+                          <SelectItem value="reopen">Reopen</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     {updateTicketMutation.isPending && (

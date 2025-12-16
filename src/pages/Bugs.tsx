@@ -63,6 +63,7 @@ import { cn } from "@/lib/utils";
 import { StatusBadge, bugSeverityMap, bugStatusMap } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageTitle } from "@/components/ui/page-title";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi, tasksApi, usersApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
@@ -497,17 +498,11 @@ export default function Bugs() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <AlertCircle className="h-6 w-6 text-primary" />
-            </div>
-            Bug Tracker
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            {userRole === 'Admin' ? 'View and track bugs across projects' : 'Track and resolve bugs across projects'}
-          </p>
-        </div>
+        <PageTitle
+          title="Bug Tracker"
+          icon={AlertCircle}
+          description={userRole === 'Admin' ? 'View and track bugs across projects' : 'Track and resolve bugs across projects'}
+        />
         {canCreateBug && (
           <Button onClick={() => navigate('/bugs/new')}>
             <Plus className="mr-2 h-4 w-4" />

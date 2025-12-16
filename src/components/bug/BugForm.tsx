@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Upload, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { SecureTextarea } from "@/components/ui/secure-textarea";
+import { useSecurityValidation } from "@/hooks/useSecurityValidation";
+import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -59,6 +61,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
   
   // Ref for file input
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { securityAlertProps } = useSecurityValidation();
 
   // Fetch projects, tasks, and users
   const { data: projectsData } = useQuery({
@@ -258,8 +261,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="title" className="text-red-500">Bug Title *</Label>
-              <Input
+              <SecureInput
                 id="title"
+                fieldName="Bug Title"
                 type="text"
                 value={formData.title}
                 onChange={(e) => handleInputChange("title", e.target.value)}
@@ -442,8 +446,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
         <CardContent className="space-y-4">
           <div className="grid gap-2">
             <Label htmlFor="steps_to_reproduce">Steps to Reproduce</Label>
-            <Textarea
+            <SecureTextarea
               id="steps_to_reproduce"
+              fieldName="Steps to Reproduce"
               value={formData.steps_to_reproduce}
               onChange={(e) => handleInputChange("steps_to_reproduce", e.target.value)}
               placeholder="1. Step one&#10;2. Step two&#10;3. Step three"
@@ -453,8 +458,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="actual_behavior">Actual Result</Label>
-              <Textarea
+              <SecureTextarea
                 id="actual_behavior"
+                fieldName="Actual Result"
                 value={formData.actual_behavior}
                 onChange={(e) => handleInputChange("actual_behavior", e.target.value)}
                 placeholder="What actually happens"
@@ -463,8 +469,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
             </div>
             <div className="grid gap-2">
               <Label htmlFor="expected_behavior">Expected Result</Label>
-              <Textarea
+              <SecureTextarea
                 id="expected_behavior"
+                fieldName="Expected Result"
                 value={formData.expected_behavior}
                 onChange={(e) => handleInputChange("expected_behavior", e.target.value)}
                 placeholder="What should happen"
@@ -485,8 +492,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="browser">Browser</Label>
-              <Input
+              <SecureInput
                 id="browser"
+                fieldName="Browser"
                 value={formData.browser}
                 onChange={(e) => handleInputChange("browser", e.target.value)}
                 placeholder="e.g., Chrome, Firefox, Safari"
@@ -511,8 +519,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
             </div>
             <div className="grid gap-2">
               <Label htmlFor="os">Operating System</Label>
-              <Input
+              <SecureInput
                 id="os"
+                fieldName="Operating System"
                 value={formData.os}
                 onChange={(e) => handleInputChange("os", e.target.value)}
                 placeholder="e.g., Android, iOS, Windows, Mac"
@@ -522,8 +531,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="app_version">App Version</Label>
-              <Input
+              <SecureInput
                 id="app_version"
+                fieldName="App Version"
                 value={formData.app_version}
                 onChange={(e) => handleInputChange("app_version", e.target.value)}
                 placeholder="e.g., 1.0.0"
@@ -531,8 +541,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
             </div>
             <div className="grid gap-2">
               <Label htmlFor="api_endpoint">API Endpoint (if applicable)</Label>
-              <Input
+              <SecureInput
                 id="api_endpoint"
+                fieldName="API Endpoint"
                 value={formData.api_endpoint}
                 onChange={(e) => handleInputChange("api_endpoint", e.target.value)}
                 placeholder="e.g., /api/users/123"
@@ -590,7 +601,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
             )}
             
             <div className="flex items-center gap-2">
-              <Input
+              <input
                 ref={fileInputRef}
                 id="attachments"
                 type="file"
@@ -634,6 +645,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
           </div>
         </CardContent>
       </Card>
+      <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );
 }

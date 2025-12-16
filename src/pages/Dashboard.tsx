@@ -39,6 +39,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { MessageSquare, User } from "lucide-react";
+import { PageTitle } from "@/components/ui/page-title";
 import {
   Dialog,
   DialogContent,
@@ -71,6 +72,13 @@ export default function Dashboard() {
   const isTL = userRole === 'Team Lead' || userRole === 'Team Leader';
   const isAdmin = userRole === 'Admin';
   const isTLOrAdmin = isTL || isAdmin;
+
+  // Redirect Admin users to IT Asset Dashboard
+  useEffect(() => {
+    if (isAdmin && !isSuperAdmin) {
+      navigate('/it-assets/dashboard', { replace: true });
+    }
+  }, [isAdmin, isSuperAdmin, navigate]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -397,13 +405,11 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10">
-              <Sparkles className="h-8 w-8 text-primary" />
-            </div>
-            Dashboard
-          </h1>
-          <p className="text-muted-foreground mt-1">Welcome back, {userName}</p>
+          <PageTitle
+            title="Dashboard"
+            icon={Sparkles}
+            description={`Welcome back, ${userName}`}
+          />
         </div>
         <div className="flex flex-col items-end">
           <div className="text-3xl font-bold text-foreground">

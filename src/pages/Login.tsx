@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Lock, Mail, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
+import { useSecurityValidation } from "@/hooks/useSecurityValidation";
+import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { authApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
@@ -24,6 +26,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const { startLoading, stopLoading } = useLoading();
   const navigate = useNavigate();
+  const { securityAlertProps } = useSecurityValidation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,8 +174,9 @@ export default function Login() {
               <Label htmlFor="email">Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
+                <SecureInput
                   id="email"
+                  fieldName="Email"
                   type="email"
                   placeholder="user@naethra.com"
                   className="pl-10"
@@ -187,8 +191,9 @@ export default function Login() {
               <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
+                <SecureInput
                   id="password"
+                  fieldName="Password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   className="pl-10 pr-10"
@@ -247,7 +252,7 @@ export default function Login() {
           </div>
         </div>
       </div>
-
+      <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );
 }

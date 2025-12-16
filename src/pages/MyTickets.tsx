@@ -49,6 +49,7 @@ import { assetsApi } from "@/lib/api";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { getItemSync } from "@/lib/secureStorage";
+import { PageTitle } from "@/components/ui/page-title";
 
 export default function MyTickets() {
   const navigate = useNavigate();
@@ -149,17 +150,11 @@ export default function MyTickets() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Ticket className="h-6 w-6 text-primary" />
-            </div>
-            My Support Tickets
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your IT support tickets and requests
-          </p>
-        </div>
+        <PageTitle
+          title="My Support Tickets"
+          icon={Ticket}
+          description="Manage your IT support tickets and requests"
+        />
         <Button onClick={() => navigate('/support/new')}>
           <Plus className="mr-2 h-4 w-4" />
           Create Ticket

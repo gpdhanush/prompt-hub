@@ -19,6 +19,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { PageTitle } from "@/components/ui/page-title";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -252,17 +253,11 @@ export default function MyDevices() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Laptop className="h-6 w-6 text-primary" />
-            </div>
-            My Devices
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            View your assigned devices and add devices you're currently holding
-          </p>
-        </div>
+        <PageTitle
+          title="My Devices"
+          icon={Laptop}
+          description="View your assigned devices and add devices you're currently holding"
+        />
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button>

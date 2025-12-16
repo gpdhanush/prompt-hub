@@ -134,22 +134,7 @@ export default function AssetView() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge
-            variant={
-              asset.status === "available"
-                ? "success"
-                : asset.status === "assigned"
-                ? "info"
-                : asset.status === "repair"
-                ? "warning"
-                : "error"
-            }
-          >
-            <div className="flex items-center gap-2">
-              {getStatusIcon(asset.status)}
-              {asset.status}
-            </div>
-          </StatusBadge>
+         
           <Button onClick={() => navigate(`/it-assets/assets/${asset.id}/edit`)}>
             <Edit className="mr-2 h-4 w-4" />
             Edit

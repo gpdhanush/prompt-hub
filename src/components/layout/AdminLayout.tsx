@@ -13,10 +13,12 @@ import { authApi } from "@/lib/api";
 import { PWAService } from "@/lib/pwaService";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
+import { NotificationPermissionDialog } from "@/components/NotificationPermissionDialog";
 
 export function AdminLayout() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuth, setIsAuth] = useState(false);
+  const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   
   // Initialize FCM for push notifications (only for authenticated users)
   const { permission, requestPermission, isRegistered } = useFCM();
@@ -81,6 +83,31 @@ export function AdminLayout() {
     checkAuth();
   }, []);
 
+  // Show notification permission dialog after user is authenticated
+  useEffect(() => {
+    if (isAuth && !isLoading) {
+      // Check if dialog was dismissed in this session
+      const wasDismissed = localStorage.getItem('notification_permission_dismissed');
+      
+      // Show dialog if:
+      // 1. Permission is default (not asked yet)
+      // 2. Dialog wasn't dismissed in this session
+      // 3. Notifications are supported
+      if (
+        'Notification' in window &&
+        Notification.permission === 'default' &&
+        !wasDismissed
+      ) {
+        // Show dialog after a short delay for better UX
+        const timer = setTimeout(() => {
+          setShowNotificationDialog(true);
+        }, 2000); // 2 second delay after page load
+        
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isAuth, isLoading, permission]);
+
   // Show loading state while checking authentication
   if (isLoading) {
     return (
@@ -110,6 +137,14 @@ export function AdminLayout() {
       {/* PWA Components */}
       <PWAInstallPrompt />
       <PWAUpdatePrompt />
+      
+      {/* Notification Permission Dialog */}
+      <NotificationPermissionDialog
+        open={showNotificationDialog}
+        onOpenChange={setShowNotificationDialog}
+        onRequestPermission={requestPermission}
+        permission={permission}
+      />
     </div>
   );
 }

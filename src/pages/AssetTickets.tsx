@@ -138,61 +138,11 @@ export default function AssetTickets() {
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={() => navigate('/it-assets/tickets/new')}>
+          <Button onClick={() => navigate('/support/new')}>
             <Plus className="mr-2 h-4 w-4" />
             New Ticket
           </Button>
         )}
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
-            <Ticket className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{total}</div>
-            <p className="text-xs text-muted-foreground">All tickets</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Open</CardTitle>
-            <AlertCircle className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {filteredTickets.filter((t: any) => t.status === 'open').length}
-            </div>
-            <p className="text-xs text-muted-foreground">Awaiting action</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {filteredTickets.filter((t: any) => t.status === 'in_progress').length}
-            </div>
-            <p className="text-xs text-muted-foreground">Being processed</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Resolved</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {filteredTickets.filter((t: any) => ['resolved', 'closed'].includes(t.status)).length}
-            </div>
-            <p className="text-xs text-muted-foreground">Completed</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Filters */}

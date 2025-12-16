@@ -33,6 +33,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PageTitle } from "@/components/ui/page-title";
 import { getProfilePhotoUrl } from "@/lib/imageUtils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -254,17 +255,11 @@ export default function Employees() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <User className="h-6 w-6 text-primary" />
-            </div>
-             <span className="text-primary">Employees</span>
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Manage employee records
-          </p>
-        </div>
+        <PageTitle
+          title="Employees"
+          icon={User}
+          description="Manage employee records"
+        />
         <Button onClick={() => navigate('/employees/new')}>
           <Plus className="mr-2 h-4 w-4" />
           Add Employee

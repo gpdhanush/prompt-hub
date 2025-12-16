@@ -4,8 +4,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Save, Loader2, Ticket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { useSecurityValidation } from "@/hooks/useSecurityValidation";
+import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { assetsApi } from "@/lib/api";
@@ -25,6 +28,7 @@ export default function SupportTicketCreate() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const { validateFormData, securityAlertProps } = useSecurityValidation();
 
   const createTicketMutation = useMutation({
     mutationFn: (data: any) => assetsApi.createTicket(data),
@@ -76,7 +80,10 @@ export default function SupportTicketCreate() {
       return;
     }
     
-    createTicketMutation.mutate(formData);
+    // Validate and sanitize form data for security
+    const sanitizedData = validateFormData(formData, ['subject', 'category', 'description']);
+    
+    createTicketMutation.mutate(sanitizedData);
   };
 
   return (
@@ -126,9 +133,12 @@ export default function SupportTicketCreate() {
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="request">Request</SelectItem>
-                    <SelectItem value="issue">Issue</SelectItem>
-                    <SelectItem value="maintenance">Maintenance</SelectItem>
+                    <SelectItem value="new_request">New Request</SelectItem>
+                    <SelectItem value="repair">Repair</SelectItem>
+                    <SelectItem value="replacement">Replacement</SelectItem>
+                    <SelectItem value="return">Return</SelectItem>
+                    <SelectItem value="accessory_request">Accessory Request</SelectItem>
+                    <SelectItem value="damage_report">Damage Report</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors.ticket_type && (
@@ -174,8 +184,9 @@ export default function SupportTicketCreate() {
               <Label htmlFor="subject" className="text-red-500">
                 Subject *
               </Label>
-              <Input
+              <SecureInput
                 id="subject"
+                fieldName="Subject"
                 value={formData.subject}
                 onChange={(e) => {
                   setFormData({ ...formData, subject: e.target.value });
@@ -194,18 +205,17 @@ export default function SupportTicketCreate() {
               <Label htmlFor="description" className="text-red-500">
                 Description *
               </Label>
-              <Textarea
-                id="description"
+              <MarkdownEditor
                 value={formData.description}
-                onChange={(e) => {
-                  setFormData({ ...formData, description: e.target.value });
+                onChange={(value) => {
+                  setFormData({ ...formData, description: value });
                   if (errors.description) {
                     setErrors({ ...errors, description: '' });
                   }
                 }}
-                placeholder="Provide detailed information about your request or issue"
-                rows={5}
-                className={errors.description ? 'border-red-500' : ''}
+                placeholder="Provide detailed information about your request or issue. You can use markdown formatting."
+                rows={8}
+                error={errors.description}
               />
               {errors.description && (
                 <p className="text-sm text-red-500 mt-1">{errors.description}</p>
@@ -240,6 +250,7 @@ export default function SupportTicketCreate() {
           </Button>
         </div>
       </form>
+      <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );
 }

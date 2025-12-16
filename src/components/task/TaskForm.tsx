@@ -2,10 +2,12 @@ import { useState, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Upload, X, FileText, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { SecureTextarea } from "@/components/ui/secure-textarea";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { useSecurityValidation } from "@/hooks/useSecurityValidation";
+import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -54,6 +56,7 @@ export function TaskForm({
 }: TaskFormProps) {
   const currentUser = getCurrentUser();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { securityAlertProps } = useSecurityValidation();
 
   // Fetch projects and users
   const { data: projectsData } = useQuery({
@@ -250,8 +253,9 @@ export function TaskForm({
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="title" className="text-red-500">Task Title *</Label>
-              <Input
+              <SecureInput
                 id="title"
+                fieldName="Task Title"
                 value={formData.title}
                 onChange={(e) => handleInputChange("title", e.target.value)}
                 placeholder="Enter task title"
@@ -541,7 +545,7 @@ export function TaskForm({
           <div className="grid gap-2">
             <Label htmlFor="attachments">Screenshots / Attachments</Label>
             <div className="flex items-center gap-2">
-              <Input
+              <input
                 ref={fileInputRef}
                 id="attachments"
                 type="file"
@@ -585,6 +589,7 @@ export function TaskForm({
           </div>
         </CardContent>
       </Card>
+      <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );
 }

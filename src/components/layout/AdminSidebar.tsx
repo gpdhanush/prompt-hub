@@ -109,14 +109,14 @@ export function AdminSidebar() {
   const canAccessITAssets = isAdmin;
   
   // Tickets menu - Check permission for ticket view
-  // Super Admin always has access, others need tickets.view permission
-  const canAccessTickets = isSuperAdmin || hasPermission('tickets.view');
+  // Super Admin and Admin always have access, others need it_assets.tickets.view permission
+  const canAccessTickets = isSuperAdmin || isAdmin || hasPermission('it_assets.tickets.view');
   
   // My Devices - All users except Super Admin (employees see their own devices)
   const canAccessMyDevices = !isSuperAdmin;
   
-  // Support - All users except Super Admin
-  const canAccessSupport = !isSuperAdmin;
+  // Support - All users except Admin and Super Admin
+  const canAccessSupport = !isSuperAdmin && !isAdmin;
   
   // Logout handler
   const handleLogout = async () => {
@@ -249,17 +249,19 @@ export function AdminSidebar() {
             if (item.href === '/audit-logs' && !canAccessAuditLogs) return false;
             // IT Asset Management - Admin only (except Tickets which requires permission)
             if (item.section === 'it-assets') {
-              // Tickets menu requires tickets.view permission
+              // Hide IT Asset Dashboard for Admin users (only show for Super Admin)
+              if (item.href === '/it-assets/dashboard' && !isSuperAdmin) return false;
+              // Tickets menu - Admin/Super Admin have access, others need it_assets.tickets.view permission
               if (item.href === '/it-assets/tickets' && !canAccessTickets) return false;
               // Other IT Asset menus are Admin only
-              if (item.href !== '/it-assets/tickets' && !canAccessITAssets) return false;
+              if (item.href !== '/it-assets/tickets' && item.href !== '/it-assets/dashboard' && !canAccessITAssets) return false;
               
               // If no items in this section are accessible, hide the section header
               // This is handled by checking if any items pass the filter
             }
             // My Devices - All users except Super Admin (now in main section, check by href)
             if (item.href === '/my-devices' && !canAccessMyDevices) return false;
-            // Support - All users except Super Admin
+            // Support - All users except Admin and Super Admin
             if (item.href === '/support' && !canAccessSupport) return false;
             return true;
           })

@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { SecureTextarea } from "@/components/ui/secure-textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,6 +37,8 @@ import { toast } from "@/hooks/use-toast";
 import { getItemSync } from "@/lib/secureStorage";
 import { API_CONFIG } from "@/lib/config";
 import { getImageUrl } from "@/lib/imageUtils";
+import { useSecurityValidation } from "@/hooks/useSecurityValidation";
+import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 
 export default function SupportTicketView() {
   const { id } = useParams();
@@ -48,6 +51,7 @@ export default function SupportTicketView() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileComment, setFileComment] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { validateInput, securityAlertProps } = useSecurityValidation();
 
   const userStr = getItemSync('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
@@ -81,6 +85,7 @@ export default function SupportTicketView() {
   const ticket = ticketData?.data;
   const comments = commentsData?.data || [];
   const attachments = attachmentsData?.data || [];
+  const isTicketOwner = ticket && currentUser && ticket.employee_user_id === currentUser.id;
 
   // Add comment mutation
   const addCommentMutation = useMutation({
@@ -113,6 +118,23 @@ export default function SupportTicketView() {
       toast({
         title: "Error",
         description: error.message || "Failed to update ticket",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reopen ticket mutation (for users)
+  const reopenTicketMutation = useMutation({
+    mutationFn: () => assetsApi.reopenTicket(ticketId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['support-ticket', ticketId] });
+      queryClient.invalidateQueries({ queryKey: ['my-tickets'] });
+      toast({ title: "Success", description: "Ticket reopened successfully" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reopen ticket",
         variant: "destructive",
       });
     },
@@ -155,7 +177,9 @@ export default function SupportTicketView() {
 
   const handleAddComment = () => {
     if (!comment.trim()) return;
-    addCommentMutation.mutate({ comment: comment.trim(), is_internal: isInternal });
+    // Validate and sanitize comment
+    const sanitizedComment = validateInput(comment.trim(), 'Comment');
+    addCommentMutation.mutate({ comment: sanitizedComment, is_internal: isInternal });
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -401,6 +425,36 @@ export default function SupportTicketView() {
                 </div>
               )}
 
+              {/* User Reopen Button (for ticket owner) */}
+              {!isAdmin && isTicketOwner && (ticket.status === 'closed' || ticket.status === 'resolved') && (
+                <div className="pt-4 border-t space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium">Ticket Status</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This ticket is {ticket.status}. You can reopen it if you need further assistance.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => reopenTicketMutation.mutate()}
+                    disabled={reopenTicketMutation.isPending}
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
+                    {reopenTicketMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Reopening...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        Reopen Ticket
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
               {/* Admin Status Update */}
               {isAdmin && (
                 <div className="pt-4 border-t space-y-3">
@@ -428,6 +482,9 @@ export default function SupportTicketView() {
                         <SelectItem value="in_progress">In Progress</SelectItem>
                         <SelectItem value="resolved">Resolved</SelectItem>
                         <SelectItem value="closed">Closed</SelectItem>
+                        {(ticket.status === 'closed' || ticket.status === 'resolved') && (
+                          <SelectItem value="reopen">Reopen</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     {updateTicketMutation.isPending && (
@@ -447,7 +504,8 @@ export default function SupportTicketView() {
             <CardContent className="space-y-4">
               {/* Add Comment */}
               <div className="space-y-3">
-                <Textarea
+                <SecureTextarea
+                  fieldName="Comment"
                   placeholder="Add a comment or update..."
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
@@ -595,7 +653,8 @@ export default function SupportTicketView() {
                 />
                 {selectedFile && (
                   <div className="space-y-2">
-                    <Textarea
+                    <SecureTextarea
+                      fieldName="File Comment"
                       placeholder="Add a comment (optional)"
                       value={fileComment}
                       onChange={(e) => setFileComment(e.target.value)}
@@ -695,6 +754,7 @@ export default function SupportTicketView() {
           </Card>
         </div>
       </div>
+      <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );
 }
