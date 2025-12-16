@@ -232,8 +232,8 @@ export function AdminHeader() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Support - All users except Super Admin */}
-        {canAccessSupport && (
+        {/* Support - All users except Super Admin - Hidden per user request */}
+        {/* {canAccessSupport && (
           <Button
             variant="ghost"
             size="icon"
@@ -243,7 +243,7 @@ export function AdminHeader() {
           >
             <Headphones className="h-5 w-5 text-green-600 dark:text-green-400" />
           </Button>
-        )}
+        )} */}
 
         {/* User Menu */}
         <DropdownMenu>

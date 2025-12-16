@@ -75,6 +75,7 @@ import RaiseTicket from "./pages/RaiseTicket";
 import AssetTicketDetail from "./pages/AssetTicketDetail";
 import MyTickets from "./pages/MyTickets";
 import SupportTicketView from "./pages/SupportTicketView";
+import SupportTicketCreate from "./pages/SupportTicketCreate";
 import { useEffect, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
@@ -521,6 +522,14 @@ const AppContent = () => {
                     <MyTickets />
                   </ProtectedRoute>
                 } 
+              />
+              <Route
+                path="/support/new"
+                element={
+                  <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
+                    <SupportTicketCreate />
+                  </ProtectedRoute>
+                }
               />
               <Route
                 path="/support/tickets/:id"

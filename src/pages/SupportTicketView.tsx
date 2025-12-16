@@ -225,14 +225,45 @@ export default function SupportTicketView() {
     );
   }
 
-  if (!ticket) {
+  if (ticketError && (ticketError as any)?.status === 404) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold">Ticket not found</h2>
-          <Button onClick={() => navigate('/support')} className="mt-4">
-            Back to Support Tickets
-          </Button>
+      <div className="container mx-auto p-6">
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+          <div className="p-4 rounded-lg bg-destructive/10">
+            <AlertCircle className="h-12 w-12 text-destructive" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-2">Ticket not found</h2>
+            <p className="text-muted-foreground mb-4">
+              The ticket you're looking for doesn't exist or has been removed.
+            </p>
+            <Button onClick={() => navigate('/support')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Support Tickets
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!ticket && !ticketLoading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+          <div className="p-4 rounded-lg bg-destructive/10">
+            <AlertCircle className="h-12 w-12 text-destructive" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-2">Ticket not found</h2>
+            <p className="text-muted-foreground mb-4">
+              The ticket you're looking for doesn't exist or has been removed.
+            </p>
+            <Button onClick={() => navigate('/support')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Support Tickets
+            </Button>
+          </div>
         </div>
       </div>
     );

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge, taskStageMap, taskPriorityMap } from "@/components/ui/status-badge";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { tasksApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -158,9 +159,11 @@ export default function TaskView() {
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Description</Label>
                 <div className="p-4 bg-muted/30 rounded-md border">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                    {task.description || "No description provided"}
-                  </p>
+                  {task.description ? (
+                    <MarkdownRenderer content={task.description} className="text-sm" />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No description provided</p>
+                  )}
                 </div>
               </div>
 

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -422,11 +423,10 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
           </div>
           <div className="grid gap-2">
             <Label htmlFor="description" className="text-red-500">Bug Description *</Label>
-            <Textarea
-              id="description"
+            <MarkdownEditor
               value={formData.description}
-              onChange={(e) => handleInputChange("description", e.target.value)}
-              placeholder="Describe the bug in detail"
+              onChange={(value) => handleInputChange("description", value)}
+              placeholder="Describe the bug in detail. You can use markdown formatting: headings, lists, code blocks, and images."
               rows={6}
             />
           </div>

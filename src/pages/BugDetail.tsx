@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge, bugSeverityMap, bugStatusMap } from "@/components/ui/status-badge";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi } from "@/lib/api";
@@ -237,9 +238,11 @@ export default function BugDetail() {
               <CardTitle>Description</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-sm whitespace-pre-wrap">
-                {bug.description ? toTitleCase(bug.description) : "No Description"}
-              </div>
+              {bug.description ? (
+                <MarkdownRenderer content={bug.description} className="text-sm" />
+              ) : (
+                <div className="text-sm text-muted-foreground">No Description</div>
+              )}
             </CardContent>
           </Card>
 

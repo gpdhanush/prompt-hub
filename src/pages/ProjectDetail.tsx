@@ -16,6 +16,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getImageUrl } from "@/lib/imageUtils";
 import { logger } from "@/lib/logger";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -498,8 +499,8 @@ export default function ProjectDetail() {
               {project.description && (
                 <div>
                   <Label className="text-muted-foreground text-sm">Description</Label>
-                  <div className="text-sm whitespace-pre-wrap mt-1">
-                    {project.description}
+                  <div className="text-sm mt-1 p-4 bg-muted/30 rounded-md border">
+                    <MarkdownRenderer content={project.description} />
                   </div>
                 </div>
               )}
