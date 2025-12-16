@@ -26,6 +26,7 @@ import {
   Ticket,
   UserSearch,
   LogOut,
+  Clock,
 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -53,6 +54,7 @@ const allMenuItems = [
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
+  { name: "Timesheet", href: "/timesheet", icon: Clock, section: "main" },
   { name: "My Devices", href: "/my-devices", icon: Laptop, section: "main" },
   { name: "Reports", href: "/reports", icon: BarChart3, section: "main" },
   
@@ -142,7 +144,7 @@ export function AdminSidebar() {
       return location.pathname === href;
     }
     // Routes that should match exactly (no sub-pages)
-    const exactMatchRoutes = ['/audit-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/my-devices', '/user-hierarchy', '/employees/list', '/support'];
+    const exactMatchRoutes = ['/audit-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/timesheet', '/my-devices', '/user-hierarchy', '/employees/list', '/support'];
     if (exactMatchRoutes.includes(href)) {
       return location.pathname === href;
     }

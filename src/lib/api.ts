@@ -612,6 +612,13 @@ export const tasksApi = {
   // Timesheets
   getTimesheets: (id: number) =>
     request<{ data: any[] }>(`/tasks/${id}/timesheets`),
+  getTimesheetsByProject: (params?: { month?: number; year?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.month) queryParams.append('month', params.month.toString());
+    if (params?.year) queryParams.append('year', params.year.toString());
+    const queryString = queryParams.toString();
+    return request<{ data: any[] }>(`/tasks/timesheets/by-project${queryString ? `?${queryString}` : ''}`);
+  },
   createTimesheet: (id: number, data: { date: string; hours: number; notes?: string }) =>
     request<{ data: any }>(`/tasks/${id}/timesheets`, {
       method: 'POST',

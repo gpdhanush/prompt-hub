@@ -65,19 +65,30 @@ export default function RolesPermissions() {
 
   useEffect(() => {
     if (permissionsData?.data && selectedRole) {
+      const currentPermissions = permissionsData.data;
       setRolePermissions(prev => ({
         ...prev,
-        [selectedRole]: permissionsData.data
+        [selectedRole]: currentPermissions
       }));
-      // Initialize local permissions state for editing
-      const permissionsMap: Record<number, boolean> = {};
-      permissionsData.data.forEach((perm: any) => {
-        permissionsMap[perm.id] = perm.allowed;
+      
+      // Always initialize/update local permissions state
+      // If in edit mode, preserve existing changes; otherwise initialize from server
+      setLocalPermissions(prev => {
+        const existing = prev[selectedRole] || {};
+        const updated: Record<number, boolean> = {};
+        
+        // First, set all permissions from server (this handles new permissions)
+        currentPermissions.forEach((perm: any) => {
+          // If user has already changed this permission, keep their change
+          // Otherwise, use the server value
+          updated[perm.id] = existing[perm.id] !== undefined ? existing[perm.id] : perm.allowed;
+        });
+        
+        return {
+          ...prev,
+          [selectedRole]: updated
+        };
       });
-      setLocalPermissions(prev => ({
-        ...prev,
-        [selectedRole]: permissionsMap
-      }));
     }
   }, [permissionsData, selectedRole]);
 
@@ -85,10 +96,27 @@ export default function RolesPermissions() {
   const updatePermissionsMutation = useMutation({
     mutationFn: ({ roleId, permissions }: { roleId: number; permissions: Array<{ permission_id: number; allowed: boolean }> }) =>
       rolesApi.updatePermissions(roleId, permissions),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['role-permissions', selectedRole] });
+    onSuccess: (data, variables) => {
+      // Update the rolePermissions state with the response data immediately
+      if (data?.data) {
+        setRolePermissions(prev => ({
+          ...prev,
+          [variables.roleId]: data.data
+        }));
+        // Update localPermissions to match the saved state
+        const permissionsMap: Record<number, boolean> = {};
+        data.data.forEach((perm: any) => {
+          permissionsMap[perm.id] = perm.allowed;
+        });
+        setLocalPermissions(prev => ({
+          ...prev,
+          [variables.roleId]: permissionsMap
+        }));
+      }
+      // Invalidate and refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['role-permissions', variables.roleId] });
       toast({ title: "Success", description: "Permissions updated successfully." });
-      setEditingPermissions(prev => ({ ...prev, [selectedRole!]: false }));
+      setEditingPermissions(prev => ({ ...prev, [variables.roleId]: false }));
     },
     onError: (error: any) => {
       toast({
@@ -100,6 +128,22 @@ export default function RolesPermissions() {
   });
 
   const handleStartEdit = (roleId: number) => {
+    // Ensure localPermissions is fully initialized before entering edit mode
+    const permissions = rolePermissions[roleId] || [];
+    const currentLocalPerms = localPermissions[roleId] || {};
+    
+    // Initialize all permissions in local state if not already present
+    const initializedPerms: Record<number, boolean> = {};
+    permissions.forEach((perm: any) => {
+      initializedPerms[perm.id] = currentLocalPerms[perm.id] !== undefined 
+        ? currentLocalPerms[perm.id] 
+        : perm.allowed;
+    });
+    
+    setLocalPermissions(prev => ({
+      ...prev,
+      [roleId]: initializedPerms
+    }));
     setEditingPermissions(prev => ({ ...prev, [roleId]: true }));
   };
 
@@ -128,11 +172,18 @@ export default function RolesPermissions() {
     }));
   };
 
-  // Check if all permissions are checked (globally)
+  // Check if all permissions are checked (globally) - only for visible permissions
   const areAllPermissionsChecked = (roleId: number) => {
     const permissions = rolePermissions[roleId] || [];
     const localPerms = localPermissions[roleId] || {};
-    return permissions.length > 0 && permissions.every((perm: any) => localPerms[perm.id] === true);
+    // Filter out excluded modules
+    const excludedModules = ['My Devices', 'Prompts', 'Roles', 'Settings'];
+    const visiblePermissions = permissions.filter((perm: any) => 
+      !excludedModules.includes(perm.module) &&
+      (perm.module !== 'IT Asset Management' || 
+       ['assets', 'assignments', 'tickets', 'maintenance', 'inventory'].some(menu => perm.code.includes(`.${menu}.`)))
+    );
+    return visiblePermissions.length > 0 && visiblePermissions.every((perm: any) => localPerms[perm.id] === true);
   };
 
   // Check if all permissions in a module are checked
@@ -168,12 +219,19 @@ export default function RolesPermissions() {
     return modulePerms.length > 0 && modulePerms.every((perm: any) => localPerms[perm.id] === true);
   };
 
-  // Check if some (but not all) permissions are checked (for indeterminate state)
+  // Check if some (but not all) permissions are checked (for indeterminate state) - only for visible permissions
   const areSomePermissionsChecked = (roleId: number) => {
     const permissions = rolePermissions[roleId] || [];
     const localPerms = localPermissions[roleId] || {};
-    const checkedCount = permissions.filter((perm: any) => localPerms[perm.id] === true).length;
-    return checkedCount > 0 && checkedCount < permissions.length;
+    // Filter out excluded modules
+    const excludedModules = ['My Devices', 'Prompts', 'Roles', 'Settings'];
+    const visiblePermissions = permissions.filter((perm: any) => 
+      !excludedModules.includes(perm.module) &&
+      (perm.module !== 'IT Asset Management' || 
+       ['assets', 'assignments', 'tickets', 'maintenance', 'inventory'].some(menu => perm.code.includes(`.${menu}.`)))
+    );
+    const checkedCount = visiblePermissions.filter((perm: any) => localPerms[perm.id] === true).length;
+    return checkedCount > 0 && checkedCount < visiblePermissions.length;
   };
 
   // Check if some (but not all) permissions in a module are checked
@@ -210,11 +268,19 @@ export default function RolesPermissions() {
     return checkedCount > 0 && checkedCount < modulePerms.length;
   };
 
-  // Toggle all permissions (globally)
+  // Toggle all permissions (globally) - only for visible permissions
   const handleToggleAllPermissions = (roleId: number, checked: boolean) => {
     const permissions = rolePermissions[roleId] || [];
-    const updatedPerms: Record<number, boolean> = {};
-    permissions.forEach((perm: any) => {
+    const localPerms = localPermissions[roleId] || {};
+    // Filter out excluded modules
+    const excludedModules = ['My Devices', 'Prompts', 'Roles', 'Settings'];
+    const visiblePermissions = permissions.filter((perm: any) => 
+      !excludedModules.includes(perm.module) &&
+      (perm.module !== 'IT Asset Management' || 
+       ['assets', 'assignments', 'tickets', 'maintenance', 'inventory'].some(menu => perm.code.includes(`.${menu}.`)))
+    );
+    const updatedPerms: Record<number, boolean> = { ...localPerms };
+    visiblePermissions.forEach((perm: any) => {
       updatedPerms[perm.id] = checked;
     });
     setLocalPermissions(prev => ({
@@ -269,9 +335,10 @@ export default function RolesPermissions() {
     const permissions = rolePermissions[roleId] || [];
     const localPerms = localPermissions[roleId] || {};
     
+    // Use localPerms if it exists (user changed it), otherwise use the original allowed value
     const permissionsToUpdate = permissions.map((perm: any) => ({
       permission_id: perm.id,
-      allowed: localPerms[perm.id] || false
+      allowed: localPerms[perm.id] !== undefined ? localPerms[perm.id] : perm.allowed
     }));
 
     updatePermissionsMutation.mutate({ roleId, permissions: permissionsToUpdate });
@@ -308,7 +375,9 @@ export default function RolesPermissions() {
           Roles & Permissions
         </h1>
         <p className="text-muted-foreground">
-          View and manage role permissions. Click on a role to see its permissions.
+          {isSuperAdmin 
+            ? "View and manage role permissions. Click on a role to see its permissions."
+            : "View role permissions"}
         </p>
       </div>
 
@@ -316,13 +385,8 @@ export default function RolesPermissions() {
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-2xl">
             <Users className="h-6 w-6 text-primary" />
-            Roles & Permissions
+            Manage Role Permissions
           </CardTitle>
-          <CardDescription className="text-base">
-            {isSuperAdmin 
-              ? "View and manage role permissions. Click on a role to see its permissions."
-              : "View role permissions"}
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -436,11 +500,17 @@ export default function RolesPermissions() {
                           const isEditing = editingPermissions[role.id] && role.name !== 'Super Admin';
                           const localPerms = localPermissions[role.id] || {};
                           
-                          // Group permissions by module
-                          // For IT Asset Management, also group by menu name (Assets, Assignments, etc.)
-                          const groupedPermissions: Record<string, any[]> = {};
+                          // Filter out unwanted modules
+                          const excludedModules = ['My Devices', 'Prompts', 'Roles', 'Settings'];
+                          const filteredPermissions = permissions.filter((perm: any) => 
+                            !excludedModules.includes(perm.module)
+                          );
+                          
+                          // Define module order for first group
+                          const firstGroupOrder = ['Audit', 'Bugs', 'Employees', 'Leaves', 'Projects', 'Reimbursements', 'Reports', 'Tasks', 'Users'];
+                          
+                          // IT Asset Management menu mapping
                           const itAssetMenuMapping: Record<string, string> = {
-                            'dashboard': 'IT Asset Dashboard',
                             'assets': 'Assets',
                             'assignments': 'Assignments',
                             'tickets': 'Tickets',
@@ -448,80 +518,69 @@ export default function RolesPermissions() {
                             'inventory': 'Inventory',
                           };
                           
-                          permissions.forEach((perm: any) => {
+                          // Group permissions by module
+                          // For IT Asset Management, also group by menu name (Assets, Assignments, etc.)
+                          const groupedPermissions: Record<string, any[]> = {};
+                          
+                          filteredPermissions.forEach((perm: any) => {
                             if (perm.module === 'IT Asset Management') {
                               // Extract menu name from permission code (e.g., "it_assets.assets.view" -> "assets")
                               const codeParts = perm.code.split('.');
                               if (codeParts.length >= 2) {
                                 const menuKey = codeParts[1]; // "assets", "assignments", etc.
                                 const menuName = itAssetMenuMapping[menuKey] || menuKey;
-                                const groupKey = `${perm.module}::${menuName}`;
-                                if (!groupedPermissions[groupKey]) {
-                                  groupedPermissions[groupKey] = [];
-                                }
-                                groupedPermissions[groupKey].push(perm);
-                              } else {
-                                // Fallback for dashboard or other special cases
-                                if (perm.code.includes('dashboard')) {
-                                  const groupKey = `${perm.module}::IT Asset Dashboard`;
+                                // Only include specific menus: Assets, Assignments, Tickets, Maintenance, Inventory
+                                if (['Assets', 'Assignments', 'Tickets', 'Maintenance', 'Inventory'].includes(menuName)) {
+                                  const groupKey = `${perm.module}::${menuName}`;
                                   if (!groupedPermissions[groupKey]) {
                                     groupedPermissions[groupKey] = [];
                                   }
                                   groupedPermissions[groupKey].push(perm);
-                                } else {
-                                  // Default grouping
-                                  if (!groupedPermissions[perm.module]) {
-                                    groupedPermissions[perm.module] = [];
-                                  }
-                                  groupedPermissions[perm.module].push(perm);
                                 }
                               }
                             } else {
-                              // Regular module grouping
-                              if (!groupedPermissions[perm.module]) {
-                                groupedPermissions[perm.module] = [];
+                              // Regular module grouping (only if in first group order)
+                              if (firstGroupOrder.includes(perm.module)) {
+                                if (!groupedPermissions[perm.module]) {
+                                  groupedPermissions[perm.module] = [];
+                                }
+                                groupedPermissions[perm.module].push(perm);
                               }
-                              groupedPermissions[perm.module].push(perm);
                             }
                           });
                           
-                          // Sort IT Asset Management sub-menus in a specific order
-                          const itAssetMenuOrder = ['IT Asset Dashboard', 'Assets', 'Assignments', 'Tickets', 'Maintenance', 'Inventory'];
-                          const sortedKeys = Object.keys(groupedPermissions).sort((a, b) => {
-                            const [moduleA, menuA] = a.split('::');
-                            const [moduleB, menuB] = b.split('::');
-                            
-                            if (moduleA === 'IT Asset Management' && moduleB === 'IT Asset Management') {
-                              const indexA = itAssetMenuOrder.indexOf(menuA || '');
-                              const indexB = itAssetMenuOrder.indexOf(menuB || '');
-                              if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                              if (indexA !== -1) return -1;
-                              if (indexB !== -1) return 1;
-                            }
-                            return 0;
-                          });
+                          // Sort permissions in the specified order
+                          const itAssetMenuOrder = ['Assets', 'Assignments', 'Tickets', 'Maintenance', 'Inventory'];
                           
                           // Create sorted grouped permissions
                           const sortedGroupedPermissions: Record<string, any[]> = {};
-                          sortedKeys.forEach(key => {
-                            sortedGroupedPermissions[key] = groupedPermissions[key];
-                          });
-                          Object.keys(groupedPermissions).forEach(key => {
-                            if (!sortedGroupedPermissions[key]) {
-                              sortedGroupedPermissions[key] = groupedPermissions[key];
+                          
+                          // First, add modules in first group order
+                          firstGroupOrder.forEach(module => {
+                            if (groupedPermissions[module]) {
+                              sortedGroupedPermissions[module] = groupedPermissions[module];
                             }
                           });
                           
-                          const totalPermissions = permissions.length;
+                          // Then, add IT Asset Management sub-menus in specified order
+                          itAssetMenuOrder.forEach(menuName => {
+                            const groupKey = `IT Asset Management::${menuName}`;
+                            if (groupedPermissions[groupKey]) {
+                              sortedGroupedPermissions[groupKey] = groupedPermissions[groupKey];
+                            }
+                          });
+                          
+                          // Count total visible permissions
+                          const totalPermissions = Object.values(sortedGroupedPermissions).reduce((sum, perms) => sum + perms.length, 0);
                           
                           // Check if we have IT Asset Management permissions to show parent module
                           const hasITAssetPermissions = Object.keys(sortedGroupedPermissions).some(key => key.startsWith('IT Asset Management::'));
                           
                           return Object.keys(sortedGroupedPermissions).length > 0 ? (
-                            <div className="space-y-4">
+                            <div className="space-y-5">
                               {/* Global Check All */}
                               {isEditing && (
-                                <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent rounded-lg border border-primary/20 mb-2">
+                                <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent rounded-xl border-2 border-primary/20 shadow-sm">
                                   <Checkbox
                                     id={`global-check-all-${role.id}`}
                                     checked={areAllPermissionsChecked(role.id)}
@@ -533,115 +592,194 @@ export default function RolesPermissions() {
                                   />
                                   <Label 
                                     htmlFor={`global-check-all-${role.id}`}
-                                    className="text-sm font-semibold cursor-pointer flex-1 text-foreground"
+                                    className="text-base font-semibold cursor-pointer flex-1 text-foreground"
                                   >
                                     Check All Permissions ({totalPermissions} total)
                                   </Label>
                                 </div>
                               )}
                               
-                              {hasITAssetPermissions && (
-                                <div className="p-3 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent rounded-lg border border-primary/10 mb-2">
-                                  <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                    <span className="inline-block w-2 h-2 rounded-full bg-primary"></span>
-                                    IT Asset Management
-                                  </p>
-                                </div>
-                              )}
-                              
-                              {Object.entries(sortedGroupedPermissions).map(([moduleKey, perms]) => {
-                                // Extract module name and menu name (for IT Asset Management)
-                                const [module, menuName] = moduleKey.split('::');
-                                const displayName = menuName || module;
-                                const isITAssetSubMenu = !!menuName;
-                                
-                                return (
-                                <div key={moduleKey} className={`space-y-3 p-4 bg-gradient-to-br from-muted/50 via-muted/30 to-transparent rounded-lg border border-border/50 ${isITAssetSubMenu ? 'ml-4 border-l-2 border-l-primary/30' : ''}`}>
-                                  <div className="flex items-center justify-between mb-3">
-                                    {isITAssetSubMenu ? (
-                                      <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary/60"></span>
-                                        {displayName}
-                                      </p>
-                                    ) : (
-                                      <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                        <span className="inline-block w-2 h-2 rounded-full bg-primary"></span>
-                                        {displayName}
-                                      </p>
-                                    )}
-                                    {isEditing && (
-                                      <div className="flex items-center gap-2">
-                                        <Checkbox
-                                          id={`module-check-all-${role.id}-${moduleKey}`}
-                                          checked={areAllModulePermissionsChecked(role.id, moduleKey)}
-                                          onCheckedChange={(checked) => 
-                                            handleToggleModulePermissions(role.id, moduleKey, checked as boolean)
-                                          }
-                                          disabled={updatePermissionsMutation.isPending}
-                                          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                                        />
-                                        <Label 
-                                          htmlFor={`module-check-all-${role.id}-${moduleKey}`}
-                                          className="text-xs text-muted-foreground cursor-pointer font-medium"
-                                        >
-                                          Check All ({perms.length})
-                                        </Label>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 ${isITAssetSubMenu ? '' : ''}`}>
-                                    {perms.map((perm: any) => {
-                                      // Extract permission name from code (e.g., "it_assets.assets.view" -> "view")
-                                      // Capitalize first letter for better display
-                                      const permCode = perm.code.split('.').pop() || perm.code;
-                                      const permName = permCode.charAt(0).toUpperCase() + permCode.slice(1);
-                                      const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
-                                      
-                                      return (
-                                        <div 
-                                          key={perm.id} 
-                                          className={`flex items-center space-x-2.5 p-2 rounded-md transition-colors ${
-                                            isChecked 
-                                              ? 'bg-primary/10 border border-primary/20' 
-                                              : 'bg-background/50 border border-border/30'
-                                          }`}
-                                        >
-                                          {isEditing ? (
+                              {/* First Group: Regular Modules */}
+                              {Object.entries(sortedGroupedPermissions)
+                                .filter(([moduleKey]) => !moduleKey.startsWith('IT Asset Management::'))
+                                .map(([moduleKey, perms]) => {
+                                  const displayName = moduleKey;
+                                  
+                                  return (
+                                    <div key={moduleKey} className="space-y-3 p-5 bg-gradient-to-br from-card via-card/95 to-muted/20 rounded-xl border border-border/60 shadow-sm hover:shadow-md transition-shadow">
+                                      <div className="flex items-center justify-between mb-4">
+                                        <p className="text-base font-semibold text-foreground flex items-center gap-2.5">
+                                          <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary"></span>
+                                          {displayName}
+                                        </p>
+                                        {isEditing && (
+                                          <div className="flex items-center gap-2.5">
                                             <Checkbox
-                                              id={`perm-${role.id}-${perm.id}`}
-                                              checked={isChecked}
+                                              id={`module-check-all-${role.id}-${moduleKey}`}
+                                              checked={areAllModulePermissionsChecked(role.id, moduleKey)}
                                               onCheckedChange={(checked) => 
-                                                handlePermissionToggle(role.id, perm.id, checked as boolean)
+                                                handleToggleModulePermissions(role.id, moduleKey, checked as boolean)
                                               }
                                               disabled={updatePermissionsMutation.isPending}
                                               className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                                             />
-                                          ) : (
-                                            isChecked ? (
-                                              <div className="p-0.5 rounded-full bg-primary/20">
-                                                <Check className="h-4 w-4 text-primary" />
+                                            <Label 
+                                              htmlFor={`module-check-all-${role.id}-${moduleKey}`}
+                                              className="text-sm text-muted-foreground cursor-pointer font-medium"
+                                            >
+                                              Check All ({perms.length})
+                                            </Label>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {perms.map((perm: any) => {
+                                          const permCode = perm.code.split('.').pop() || perm.code;
+                                          const permName = permCode.charAt(0).toUpperCase() + permCode.slice(1);
+                                          const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
+                                          
+                                          return (
+                                            <div 
+                                              key={perm.id} 
+                                              className={`flex items-center space-x-3 p-3 rounded-lg transition-all ${
+                                                isChecked 
+                                                  ? 'bg-primary/10 border-2 border-primary/30 shadow-sm' 
+                                                  : 'bg-background/60 border border-border/40 hover:border-border/60'
+                                              }`}
+                                            >
+                                              {isEditing ? (
+                                                <Checkbox
+                                                  id={`perm-${role.id}-${perm.id}`}
+                                                  checked={isChecked}
+                                                  onCheckedChange={(checked) => 
+                                                    handlePermissionToggle(role.id, perm.id, checked as boolean)
+                                                  }
+                                                  disabled={updatePermissionsMutation.isPending}
+                                                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                                />
+                                              ) : (
+                                                isChecked ? (
+                                                  <div className="p-1 rounded-full bg-primary/20 flex-shrink-0">
+                                                    <Check className="h-4 w-4 text-primary" />
+                                                  </div>
+                                                ) : (
+                                                  <X className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                                )
+                                              )}
+                                              <Label 
+                                                htmlFor={`perm-${role.id}-${perm.id}`}
+                                                className={`text-sm cursor-pointer flex-1 ${
+                                                  isChecked 
+                                                    ? 'text-foreground font-medium' 
+                                                    : 'text-muted-foreground'
+                                                }`}
+                                              >
+                                                {permName}
+                                              </Label>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              
+                              {/* IT Asset Management Group */}
+                              {hasITAssetPermissions && (
+                                <div className="space-y-4">
+                                  <div className="p-4 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent rounded-xl border-2 border-primary/20 shadow-sm">
+                                    <p className="text-base font-semibold text-foreground flex items-center gap-2.5">
+                                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary"></span>
+                                      IT Asset Management
+                                    </p>
+                                  </div>
+                                  
+                                  {Object.entries(sortedGroupedPermissions)
+                                    .filter(([moduleKey]) => moduleKey.startsWith('IT Asset Management::'))
+                                    .map(([moduleKey, perms]) => {
+                                      const [, menuName] = moduleKey.split('::');
+                                      const displayName = menuName;
+                                      
+                                      return (
+                                        <div key={moduleKey} className="space-y-3 p-5 bg-gradient-to-br from-card via-card/95 to-muted/20 rounded-xl border-l-4 border-l-primary/40 border border-border/60 shadow-sm hover:shadow-md transition-shadow ml-4">
+                                          <div className="flex items-center justify-between mb-4">
+                                            <p className="text-base font-semibold text-foreground flex items-center gap-2.5">
+                                              <span className="inline-block w-2 h-2 rounded-full bg-primary/70"></span>
+                                              {displayName}
+                                            </p>
+                                            {isEditing && (
+                                              <div className="flex items-center gap-2.5">
+                                                <Checkbox
+                                                  id={`module-check-all-${role.id}-${moduleKey}`}
+                                                  checked={areAllModulePermissionsChecked(role.id, moduleKey)}
+                                                  onCheckedChange={(checked) => 
+                                                    handleToggleModulePermissions(role.id, moduleKey, checked as boolean)
+                                                  }
+                                                  disabled={updatePermissionsMutation.isPending}
+                                                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                                />
+                                                <Label 
+                                                  htmlFor={`module-check-all-${role.id}-${moduleKey}`}
+                                                  className="text-sm text-muted-foreground cursor-pointer font-medium"
+                                                >
+                                                  Check All ({perms.length})
+                                                </Label>
                                               </div>
-                                            ) : (
-                                              <X className="h-4 w-4 text-muted-foreground" />
-                                            )
-                                          )}
-                                          <Label 
-                                            htmlFor={`perm-${role.id}-${perm.id}`}
-                                            className={`text-sm cursor-pointer flex-1 ${
-                                              isChecked 
-                                                ? 'text-foreground font-medium' 
-                                                : 'text-muted-foreground'
-                                            }`}
-                                          >
-                                            {permName}
-                                          </Label>
+                                            )}
+                                          </div>
+                                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                            {perms.map((perm: any) => {
+                                              const permCode = perm.code.split('.').pop() || perm.code;
+                                              const permName = permCode.charAt(0).toUpperCase() + permCode.slice(1);
+                                              const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
+                                              
+                                              return (
+                                                <div 
+                                                  key={perm.id} 
+                                                  className={`flex items-center space-x-3 p-3 rounded-lg transition-all ${
+                                                    isChecked 
+                                                      ? 'bg-primary/10 border-2 border-primary/30 shadow-sm' 
+                                                      : 'bg-background/60 border border-border/40 hover:border-border/60'
+                                                  }`}
+                                                >
+                                                  {isEditing ? (
+                                                    <Checkbox
+                                                      id={`perm-${role.id}-${perm.id}`}
+                                                      checked={isChecked}
+                                                      onCheckedChange={(checked) => 
+                                                        handlePermissionToggle(role.id, perm.id, checked as boolean)
+                                                      }
+                                                      disabled={updatePermissionsMutation.isPending}
+                                                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                                    />
+                                                  ) : (
+                                                    isChecked ? (
+                                                      <div className="p-1 rounded-full bg-primary/20 flex-shrink-0">
+                                                        <Check className="h-4 w-4 text-primary" />
+                                                      </div>
+                                                    ) : (
+                                                      <X className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                                    )
+                                                  )}
+                                                  <Label 
+                                                    htmlFor={`perm-${role.id}-${perm.id}`}
+                                                    className={`text-sm cursor-pointer flex-1 ${
+                                                      isChecked 
+                                                        ? 'text-foreground font-medium' 
+                                                        : 'text-muted-foreground'
+                                                    }`}
+                                                  >
+                                                    {permName}
+                                                  </Label>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
                                         </div>
                                       );
                                     })}
-                                  </div>
                                 </div>
-                              );
-                              })}
+                              )}
                             </div>
                           ) : (
                             <div className="text-sm text-muted-foreground py-4">

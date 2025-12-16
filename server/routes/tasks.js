@@ -549,6 +549,123 @@ router.get('/:id/history', async (req, res) => {
 // TIMESHEETS ROUTES
 // ============================================
 
+// Get timesheets grouped by project with month filter
+router.get('/timesheets/by-project', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    const isSuperAdmin = userRole === 'Super Admin';
+    const { month, year } = req.query;
+    
+    // Get employee ID for non-Super Admin users
+    let employeeId = null;
+    if (!isSuperAdmin) {
+      const [employee] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
+      if (employee.length > 0) {
+        employeeId = employee[0].id;
+      } else {
+        return res.json({ data: [] });
+      }
+    }
+    
+    // Build date filter
+    let dateFilter = '';
+    const params = [];
+    
+    if (month && year) {
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+      dateFilter = ' AND ts.date >= ? AND ts.date <= ?';
+      params.push(startDate, endDate);
+    } else if (year) {
+      const startDate = `${year}-01-01`;
+      const endDate = `${year}-12-31`;
+      dateFilter = ' AND ts.date >= ? AND ts.date <= ?';
+      params.push(startDate, endDate);
+    }
+    
+    // Build employee filter
+    if (employeeId) {
+      dateFilter += ' AND ts.employee_id = ?';
+      params.push(employeeId);
+    }
+    
+    const query = `
+      SELECT 
+        p.id as project_id,
+        p.name as project_name,
+        p.project_code as project_code,
+        SUM(ts.hours) as total_hours,
+        COUNT(ts.id) as entry_count,
+        GROUP_CONCAT(DISTINCT t.title ORDER BY t.title SEPARATOR ', ') as task_titles
+      FROM timesheets ts
+      INNER JOIN tasks t ON ts.task_id = t.id
+      INNER JOIN projects p ON t.project_id = p.id
+      WHERE ts.task_id IS NOT NULL
+        ${dateFilter}
+      GROUP BY p.id, p.name, p.project_code
+      ORDER BY total_hours DESC, p.name ASC
+    `;
+    
+    const [results] = await db.query(query, params);
+    
+    // Get detailed timesheet entries for each project
+    const detailedResults = await Promise.all(
+      results.map(async (project) => {
+        let detailQuery = `
+          SELECT 
+            ts.id,
+            ts.date,
+            ts.hours,
+            ts.notes,
+            t.id as task_id,
+            t.title as task_title,
+            t.task_code,
+            u.name as employee_name,
+            e.emp_code
+          FROM timesheets ts
+          INNER JOIN tasks t ON ts.task_id = t.id
+          INNER JOIN employees e ON ts.employee_id = e.id
+          INNER JOIN users u ON e.user_id = u.id
+          WHERE t.project_id = ?
+        `;
+        const detailParams = [project.project_id];
+        
+        if (month && year) {
+          const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+          const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+          detailQuery += ' AND ts.date >= ? AND ts.date <= ?';
+          detailParams.push(startDate, endDate);
+        } else if (year) {
+          const startDate = `${year}-01-01`;
+          const endDate = `${year}-12-31`;
+          detailQuery += ' AND ts.date >= ? AND ts.date <= ?';
+          detailParams.push(startDate, endDate);
+        }
+        
+        if (employeeId) {
+          detailQuery += ' AND ts.employee_id = ?';
+          detailParams.push(employeeId);
+        }
+        
+        detailQuery += ' ORDER BY ts.date DESC, ts.created_at DESC';
+        
+        const [entries] = await db.query(detailQuery, detailParams);
+        
+        return {
+          ...project,
+          entries: entries || []
+        };
+      })
+    );
+    
+    res.json({ data: detailedResults });
+  } catch (error) {
+    logger.error('Error fetching timesheets by project:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get timesheets for a task
 router.get('/:id/timesheets', async (req, res) => {
   try {

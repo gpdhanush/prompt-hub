@@ -30,6 +30,7 @@ import Settings from "./pages/Settings";
 import FileManager from "./pages/FileManager";
 import Notifications from "./pages/Notifications";
 import Reports from "./pages/Reports";
+import Timesheet from "./pages/Timesheet";
 import EmployeeProfile from "./pages/EmployeeProfile";
 import EmployeeCreate from "./pages/EmployeeCreate";
 import EmployeeEdit from "./pages/EmployeeEdit";
@@ -394,6 +395,10 @@ const AppContent = () => {
                     <Reports />
                   </ProtectedRoute>
                 } 
+              />
+              <Route 
+                path="/timesheet" 
+                element={<Timesheet />} 
               />
               <Route 
                 path="/user-hierarchy" 
