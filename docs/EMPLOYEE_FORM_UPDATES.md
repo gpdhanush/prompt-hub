@@ -170,12 +170,12 @@ const { data: rolePositionsData, isLoading: isLoadingPositions } = useQuery({
 ---
 
 ### 8. Reduced Max Width
-- ✅ Changed from `max-w-6xl` to `max-w-4xl`
+- ✅ Changed from `` to `max-w-4xl`
 - ✅ Form is now more compact
 
 **Change:**
 ```tsx
-<div className="container mx-auto p-6 space-y-6 max-w-4xl">
+<div className="mx-auto p-6 space-y-6 max-w-4xl">
 ```
 
 ---

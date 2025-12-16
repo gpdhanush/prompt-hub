@@ -140,7 +140,7 @@ export default function AssetCreate() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-6xl">
+    <div className="mx-auto p-6 space-y-6 ">
       <div className="flex items-center gap-4">
         <Button variant="outline" size="icon" onClick={() => navigate('/it-assets/assets')}>
           <ArrowLeft className="h-4 w-4" />

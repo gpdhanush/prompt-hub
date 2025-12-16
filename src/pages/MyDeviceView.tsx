@@ -53,7 +53,7 @@ export default function MyDeviceView() {
           <p className="text-muted-foreground mb-4">
             {(error as any)?.message || "The device you're looking for doesn't exist or you don't have access to it."}
           </p>
-          <Button onClick={() => navigate('/my-devices')}>Back to My Devices</Button>
+          <Button onClick={() => navigate('/my-devices')}>Back</Button>
         </div>
       </div>
     );
@@ -81,13 +81,12 @@ export default function MyDeviceView() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-6xl">
+    <div className="mx-auto p-6 space-y-6 ">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate('/my-devices')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to My Devices
           </Button>
           <div>
             <div className="flex items-center gap-3">

@@ -2224,6 +2224,36 @@ router.post('/assign', requireAdmin, async (req, res) => {
     // Update asset status
     await db.query('UPDATE assets SET status = "assigned" WHERE id = ?', [asset_id]);
     
+    // Reduce inventory quantity if asset category exists in inventory
+    try {
+      const [inventoryItems] = await db.query(
+        'SELECT id, current_stock FROM inventory_items WHERE asset_category_id = ? AND current_stock > 0 LIMIT 1',
+        [asset.asset_category_id]
+      );
+      
+      if (inventoryItems.length > 0) {
+        const inventoryItem = inventoryItems[0];
+        const newStock = Math.max(0, inventoryItem.current_stock - 1);
+        
+        // Update inventory stock
+        await db.query(
+          'UPDATE inventory_items SET current_stock = ? WHERE id = ?',
+          [newStock, inventoryItem.id]
+        );
+        
+        // Create inventory transaction record
+        await db.query(`
+          INSERT INTO inventory_transactions (
+            inventory_item_id, type, quantity_change, previous_stock, new_stock,
+            reason, notes, created_by
+          ) VALUES (?, 'reduction', -1, ?, ?, 'Asset assigned', ?, ?)
+        `, [inventoryItem.id, inventoryItem.current_stock, newStock, `Asset ID: ${asset_id} assigned to employee ID: ${employee_id}`, userId]);
+      }
+    } catch (inventoryError) {
+      // Log error but don't fail the assignment
+      logger.warn('Error updating inventory for asset assignment:', inventoryError);
+    }
+    
     // Log audit
     await db.query(`
       INSERT INTO asset_audit_logs (

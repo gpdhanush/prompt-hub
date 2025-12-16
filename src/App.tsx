@@ -667,6 +667,34 @@ const AppContent = () => {
 };
 
 const App = () => {
+  // Initialize theme color from localStorage on app start, or use default
+  useEffect(() => {
+    const root = document.documentElement;
+    const savedColor = localStorage.getItem("theme-color");
+    const defaultColor = "217 91% 60%"; // Default blue color
+    
+    // Use saved color or default
+    const colorToUse = savedColor || defaultColor;
+    
+    // Apply color to CSS variables
+    root.style.setProperty("--primary", colorToUse);
+    root.style.setProperty("--ring", colorToUse);
+    root.style.setProperty("--sidebar-primary", colorToUse);
+    root.style.setProperty("--sidebar-ring", colorToUse);
+    root.style.setProperty("--chart-1", colorToUse);
+    
+    // If no color was saved, save the default
+    if (!savedColor) {
+      localStorage.setItem("theme-color", defaultColor);
+    }
+    
+    // Set default theme to light if not set
+    const savedTheme = localStorage.getItem("vite-ui-theme");
+    if (!savedTheme) {
+      localStorage.setItem("vite-ui-theme", "light");
+    }
+  }, []);
+
   // Set up global error handlers for production crash reporting
   useEffect(() => {
     // Handle unhandled errors
@@ -723,7 +751,7 @@ const App = () => {
 
   return (
     <ErrorBoundary>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
         <QueryClientProvider client={queryClient}>
           <LoadingProvider>
             <TooltipProvider>

@@ -239,7 +239,7 @@ export function TaskForm({
   };
 
   return (
-    <div className="container mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto space-y-6">
       {/* Basic Task Information */}
       <Card>
         <CardHeader>

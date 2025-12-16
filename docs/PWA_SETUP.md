@@ -203,7 +203,8 @@ The service worker supports background sync for offline actions:
 // In your component
 if ('serviceWorker' in navigator && 'sync' in ServiceWorkerRegistration.prototype) {
   const registration = await navigator.serviceWorker.ready;
-  await registration.sync.register('sync-forms');
+  // Register your sync tags here
+  // Example: await registration.sync.register('sync-tasks');
 }
 ```
 

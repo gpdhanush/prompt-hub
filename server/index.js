@@ -36,10 +36,12 @@ import mfaRoutes from './routes/mfa.js';
 import assetsRoutes from './routes/assets.js';
 import remindersRoutes from './routes/reminders.js';
 import webhooksRoutes from './routes/webhooks.js';
+import documentRequestsRoutes from './routes/documentRequests.js';
 import { performHealthCheck } from './utils/dbHealthCheck.js';
 import { initializeFirebase } from './utils/fcmService.js';
 import { reportFatalError, createErrorContext } from './utils/errorReporting.js';
 import { initializeReminderScheduler } from './utils/reminderScheduler.js';
+import { initializeTicketEscalationScheduler } from './utils/ticketEscalationScheduler.js';
 
 // Initialize Firebase Admin SDK (async)
 initializeFirebase().catch(err => {
@@ -238,6 +240,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/assets', assetsRoutes);
 app.use('/api/reminders', remindersRoutes);
+app.use('/api/document-requests', documentRequestsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -333,6 +336,12 @@ app.use((req, res) => {
       } catch (error) {
         logger.error('Error cleaning up expired tokens on startup:', error);
       }
+
+      // Initialize reminder scheduler
+      initializeReminderScheduler();
+      
+      // Initialize ticket escalation scheduler
+      initializeTicketEscalationScheduler();
     } catch (error) {
       logger.error('❌ Health check failed:', error);
       logger.error('⚠️  Server started but database may have issues');

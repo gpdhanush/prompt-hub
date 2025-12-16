@@ -1544,3 +1544,91 @@ export const assetsApi = {
   getAssignmentHistory: (assetId: number) =>
     request<{ data: any[] }>(`/assets/assignments/history/${assetId}`),
 };
+
+// Document Requests API
+export const documentRequestsApi = {
+  getAll: (params?: { employee_id?: number; request_type?: string; status?: string }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.employee_id) queryParams.append('employee_id', params.employee_id.toString());
+    if (params?.request_type) queryParams.append('request_type', params.request_type);
+    if (params?.status) queryParams.append('status', params.status);
+    const query = queryParams.toString();
+    return request<{ data: any[] }>(`/document-requests${query ? `?${query}` : ''}`);
+  },
+  getById: (id: number) =>
+    request<{ data: any }>(`/document-requests/${id}`),
+  create: (data: { request_type: string; employee_id: number; document_name: string; description?: string; due_date?: string }) =>
+    request<{ data: any; message: string }>('/document-requests', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  submit: async (id: number, formData: FormData) => {
+    const API_BASE_URL = API_CONFIG.BASE_URL;
+    setGlobalLoading(true);
+    
+    try {
+      let token = getItemSync('auth_token');
+      if (!token) {
+        token = await secureStorageWithCache.getItem('auth_token');
+      }
+      
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/document-requests/${id}/submit`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new ApiError(response.status, errorData.error || 'Request failed');
+      }
+      
+      return await response.json();
+    } finally {
+      setGlobalLoading(false);
+    }
+  },
+  provide: async (id: number, formData: FormData) => {
+    const API_BASE_URL = API_CONFIG.BASE_URL;
+    setGlobalLoading(true);
+    
+    try {
+      let token = getItemSync('auth_token');
+      if (!token) {
+        token = await secureStorageWithCache.getItem('auth_token');
+      }
+      
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/document-requests/${id}/provide`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new ApiError(response.status, errorData.error || 'Request failed');
+      }
+      
+      return await response.json();
+    } finally {
+      setGlobalLoading(false);
+    }
+  },
+  review: (id: number, data: { status: 'approved' | 'rejected'; review_notes?: string }) =>
+    request<{ message: string }>(`/document-requests/${id}/review`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+};

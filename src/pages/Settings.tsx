@@ -39,7 +39,7 @@ const themeColors = [
   { name: "Violet", value: "258 90% 66%", class: "violet" },
   { name: "Rose", value: "350 89% 60%", class: "rose" },
   { name: "Sky", value: "199 89% 48%", class: "sky" },
-  { name: "Fuchsia", value: "292 84% 61%", class: "fuchsia" },
+  { name: "Indigo1", value: "242 57% 58%", class: "indigo1" },
 ];
 
 // Permission modules mapping
@@ -156,13 +156,31 @@ export default function Settings() {
 
   useEffect(() => {
     setMounted(true);
-    // Get current primary color from CSS
+    // Load saved theme color from localStorage, or use default
+    const savedColor = localStorage.getItem("theme-color");
+    const defaultColor = "217 91% 60%"; // Default blue color
+    const colorToUse = savedColor || defaultColor;
+    
     const root = document.documentElement;
-    const primaryColor = getComputedStyle(root).getPropertyValue("--primary").trim();
-    if (primaryColor) {
-      setSelectedColor(primaryColor);
+    root.style.setProperty("--primary", colorToUse);
+    root.style.setProperty("--ring", colorToUse);
+    root.style.setProperty("--sidebar-primary", colorToUse);
+    root.style.setProperty("--sidebar-ring", colorToUse);
+    root.style.setProperty("--chart-1", colorToUse);
+    setSelectedColor(colorToUse);
+    
+    // If no color was saved, save the default
+    if (!savedColor) {
+      localStorage.setItem("theme-color", defaultColor);
     }
-  }, []);
+    
+    // Set default theme to light if not set
+    const savedTheme = localStorage.getItem("vite-ui-theme");
+    if (!savedTheme) {
+      localStorage.setItem("vite-ui-theme", "light");
+      setTheme("light");
+    }
+  }, [setTheme]);
 
   const handleColorChange = (colorValue: string) => {
     setSelectedColor(colorValue);

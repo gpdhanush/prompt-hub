@@ -141,7 +141,7 @@ export default function TaskCreate() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button

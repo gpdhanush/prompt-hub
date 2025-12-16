@@ -82,10 +82,10 @@ export default function RolesPermissions() {
           // If user has already changed this permission, keep their change
           // Otherwise, use the server value
           updated[perm.id] = existing[perm.id] !== undefined ? existing[perm.id] : perm.allowed;
-        });
+      });
         
         return {
-          ...prev,
+        ...prev,
           [selectedRole]: updated
         };
       });
@@ -531,7 +531,7 @@ export default function RolesPermissions() {
                                 const menuName = itAssetMenuMapping[menuKey] || menuKey;
                                 // Only include specific menus: Assets, Assignments, Tickets, Maintenance, Inventory
                                 if (['Assets', 'Assignments', 'Tickets', 'Maintenance', 'Inventory'].includes(menuName)) {
-                                  const groupKey = `${perm.module}::${menuName}`;
+                                const groupKey = `${perm.module}::${menuName}`;
                                   if (!groupedPermissions[groupKey]) {
                                     groupedPermissions[groupKey] = [];
                                   }
@@ -541,11 +541,11 @@ export default function RolesPermissions() {
                             } else {
                               // Regular module grouping (only if in first group order)
                               if (firstGroupOrder.includes(perm.module)) {
-                                if (!groupedPermissions[perm.module]) {
-                                  groupedPermissions[perm.module] = [];
-                                }
-                                groupedPermissions[perm.module].push(perm);
+                              if (!groupedPermissions[perm.module]) {
+                                groupedPermissions[perm.module] = [];
                               }
+                              groupedPermissions[perm.module].push(perm);
+                            }
                             }
                           });
                           
@@ -690,94 +690,94 @@ export default function RolesPermissions() {
                                   <div className="p-4 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent rounded-xl border-2 border-primary/20 shadow-sm">
                                     <p className="text-base font-semibold text-foreground flex items-center gap-2.5">
                                       <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary"></span>
-                                      IT Asset Management
-                                    </p>
-                                  </div>
-                                  
+                                    IT Asset Management
+                                  </p>
+                                </div>
+                              
                                   {Object.entries(sortedGroupedPermissions)
                                     .filter(([moduleKey]) => moduleKey.startsWith('IT Asset Management::'))
                                     .map(([moduleKey, perms]) => {
                                       const [, menuName] = moduleKey.split('::');
                                       const displayName = menuName;
-                                      
-                                      return (
+                                
+                                return (
                                         <div key={moduleKey} className="space-y-3 p-5 bg-gradient-to-br from-card via-card/95 to-muted/20 rounded-xl border-l-4 border-l-primary/40 border border-border/60 shadow-sm hover:shadow-md transition-shadow ml-4">
                                           <div className="flex items-center justify-between mb-4">
                                             <p className="text-base font-semibold text-foreground flex items-center gap-2.5">
                                               <span className="inline-block w-2 h-2 rounded-full bg-primary/70"></span>
-                                              {displayName}
-                                            </p>
-                                            {isEditing && (
+                                        {displayName}
+                                      </p>
+                                    {isEditing && (
                                               <div className="flex items-center gap-2.5">
-                                                <Checkbox
-                                                  id={`module-check-all-${role.id}-${moduleKey}`}
-                                                  checked={areAllModulePermissionsChecked(role.id, moduleKey)}
-                                                  onCheckedChange={(checked) => 
-                                                    handleToggleModulePermissions(role.id, moduleKey, checked as boolean)
-                                                  }
-                                                  disabled={updatePermissionsMutation.isPending}
-                                                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                                                />
-                                                <Label 
-                                                  htmlFor={`module-check-all-${role.id}-${moduleKey}`}
+                                        <Checkbox
+                                          id={`module-check-all-${role.id}-${moduleKey}`}
+                                          checked={areAllModulePermissionsChecked(role.id, moduleKey)}
+                                          onCheckedChange={(checked) => 
+                                            handleToggleModulePermissions(role.id, moduleKey, checked as boolean)
+                                          }
+                                          disabled={updatePermissionsMutation.isPending}
+                                          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                        />
+                                        <Label 
+                                          htmlFor={`module-check-all-${role.id}-${moduleKey}`}
                                                   className="text-sm text-muted-foreground cursor-pointer font-medium"
-                                                >
-                                                  Check All ({perms.length})
-                                                </Label>
-                                              </div>
-                                            )}
-                                          </div>
+                                        >
+                                          Check All ({perms.length})
+                                        </Label>
+                                      </div>
+                                    )}
+                                  </div>
                                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                            {perms.map((perm: any) => {
-                                              const permCode = perm.code.split('.').pop() || perm.code;
-                                              const permName = permCode.charAt(0).toUpperCase() + permCode.slice(1);
-                                              const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
-                                              
-                                              return (
-                                                <div 
-                                                  key={perm.id} 
+                                    {perms.map((perm: any) => {
+                                      const permCode = perm.code.split('.').pop() || perm.code;
+                                      const permName = permCode.charAt(0).toUpperCase() + permCode.slice(1);
+                                      const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
+                                      
+                                      return (
+                                        <div 
+                                          key={perm.id} 
                                                   className={`flex items-center space-x-3 p-3 rounded-lg transition-all ${
-                                                    isChecked 
+                                            isChecked 
                                                       ? 'bg-primary/10 border-2 border-primary/30 shadow-sm' 
                                                       : 'bg-background/60 border border-border/40 hover:border-border/60'
-                                                  }`}
-                                                >
-                                                  {isEditing ? (
-                                                    <Checkbox
-                                                      id={`perm-${role.id}-${perm.id}`}
-                                                      checked={isChecked}
-                                                      onCheckedChange={(checked) => 
-                                                        handlePermissionToggle(role.id, perm.id, checked as boolean)
-                                                      }
-                                                      disabled={updatePermissionsMutation.isPending}
-                                                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                                                    />
-                                                  ) : (
-                                                    isChecked ? (
+                                          }`}
+                                        >
+                                          {isEditing ? (
+                                            <Checkbox
+                                              id={`perm-${role.id}-${perm.id}`}
+                                              checked={isChecked}
+                                              onCheckedChange={(checked) => 
+                                                handlePermissionToggle(role.id, perm.id, checked as boolean)
+                                              }
+                                              disabled={updatePermissionsMutation.isPending}
+                                              className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                            />
+                                          ) : (
+                                            isChecked ? (
                                                       <div className="p-1 rounded-full bg-primary/20 flex-shrink-0">
-                                                        <Check className="h-4 w-4 text-primary" />
-                                                      </div>
-                                                    ) : (
+                                                <Check className="h-4 w-4 text-primary" />
+                                              </div>
+                                            ) : (
                                                       <X className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                                    )
-                                                  )}
-                                                  <Label 
-                                                    htmlFor={`perm-${role.id}-${perm.id}`}
-                                                    className={`text-sm cursor-pointer flex-1 ${
-                                                      isChecked 
-                                                        ? 'text-foreground font-medium' 
-                                                        : 'text-muted-foreground'
-                                                    }`}
-                                                  >
-                                                    {permName}
-                                                  </Label>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
+                                            )
+                                          )}
+                                          <Label 
+                                            htmlFor={`perm-${role.id}-${perm.id}`}
+                                            className={`text-sm cursor-pointer flex-1 ${
+                                              isChecked 
+                                                ? 'text-foreground font-medium' 
+                                                : 'text-muted-foreground'
+                                            }`}
+                                          >
+                                            {permName}
+                                          </Label>
                                         </div>
                                       );
                                     })}
+                                  </div>
+                                </div>
+                              );
+                              })}
                                 </div>
                               )}
                             </div>

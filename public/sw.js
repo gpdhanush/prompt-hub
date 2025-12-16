@@ -287,21 +287,9 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('sync', (event) => {
   console.log('[SW] Background sync:', event.tag);
   
-  if (event.tag === 'sync-forms') {
-    event.waitUntil(syncPendingForms());
-  }
+  // Add your background sync handlers here
+  // Example: if (event.tag === 'sync-tasks') { ... }
 });
-
-// Helper: Sync pending forms
-async function syncPendingForms() {
-  // This would sync any pending form submissions
-  // Implementation depends on your app's needs
-  console.log('[SW] Syncing pending forms...');
-  
-  // Example: Get pending items from IndexedDB and sync
-  // const pendingItems = await getPendingItems();
-  // await Promise.all(pendingItems.map(item => syncItem(item)));
-}
 
 // Push notification event (handled by Firebase messaging)
 self.addEventListener('push', (event) => {

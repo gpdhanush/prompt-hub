@@ -609,9 +609,43 @@ router.get('/timesheets/by-project', async (req, res) => {
     
     const [results] = await db.query(query, params);
     
-    // Get detailed timesheet entries for each project
+    // Get detailed timesheet entries for each project with daily breakdown
     const detailedResults = await Promise.all(
       results.map(async (project) => {
+        // Get daily summary (hours per day)
+        let dailySummaryQuery = `
+          SELECT 
+            ts.date,
+            SUM(ts.hours) as daily_hours,
+            COUNT(ts.id) as daily_entries
+          FROM timesheets ts
+          INNER JOIN tasks t ON ts.task_id = t.id
+          WHERE t.project_id = ?
+        `;
+        const dailyParams = [project.project_id];
+        
+        if (month && year) {
+          const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+          const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+          dailySummaryQuery += ' AND ts.date >= ? AND ts.date <= ?';
+          dailyParams.push(startDate, endDate);
+        } else if (year) {
+          const startDate = `${year}-01-01`;
+          const endDate = `${year}-12-31`;
+          dailySummaryQuery += ' AND ts.date >= ? AND ts.date <= ?';
+          dailyParams.push(startDate, endDate);
+        }
+        
+        if (employeeId) {
+          dailySummaryQuery += ' AND ts.employee_id = ?';
+          dailyParams.push(employeeId);
+        }
+        
+        dailySummaryQuery += ' GROUP BY ts.date ORDER BY ts.date DESC';
+        
+        const [dailySummary] = await db.query(dailySummaryQuery, dailyParams);
+        
+        // Get detailed entries
         let detailQuery = `
           SELECT 
             ts.id,
@@ -654,6 +688,7 @@ router.get('/timesheets/by-project', async (req, res) => {
         
         return {
           ...project,
+          dailySummary: dailySummary || [],
           entries: entries || []
         };
       })
