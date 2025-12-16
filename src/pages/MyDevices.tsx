@@ -6,14 +6,15 @@ import {
   Loader2, 
   Package,
   User,
-  Calendar,
   CheckCircle,
   AlertCircle,
   Clock,
   XCircle,
   Edit,
   Eye,
-  Save
+  Save,
+  Search,
+  Filter
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -26,7 +27,6 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { assetsApi } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
-import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
 import {
@@ -44,6 +44,9 @@ export default function MyDevices() {
   const queryClient = useQueryClient();
   const currentUser = getCurrentUser();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
 
   const [formData, setFormData] = useState({
     asset_category_id: "",
@@ -97,6 +100,22 @@ export default function MyDevices() {
   const categories = categoriesData?.data || [];
   const selectedCategory = categories.find((cat: any) => cat.id.toString() === formData.asset_category_id);
   const categoryName = selectedCategory?.name?.toLowerCase() || "";
+
+  // Filter assets based on search and filters
+  const filteredAssets = assets.filter((asset: any) => {
+    const matchesSearch = !searchQuery || 
+      asset.asset_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.model?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.serial_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      asset.category_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStatus = !statusFilter || asset.status === statusFilter;
+    
+    const matchesCategory = !categoryFilter || asset.category_name === categoryFilter;
+    
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
 
   const createAndAssignMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -230,7 +249,7 @@ export default function MyDevices() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -552,108 +571,156 @@ export default function MyDevices() {
         </Dialog>
       </div>
 
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>Search and filter devices</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by asset code, brand, model, serial number, or category..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select 
+              value={statusFilter || "all"} 
+              onValueChange={(value) => {
+                setStatusFilter(value === "all" ? "" : value);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="assigned">Assigned</SelectItem>
+                <SelectItem value="available">Available</SelectItem>
+                <SelectItem value="repair">Repair</SelectItem>
+                <SelectItem value="damaged">Damaged</SelectItem>
+                <SelectItem value="retired">Retired</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select 
+              value={categoryFilter || "all"} 
+              onValueChange={(value) => {
+                setCategoryFilter(value === "all" ? "" : value);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((cat: any) => (
+                  <SelectItem key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Assigned Devices */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5" />
-            Assigned Devices
-          </CardTitle>
-          <CardDescription>
-            Devices currently assigned to you
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Assigned Devices ({filteredAssets.length})</CardTitle>
+              <CardDescription>Devices currently assigned to you</CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoadingAssets ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading devices...</p>
+              </div>
             </div>
-          ) : assets.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Laptop className="mx-auto h-12 w-12 mb-4 opacity-50" />
-              <p className="font-medium">No devices assigned</p>
-              <p className="text-sm mt-1">Add a device you're currently holding using the "Add Device" button</p>
+          ) : filteredAssets.length === 0 ? (
+            <div className="text-center py-12">
+              <Laptop className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">
+                {searchQuery || statusFilter || categoryFilter ? "No devices found" : "No devices assigned"}
+              </h3>
+              <p className="text-muted-foreground">
+                {searchQuery || statusFilter || categoryFilter
+                  ? 'Try adjusting your filters'
+                  : 'Add a device you\'re currently holding using the "Add Device" button'}
+              </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Asset Code</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Device</TableHead>
-                  <TableHead>Serial Number</TableHead>
-                  <TableHead>Assigned Date</TableHead>
-                  <TableHead>Condition</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {assets.map((asset: any) => (
-                  <TableRow 
-                    key={asset.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/my-devices/${asset.id}`)}
-                  >
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(asset.status)}
-                        {asset.asset_code}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{asset.category_name}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{asset.brand} {asset.model}</div>
-                        {asset.serial_number && (
-                          <div className="text-sm text-muted-foreground">SN: {asset.serial_number}</div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{asset.serial_number || "-"}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        {asset.assigned_date
-                          ? format(new Date(asset.assigned_date), "MMM dd, yyyy")
-                          : "-"}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        variant={
-                          asset.condition_on_assign === "excellent"
-                            ? "success"
-                            : asset.condition_on_assign === "good"
-                            ? "info"
-                            : "warning"
-                        }
-                      >
-                        {asset.condition_on_assign || "good"}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        variant={asset.status === "assigned" ? "info" : "warning"}
-                      >
-                        {asset.status}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => navigate(`/my-devices/${asset.id}`)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[120px]">Asset Code</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Device</TableHead>
+                    <TableHead>Serial Number</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredAssets.map((asset: any) => (
+                    <TableRow 
+                      key={asset.id}
+                      className="hover:bg-muted/50 cursor-pointer"
+                      onClick={() => navigate(`/my-devices/${asset.id}`)}
+                    >
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(asset.status)}
+                          <span className="font-mono text-sm">{asset.asset_code}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{asset.category_name}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{asset.brand} {asset.model}</div>
+                          {asset.serial_number && (
+                            <div className="text-sm text-muted-foreground">SN: {asset.serial_number}</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{asset.serial_number || "-"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          variant={asset.status === "assigned" ? "info" : "warning"}
+                        >
+                          {asset.status}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => navigate(`/my-devices/${asset.id}`)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -246,6 +246,7 @@ async function handlePushEvent(payload, project) {
         // Extract commit message
         const commitMessage = commit.message || 'No commit message';
         
+        
         const commitData = {
           project_id: project.id,
           activity_type: 'push',

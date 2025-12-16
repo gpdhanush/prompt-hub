@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Image as ImageIcon } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Image as ImageIcon, FolderKanban, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,9 +30,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { Pagination } from "@/components/ui/pagination";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { projectsApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
@@ -237,272 +243,280 @@ export default function Projects() {
 
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <FolderKanban className="h-6 w-6 text-primary" />
+            </div>
+            Projects
+          </h1>
+          <p className="text-muted-foreground mt-2">
             {userRole === 'Admin' ? 'View and track all projects' : 'Manage and track all projects'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {canCreateProject && (
-            <Button onClick={() => navigate('/projects/new')}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Project
-            </Button>
-          )}
-        </div>
+        {canCreateProject && (
+          <Button onClick={() => navigate('/projects/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Project
+          </Button>
+        )}
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card 
-          className={`glass-card cursor-pointer transition-colors ${
-            statusFilter === null ? 'bg-primary/10 border-primary' : ''
-          }`}
-          onClick={() => {
-            setStatusFilter(null);
-            setPage(1);
-          }}
-        >
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{totalProjects}</div>
-            <p className="text-xs text-muted-foreground">Total Projects</p>
-          </CardContent>
-        </Card>
-        <Card 
-          className={`glass-card cursor-pointer transition-colors ${
-            statusFilter === 'In Progress' || statusFilter === 'Testing' || statusFilter === 'Pre-Prod' || statusFilter === 'Production'
-              ? 'bg-primary/10 border-primary' : ''
-          }`}
-          onClick={() => {
-            // Toggle between In Progress states or clear
-            if (statusFilter === 'In Progress') {
-              setStatusFilter(null);
-            } else {
-              setStatusFilter('In Progress');
-            }
-            setPage(1);
-          }}
-        >
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-warning">{inProgressCount}</div>
-            <p className="text-xs text-muted-foreground">In Progress</p>
-          </CardContent>
-        </Card>
-        <Card 
-          className={`glass-card cursor-pointer transition-colors ${
-            statusFilter === 'Completed' ? 'bg-primary/10 border-primary' : ''
-          }`}
-          onClick={() => {
-            setStatusFilter(statusFilter === 'Completed' ? null : 'Completed');
-            setPage(1);
-          }}
-        >
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-success">{completedCount}</div>
-            <p className="text-xs text-muted-foreground">Completed</p>
-          </CardContent>
-        </Card>
-        <Card 
-          className={`glass-card cursor-pointer transition-colors ${
-            statusFilter === 'On Hold' ? 'bg-primary/10 border-primary' : ''
-          }`}
-          onClick={() => {
-            setStatusFilter(statusFilter === 'On Hold' ? null : 'On Hold');
-            setPage(1);
-          }}
-        >
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-status-neutral">{onHoldCount}</div>
-            <p className="text-xs text-muted-foreground">On Hold</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>Search and filter projects</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by project name, project code, or ID..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-10"
+              />
+            </div>
+            <Select 
+              value={statusFilter || "all"} 
+              onValueChange={(value) => {
+                setStatusFilter(value === "all" ? null : value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="Planning">Planning</SelectItem>
+                <SelectItem value="In Progress">In Progress</SelectItem>
+                <SelectItem value="Testing">Testing</SelectItem>
+                <SelectItem value="Pre-Prod">Pre-Prod</SelectItem>
+                <SelectItem value="Production">Production</SelectItem>
+                <SelectItem value="Completed">Completed</SelectItem>
+                <SelectItem value="On Hold">On Hold</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setViewFilter('all');
+                  setPage(1);
+                }}
+              >
+                All Projects
+              </Button>
+              <Button
+                variant={viewFilter === 'my' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setViewFilter('my');
+                  setPage(1);
+                }}
+              >
+                My Projects
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      <Card className="glass-card">
-        <CardHeader className="pb-4">
+      {/* Projects Table */}
+      <Card>
+        <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">All Projects</CardTitle>
-            <div className="flex items-center gap-4">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search projects..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setPage(1);
-                  }}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={viewFilter === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    setViewFilter('all');
-                    setPage(1);
-                  }}
-                  className={viewFilter === 'all' ? '' : ''}
-                >
-                  All Projects
-                </Button>
-                <Button
-                  variant={viewFilter === 'my' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    setViewFilter('my');
-                    setPage(1);
-                  }}
-                  className={viewFilter === 'my' ? '' : ''}
-                >
-                  My Projects
-                </Button>
-              </div>
+            <div>
+              <CardTitle>Projects ({filteredProjects.length})</CardTitle>
+              <CardDescription>List of all projects</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Project ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Team Lead</TableHead>
-                <TableHead>Timeline</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Loading projects...
-                  </TableCell>
-                </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="text-destructive font-semibold">
-                        {(error as any).status === 503 
-                          ? 'Service Unavailable' 
-                          : (error as any).status === 401
-                          ? 'Authentication Required'
-                          : 'Error Loading Projects'}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {(error as any).status === 503 
-                          ? 'The database service is temporarily unavailable. Please try again in a moment.'
-                          : (error as any).status === 401
-                          ? 'Your session has expired. Please login again.'
-                          : error.message || 'An error occurred while loading projects. Please refresh the page.'}
-                      </div>
-                      {(error as any).status === 503 && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => window.location.reload()}
-                          className="mt-2"
-                        >
-                          Retry
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : filteredProjects.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    {searchQuery ? 'No projects found matching your search.' : 'No projects found. Create your first project to get started.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredProjects.map((project: Project) => {
-                  // Log projects with invalid IDs for debugging
-                  if (!project.id || project.id <= 0) {
-                    console.warn('Project with invalid ID found:', project);
-                  }
-                  return (
-                <TableRow 
-                  key={project.id || `project-${project.name}`}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => handleView(project)}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
+              <p className="text-destructive font-semibold mb-2">
+                {(error as any).status === 503 
+                  ? 'Service Unavailable' 
+                  : (error as any).status === 401
+                  ? 'Authentication Required'
+                  : 'Error Loading Projects'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {(error as any).status === 503 
+                  ? 'The database service is temporarily unavailable. Please try again in a moment.'
+                  : (error as any).status === 401
+                  ? 'Your session has expired. Please login again.'
+                  : error.message || 'An error occurred while loading projects. Please refresh the page.'}
+              </p>
+              {(error as any).status === 503 && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => window.location.reload()}
+                  className="mt-4"
                 >
-                  <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
-                        {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {project.logo_url && getImageUrl(project.logo_url) && (
-                        <ProjectImage 
-                          src={getImageUrl(project.logo_url)!} 
-                          alt={project.name}
-                          className="h-10 w-10 rounded object-cover border flex-shrink-0"
-                        />
-                      )}
-                      <span className="font-medium">{project.name}</span>
-                    </div>
-                  </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {project.team_lead_name || '-'}
-                      </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                        {formatDate(project.start_date)} - {formatDate(project.end_date)}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge variant={projectStatusMap[project.status] || "neutral"}>
-                          {project.status || 'Planning'}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleView(project)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View
-                        </DropdownMenuItem>
-                            {canEditProject && (
-                              <DropdownMenuItem onClick={() => handleEdit(project)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                            )}
-                            {canDeleteProject && (
-                              <DropdownMenuItem 
-                                className="text-destructive"
-                                onClick={() => handleDelete(project)}
-                              >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                            )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-                  );
-                })
+                  Retry
+                </Button>
               )}
-            </TableBody>
-          </Table>
-          {pagination.totalPages > 1 && (
-            <Pagination
-              currentPage={page}
-              totalPages={pagination.totalPages}
-              onPageChange={setPage}
-              total={pagination.total}
-              limit={limit}
-            />
+            </div>
+          ) : filteredProjects.length === 0 ? (
+            <div className="text-center py-12">
+              <FolderKanban className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No projects found</h3>
+              <p className="text-muted-foreground">
+                {searchQuery || statusFilter
+                  ? 'Try adjusting your filters'
+                  : 'No projects available'}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[120px]">Project ID</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Team Lead</TableHead>
+                    <TableHead>Timeline</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredProjects.map((project: Project) => {
+                    // Log projects with invalid IDs for debugging
+                    if (!project.id || project.id <= 0) {
+                      console.warn('Project with invalid ID found:', project);
+                    }
+                    return (
+                      <TableRow 
+                        key={project.id || `project-${project.name}`}
+                        className="hover:bg-muted/50 cursor-pointer"
+                        onClick={() => handleView(project)}
+                      >
+                        <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
+                          <span className="font-mono text-sm">{project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium">{project.name}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">{project.team_lead_name || '-'}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{formatDate(project.start_date)} - {formatDate(project.end_date)}</span>
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge variant={projectStatusMap[project.status] || "neutral"}>
+                            {project.status || 'Planning'}
+                          </StatusBadge>
+                        </TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleView(project)}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+                              {canEditProject && (
+                                <DropdownMenuItem onClick={() => handleEdit(project)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
+                              {canDeleteProject && (
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => handleDelete(project)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {filteredProjects.length > 0 && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.total)} of {pagination.total} projects
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="page-limit" className="text-sm text-muted-foreground">
+                    Rows per page:
+                  </Label>
+                  <Select
+                    value={limit.toString()}
+                    onValueChange={(value) => {
+                      // Note: limit is constant, but we can add state if needed
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-20" id="page-limit">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {pagination.totalPages > 1 && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={page >= pagination.totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

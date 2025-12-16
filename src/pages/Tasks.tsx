@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, MessageSquare, Paperclip, CheckSquare, CheckCircle, User, Clock, CalendarDays, FileText, AlertCircle, Target, Users, Calendar, History, Timer, Send, Reply, ArrowRight } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, MessageSquare, Paperclip, CheckSquare, CheckCircle, User, Clock, CalendarDays, FileText, AlertCircle, Target, Users, Calendar, History, Timer, Send, Reply, ArrowRight, CheckSquare as CheckSquareIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,12 +46,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge, taskStageMap, taskPriorityMap } from "@/components/ui/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Pagination } from "@/components/ui/pagination";
-import { Switch } from "@/components/ui/switch";
 import { tasksApi, projectsApi, usersApi } from "@/lib/api";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
@@ -400,175 +398,251 @@ export default function Tasks() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Tasks</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <CheckSquareIcon className="h-6 w-6 text-primary" />
+            </div>
+            Tasks
+          </h1>
+          <p className="text-muted-foreground mt-2">
             {userRole === 'Admin' ? 'View and track all tasks' : 'Track and manage all tasks'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {canCreateTask && (
-            <Button onClick={() => navigate('/tasks/new')}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Task
-            </Button>
-          )}
-        </div>
+        {canCreateTask && (
+          <Button onClick={() => navigate('/tasks/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Task
+          </Button>
+        )}
       </div>
 
-
-      <Card className="glass-card">
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <CardTitle className="text-lg">All Tasks</CardTitle>
-            <div className="flex items-center gap-4">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search tasks..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setPage(1);
-                  }}
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={(value) => {
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>Search and filter tasks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by task title, task code, or ID..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-10"
+              />
+            </div>
+            <Select 
+              value={statusFilter || "All"} 
+              onValueChange={(value) => {
                 setStatusFilter(value);
                 setPage(1);
-              }}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Filter by Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Status</SelectItem>
-                  {stages.slice(1).map((stage) => (
-                    <SelectItem key={stage} value={stage}>{stage}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border">
-                <Label htmlFor="view-filter-tasks" className="text-sm font-medium cursor-pointer">
-                  All Tasks
-                </Label>
-                <Switch
-                  id="view-filter-tasks"
-                  checked={viewFilter === 'my'}
-                  onCheckedChange={(checked) => {
-                    setViewFilter(checked ? 'my' : 'all');
-                    setPage(1);
-                  }}
-                />
-                <Label htmlFor="view-filter-tasks" className="text-sm font-medium cursor-pointer">
-                  My Tasks
-                </Label>
-              </div>
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Stages" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Stages</SelectItem>
+                {stages.slice(1).map((stage) => (
+                  <SelectItem key={stage} value={stage}>{stage}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setViewFilter('all');
+                  setPage(1);
+                }}
+              >
+                All Tasks
+              </Button>
+              <Button
+                variant={viewFilter === 'my' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setViewFilter('my');
+                  setPage(1);
+                }}
+              >
+                My Tasks
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tasks Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Tasks ({filteredTasks.length})</CardTitle>
+              <CardDescription>List of all tasks</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Task ID</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Deadline</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    Loading tasks...
-                  </TableCell>
-                </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-destructive">
-                    Error loading tasks. Please check your database connection.
-                  </TableCell>
-                </TableRow>
-              ) : filteredTasks.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                    {searchQuery || statusFilter !== "All" ? 'No tasks found matching your filters.' : 'No tasks found. Create your first task to get started.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredTasks.map((task: Task) => (
-                <TableRow 
-                  key={task.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => handleView(task)}
-                >
-                  <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
-                    {task.task_code || `TASK-${task.id}`}
-                  </TableCell>
-                  <TableCell className="font-medium max-w-[200px] truncate">
-                    {task.title}
-                  </TableCell>
-                  <TableCell>
-                      <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]}>
-                        {getPriorityLabel(task.priority)}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell>
-                      <StatusBadge variant={taskStageMap[task.stage || 'Analysis']}>
-                        {task.stage || 'Analysis'}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                      {task.deadline ? formatDate(task.deadline) : "Not set"}
-                  </TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleView(task)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View
-                        </DropdownMenuItem>
-                          {canEditTask && (
-                            <DropdownMenuItem onClick={() => handleEdit(task)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                          )}
-                          {canDeleteTask && (
-                            <DropdownMenuItem 
-                              className="text-destructive"
-                              onClick={() => handleDelete(task)}
-                            >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                          )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          {pagination.totalPages > 1 && (
-            <Pagination
-              currentPage={page}
-              totalPages={pagination.totalPages}
-              onPageChange={setPage}
-              total={pagination.total}
-              limit={limit}
-            />
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
+              <p className="text-destructive font-semibold mb-2">Error loading tasks</p>
+              <p className="text-sm text-muted-foreground">Please check your database connection.</p>
+            </div>
+          ) : filteredTasks.length === 0 ? (
+            <div className="text-center py-12">
+              <CheckSquareIcon className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No tasks found</h3>
+              <p className="text-muted-foreground">
+                {searchQuery || statusFilter !== "All"
+                  ? 'Try adjusting your filters'
+                  : 'No tasks available'}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[120px]">Task ID</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Stage</TableHead>
+                    <TableHead>Deadline</TableHead>
+                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTasks.map((task: Task) => (
+                    <TableRow 
+                      key={task.id}
+                      className="hover:bg-muted/50 cursor-pointer"
+                      onClick={() => handleView(task)}
+                    >
+                      <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
+                        <span className="font-mono text-sm">{task.task_code || `TASK-${task.id}`}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-medium">{task.title}</span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]}>
+                          {getPriorityLabel(task.priority)}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={taskStageMap[task.stage || 'Analysis']}>
+                          {task.stage || 'Analysis'}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {task.deadline ? formatDate(task.deadline) : "Not set"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleView(task)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            {canEditTask && (
+                              <DropdownMenuItem onClick={() => handleEdit(task)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {canDeleteTask && (
+                              <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={() => handleDelete(task)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {filteredTasks.length > 0 && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.total)} of {pagination.total} tasks
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="page-limit" className="text-sm text-muted-foreground">
+                    Rows per page:
+                  </Label>
+                  <Select
+                    value={limit.toString()}
+                    onValueChange={(value) => {
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-20" id="page-limit">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {pagination.totalPages > 1 && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={page >= pagination.totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

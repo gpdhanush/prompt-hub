@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, AlertCircle, X, Upload, FileText, Image as ImageIcon } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, AlertCircle, X, Upload, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,10 +61,8 @@ import {
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge, bugSeverityMap, bugStatusMap } from "@/components/ui/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pagination } from "@/components/ui/pagination";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi, tasksApi, usersApi } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
@@ -496,57 +494,62 @@ export default function Bugs() {
    
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <AlertCircle className="h-8 w-8 text-status-error" />
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <AlertCircle className="h-6 w-6 text-primary" />
+            </div>
             Bug Tracker
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-2">
             {userRole === 'Admin' ? 'View and track bugs across projects' : 'Track and resolve bugs across projects'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {canCreateBug && (
-            <Button onClick={() => navigate('/bugs/new')}>
-              <Plus className="mr-2 h-4 w-4" />
-              Report Bug
-            </Button>
-          )}
-        </div>
+        {canCreateBug && (
+          <Button onClick={() => navigate('/bugs/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Report Bug
+          </Button>
+        )}
       </div>
 
-      <Card className="glass-card">
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">All Bugs</CardTitle>
-            <div className="flex items-center gap-4">
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search bugs..."
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setPage(1);
-                  }}
-                />
-              </div>
-              <Select 
-                value={statusFilter} 
-                onValueChange={(value) => {
-                  setStatusFilter(value);
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+          <CardDescription>Search and filter bugs</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by bug title, bug code, description, or ID..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
                   setPage(1);
                 }}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Status</SelectItem>
-                  <SelectItem value="Open">Open</SelectItem>
+                className="pl-10"
+              />
+            </div>
+            <Select 
+              value={statusFilter || "All"} 
+              onValueChange={(value) => {
+                setStatusFilter(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Statuses</SelectItem>
+                <SelectItem value="Open">Open</SelectItem>
                   <SelectItem value="In Progress">In Progress</SelectItem>
                   <SelectItem value="Fixed">Fixed</SelectItem>
                   <SelectItem value="Closed">Closed</SelectItem>
@@ -558,135 +561,202 @@ export default function Bugs() {
                   <SelectItem value="Passed">Passed</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border">
-                <Label htmlFor="view-filter" className="text-sm font-medium cursor-pointer">
-                  All Bugs
-                </Label>
-                <Switch
-                  id="view-filter"
-                  checked={viewFilter === 'my'}
-                  onCheckedChange={(checked) => {
-                    setViewFilter(checked ? 'my' : 'all');
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setViewFilter('all');
                     setPage(1);
                   }}
-                />
-                <Label htmlFor="view-filter" className="text-sm font-medium cursor-pointer">
+                >
+                  All Bugs
+                </Button>
+                <Button
+                  variant={viewFilter === 'my' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setViewFilter('my');
+                    setPage(1);
+                  }}
+                >
                   My Bugs
-                </Label>
+                </Button>
               </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bugs Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Bugs ({filteredBugs.length})</CardTitle>
+              <CardDescription>List of all bugs</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Bug ID</TableHead>
-                <TableHead>Task ID</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Loading bugs...
-                  </TableCell>
-                </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-destructive">
-                    Error loading bugs. Please check your database connection.
-                  </TableCell>
-                </TableRow>
-              ) : filteredBugs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    {searchQuery ? 'No bugs found matching your search.' : 'No bugs found. Report your first bug to get started.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredBugs.map((bug: any) => (
-                  <TableRow 
-                    key={bug.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/bugs/${bug.id}`)}
-                      >
-                    <TableCell className="font-mono font-bold text-primary" onClick={(e) => e.stopPropagation()}>
-                        {bug.bug_code || `BG-${bug.id}`}
-                    </TableCell>
-                    <TableCell className="font-mono text-primary">
-                      {bug.task_id ? (
-                        <Button
-                          variant="link"
-                          className="p-0 h-auto font-mono text-primary hover:underline"
-                          onClick={() => navigate(`/tasks?task=${bug.task_id}`)}
-                        >
-                          #{bug.task_id}
-                        </Button>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate">
-                      {bug.title || (bug.description ? bug.description.charAt(0).toUpperCase() + bug.description.slice(1) : '-')}
-                    </TableCell>
-                  <TableCell>
-                      <StatusBadge variant={bug.severity === 'Critical' ? 'error' : bug.severity === 'High' ? 'warning' : bug.severity === 'Medium' ? 'info' : 'neutral'}>
-                        {bug.severity || 'Low'}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell>
-                      <StatusBadge variant={bugStatusMap[bug.status] || 'default'}>
-                        {bug.status || 'Open'}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleView(bug)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View
-                        </DropdownMenuItem>
-                          {canEditBug && (
-                            <DropdownMenuItem onClick={() => navigate(`/bugs/${bug.id}/edit`)}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
+              <p className="text-destructive font-semibold mb-2">Error loading bugs</p>
+              <p className="text-sm text-muted-foreground">Please check your database connection.</p>
+            </div>
+          ) : filteredBugs.length === 0 ? (
+            <div className="text-center py-12">
+              <AlertCircle className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No bugs found</h3>
+              <p className="text-muted-foreground">
+                {searchQuery || statusFilter !== "All"
+                  ? 'Try adjusting your filters'
+                  : 'No bugs available'}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[120px]">Bug ID</TableHead>
+                    <TableHead>Task ID</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredBugs.map((bug: any) => (
+                    <TableRow 
+                      key={bug.id}
+                      className="hover:bg-muted/50 cursor-pointer"
+                      onClick={() => navigate(`/bugs/${bug.id}`)}
+                    >
+                      <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
+                        <span className="font-mono text-sm">{bug.bug_code || `BG-${bug.id}`}</span>
+                      </TableCell>
+                      <TableCell>
+                        {bug.task_id ? (
+                          <Button
+                            variant="link"
+                            className="p-0 h-auto font-mono text-sm text-primary hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/tasks?task=${bug.task_id}`);
+                            }}
+                          >
+                            #{bug.task_id}
+                          </Button>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm">{bug.title || (bug.description ? bug.description.charAt(0).toUpperCase() + bug.description.slice(1) : '-')}</span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={bug.severity === 'Critical' ? 'error' : bug.severity === 'High' ? 'warning' : bug.severity === 'Medium' ? 'info' : 'neutral'}>
+                          {bug.severity || 'Low'}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge variant={bugStatusMap[bug.status] || 'default'}>
+                          {bug.status || 'Open'}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleView(bug)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
                             </DropdownMenuItem>
-                          )}
-                          {canDeleteBug && (
-                            <DropdownMenuItem 
-                              className="text-destructive"
-                              onClick={() => handleDelete(bug)}
-                            >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                          )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          {pagination.totalPages > 1 && (
-            <Pagination
-              currentPage={page}
-              totalPages={pagination.totalPages}
-              onPageChange={setPage}
-              total={pagination.total}
-              limit={limit}
-            />
+                            {canEditBug && (
+                              <DropdownMenuItem onClick={() => navigate(`/bugs/${bug.id}/edit`)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {canDeleteBug && (
+                              <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={() => handleDelete(bug)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {filteredBugs.length > 0 && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.total)} of {pagination.total} bugs
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="page-limit" className="text-sm text-muted-foreground">
+                    Rows per page:
+                  </Label>
+                  <Select
+                    value={limit.toString()}
+                    onValueChange={(value) => {
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-20" id="page-limit">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {pagination.totalPages > 1 && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={page >= pagination.totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -259,9 +259,9 @@ export default function Employees() {
             <div className="p-2 rounded-lg bg-primary/10">
               <User className="h-6 w-6 text-primary" />
             </div>
-            Employees
+             <span className="text-primary">Employees</span>
           </h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-muted-foreground mt-1">
             Manage employee records
           </p>
         </div>
