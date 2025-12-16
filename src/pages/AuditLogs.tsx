@@ -60,7 +60,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { auditLogsApi } from "@/lib/api";
+import { auditLogsApi } from "@/features/audit-logs/api";
 import { toast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 

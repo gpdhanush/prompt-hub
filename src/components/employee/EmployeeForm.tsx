@@ -21,7 +21,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { employeesApi, usersApi, rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
+import { rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
+import { employeesApi } from "@/features/employees/api";
+import { usersApi } from "@/features/users/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
 import { getImageUrl } from "@/lib/imageUtils";

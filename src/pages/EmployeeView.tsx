@@ -1,6 +1,6 @@
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { employeesApi } from "@/lib/api";
+import { employeesApi } from "@/features/employees/api";
 import { ArrowLeft, Mail, Phone, MapPin, MessageCircle, MessageSquare, User, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

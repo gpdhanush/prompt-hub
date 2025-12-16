@@ -13,7 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Separator } from "@/components/ui/separator";
-import { projectsApi, usersApi, employeesApi } from "@/lib/api";
+import { projectsApi } from "@/features/projects/api";
+import { employeesApi } from "@/features/employees/api";
+import { usersApi } from "@/features/users/api";
 import { toast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
 import { Loader2 } from "lucide-react";

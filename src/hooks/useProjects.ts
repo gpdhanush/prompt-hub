@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { projectsApi } from "@/lib/api";
+import { projectsApi } from "@/features/projects/api";
 import { toast } from "@/hooks/use-toast";
 import type { Project } from "@/components/project/utils";
 

@@ -65,7 +65,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { PageTitle } from "@/components/ui/page-title";
 import { toast } from "@/hooks/use-toast";
-import { bugsApi, tasksApi, usersApi } from "@/lib/api";
+import { bugsApi } from "@/features/bugs/api";
+import { tasksApi } from "@/features/tasks/api";
+import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { logger } from "@/lib/logger";

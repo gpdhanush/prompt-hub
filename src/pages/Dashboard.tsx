@@ -28,7 +28,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { reportsApi, settingsApi, auditLogsApi, employeesApi, reimbursementsApi, tasksApi, bugsApi, projectsApi, assetsApi, remindersApi } from "@/lib/api";
+import { assetsApi } from "@/features/assets/api";
+import { settingsApi } from "@/features/settings/api";
+import { auditLogsApi } from "@/features/audit-logs/api";
+import { remindersApi } from "@/features/reminders/api";
+import { reportsApi } from "@/features/reports/api";
+import { reimbursementsApi } from "@/features/reimbursements/api";
+import { bugsApi } from "@/features/bugs/api";
+import { tasksApi } from "@/features/tasks/api";
+import { projectsApi } from "@/features/projects/api";
+import { employeesApi } from "@/features/employees/api";
 import { useState, useEffect } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";

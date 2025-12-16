@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { assetsApi } from "@/lib/api";
+import { assetsApi } from "@/features/assets/api";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 

@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AdminLayout } from "./components/layout/AdminLayout";
@@ -9,92 +9,91 @@ import { LoadingProvider, useLoading } from "./contexts/LoadingContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { logger } from "./lib/logger";
 import { ENV_CONFIG } from "./lib/config";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Users from "./pages/Users";
-import Employees from "./pages/Employees";
-import Projects from "./pages/Projects";
-import Tasks from "./pages/Tasks";
-import TaskCreate from "./pages/TaskCreate";
-import TaskEdit from "./pages/TaskEdit";
-import TaskView from "./pages/TaskView";
-import Bugs from "./pages/Bugs";
-import Leaves from "./pages/Leaves";
-import Reimbursements from "./pages/Reimbursements";
-import ReimbursementCreate from "./pages/ReimbursementCreate";
-import ReimbursementEdit from "./pages/ReimbursementEdit";
-import ReimbursementView from "./pages/ReimbursementView";
-import AIPrompts from "./pages/AIPrompts";
-import AuditLogs from "./pages/AuditLogs";
-import Settings from "./pages/Settings";
-import FileManager from "./pages/FileManager";
-import Notifications from "./pages/Notifications";
-import Reports from "./pages/Reports";
-import Timesheet from "./pages/Timesheet";
-import EmployeeProfile from "./pages/EmployeeProfile";
-import EmployeeCreate from "./pages/EmployeeCreate";
-import EmployeeEdit from "./pages/EmployeeEdit";
-import EmployeeList from "./pages/EmployeeList";
-import EmployeeView from "./pages/EmployeeView";
-import BugDetail from "./pages/BugDetail";
-import BugCreate from "./pages/BugCreate";
-import BugEdit from "./pages/BugEdit";
-import ProjectDetail from "./pages/ProjectDetail";
-import ProjectCreate from "./pages/ProjectCreate";
-import ProjectEdit from "./pages/ProjectEdit";
-import RolesPositions from "./pages/RolesPositions";
-import RolesPermissions from "./pages/RolesPermissions";
-import Permissions from "./pages/Permissions";
-import ProfileSetup from "./pages/ProfileSetup";
-import UserHierarchy from "./pages/UserHierarchy";
-import NotFound from "./pages/NotFound";
-import MFASetup from "./pages/MFASetup";
-import MFAVerify from "./pages/MFAVerify";
-import ITAssetDashboard from "./pages/ITAssetDashboard";
-import Assets from "./pages/Assets";
-import AssetCreate from "./pages/AssetCreate";
-import AssetView from "./pages/AssetView";
-import AssetEdit from "./pages/AssetEdit";
-import AssetAssignments from "./pages/AssetAssignments";
-import AssignAsset from "./pages/AssignAsset";
-import ReturnAsset from "./pages/ReturnAsset";
-import AssetTickets from "./pages/AssetTickets";
-import AssetMaintenance from "./pages/AssetMaintenance";
-import AssetInventory from "./pages/AssetInventory";
-import InventoryAdjustment from "./pages/InventoryAdjustment";
-import InventoryHistory from "./pages/InventoryHistory";
-import InventoryReports from "./pages/InventoryReports";
-import InventoryCreate from "./pages/InventoryCreate";
-import InventoryEdit from "./pages/InventoryEdit";
-import AssetReports from "./pages/AssetReports";
-import AssetApprovals from "./pages/AssetApprovals";
-import AssetSettings from "./pages/AssetSettings";
-import MyITAssets from "./pages/MyITAssets";
-import MyDevices from "./pages/MyDevices";
-import MyDeviceView from "./pages/MyDeviceView";
-import RaiseTicket from "./pages/RaiseTicket";
-import AssetTicketDetail from "./pages/AssetTicketDetail";
-import MyTickets from "./pages/MyTickets";
-import SupportTicketView from "./pages/SupportTicketView";
-import SupportTicketCreate from "./pages/SupportTicketCreate";
-import { useEffect, useRef } from "react";
+import { queryClient } from "./lib/queryClient";
+import { useEffect, useRef, lazy } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
 import { registerLoadingCallback } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useQueryClient } from "@tanstack/react-query";
 import { clearAuth } from "@/lib/auth";
-import ForgotPassword from "./pages/ForgotPassword";
 import { AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { LazyRoute } from "./components/LazyRoute";
 
-const queryClient = new QueryClient();
+// Lazy load all pages for better code splitting
+const Login = lazy(() => import("./pages/Login"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Users = lazy(() => import("./pages/Users"));
+const Employees = lazy(() => import("./pages/Employees"));
+const Projects = lazy(() => import("./pages/Projects"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const TaskCreate = lazy(() => import("./pages/TaskCreate"));
+const TaskEdit = lazy(() => import("./pages/TaskEdit"));
+const TaskView = lazy(() => import("./pages/TaskView"));
+const Bugs = lazy(() => import("./pages/Bugs"));
+const Leaves = lazy(() => import("./pages/Leaves"));
+const Reimbursements = lazy(() => import("./pages/Reimbursements"));
+const ReimbursementCreate = lazy(() => import("./pages/ReimbursementCreate"));
+const ReimbursementEdit = lazy(() => import("./pages/ReimbursementEdit"));
+const ReimbursementView = lazy(() => import("./pages/ReimbursementView"));
+const AIPrompts = lazy(() => import("./pages/AIPrompts"));
+const AuditLogs = lazy(() => import("./pages/AuditLogs"));
+const Settings = lazy(() => import("./pages/Settings"));
+const FileManager = lazy(() => import("./pages/FileManager"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const Reports = lazy(() => import("./pages/Reports"));
+const Timesheet = lazy(() => import("./pages/Timesheet"));
+const EmployeeProfile = lazy(() => import("./pages/EmployeeProfile"));
+const EmployeeCreate = lazy(() => import("./pages/EmployeeCreate"));
+const EmployeeEdit = lazy(() => import("./pages/EmployeeEdit"));
+const EmployeeList = lazy(() => import("./pages/EmployeeList"));
+const EmployeeView = lazy(() => import("./pages/EmployeeView"));
+const BugDetail = lazy(() => import("./pages/BugDetail"));
+const BugCreate = lazy(() => import("./pages/BugCreate"));
+const BugEdit = lazy(() => import("./pages/BugEdit"));
+const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
+const ProjectCreate = lazy(() => import("./pages/ProjectCreate"));
+const ProjectEdit = lazy(() => import("./pages/ProjectEdit"));
+const RolesPositions = lazy(() => import("./pages/RolesPositions"));
+const RolesPermissions = lazy(() => import("./pages/RolesPermissions"));
+const Permissions = lazy(() => import("./pages/Permissions"));
+const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
+const UserHierarchy = lazy(() => import("./pages/UserHierarchy"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const MFASetup = lazy(() => import("./pages/MFASetup"));
+const MFAVerify = lazy(() => import("./pages/MFAVerify"));
+const ITAssetDashboard = lazy(() => import("./pages/ITAssetDashboard"));
+const Assets = lazy(() => import("./pages/Assets"));
+const AssetCreate = lazy(() => import("./pages/AssetCreate"));
+const AssetView = lazy(() => import("./pages/AssetView"));
+const AssetEdit = lazy(() => import("./pages/AssetEdit"));
+const AssetAssignments = lazy(() => import("./pages/AssetAssignments"));
+const AssignAsset = lazy(() => import("./pages/AssignAsset"));
+const ReturnAsset = lazy(() => import("./pages/ReturnAsset"));
+const AssetTickets = lazy(() => import("./pages/AssetTickets"));
+const AssetMaintenance = lazy(() => import("./pages/AssetMaintenance"));
+const AssetInventory = lazy(() => import("./pages/AssetInventory"));
+const InventoryAdjustment = lazy(() => import("./pages/InventoryAdjustment"));
+const InventoryHistory = lazy(() => import("./pages/InventoryHistory"));
+const InventoryReports = lazy(() => import("./pages/InventoryReports"));
+const InventoryCreate = lazy(() => import("./pages/InventoryCreate"));
+const InventoryEdit = lazy(() => import("./pages/InventoryEdit"));
+const AssetReports = lazy(() => import("./pages/AssetReports"));
+const AssetApprovals = lazy(() => import("./pages/AssetApprovals"));
+const AssetSettings = lazy(() => import("./pages/AssetSettings"));
+const MyITAssets = lazy(() => import("./pages/MyITAssets"));
+const MyDevices = lazy(() => import("./pages/MyDevices"));
+const MyDeviceView = lazy(() => import("./pages/MyDeviceView"));
+const RaiseTicket = lazy(() => import("./pages/RaiseTicket"));
+const AssetTicketDetail = lazy(() => import("./pages/AssetTicketDetail"));
+const MyTickets = lazy(() => import("./pages/MyTickets"));
+const SupportTicketView = lazy(() => import("./pages/SupportTicketView"));
+const SupportTicketCreate = lazy(() => import("./pages/SupportTicketCreate"));
 
-// Expose QueryClient globally for logout function
-if (typeof window !== 'undefined') {
-  (window as any).__REACT_QUERY_CLIENT__ = queryClient;
-}
+// QueryClient is already exposed in lib/queryClient.ts
 
 // Protected Route Component - checks user role or permission before allowing access
 function ProtectedRoute({ 
@@ -201,19 +200,19 @@ const AppContent = () => {
     >
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/mfa/setup" element={<MFASetup />} />
-            <Route path="/mfa/verify" element={<MFAVerify />} />
+            <Route path="/login" element={<LazyRoute><Login /></LazyRoute>} />
+            <Route path="/forgot-password" element={<LazyRoute><ForgotPassword /></LazyRoute>} />
+            <Route path="/mfa/setup" element={<LazyRoute><MFASetup /></LazyRoute>} />
+            <Route path="/mfa/verify" element={<LazyRoute><MFAVerify /></LazyRoute>} />
             
             {/* Protected Admin Routes */}
             <Route element={<AdminLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard" element={<LazyRoute><Dashboard /></LazyRoute>} />
               <Route 
                 path="/users" 
                 element={
                   <ProtectedRoute requiredPermission="users.view">
-                    <Users />
+                    <LazyRoute><Users /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -221,35 +220,26 @@ const AppContent = () => {
                 path="/employees" 
                 element={
                   <ProtectedRoute requiredPermission="employees.view">
-                    <Employees />
+                    <LazyRoute><Employees /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/employees/list" 
-                element={<EmployeeList />} 
-              />
+              <Route path="/employees/list" element={<LazyRoute><EmployeeList /></LazyRoute>} />
               <Route 
                 path="/employees/new" 
                 element={
                   <ProtectedRoute requiredPermission="employees.create">
-                    <EmployeeCreate />
+                    <LazyRoute><EmployeeCreate /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/employees/:id/edit" 
-                element={<EmployeeEdit />} 
-              />
-              <Route 
-                path="/employees/:id/view" 
-                element={<EmployeeView />} 
-              />
+              <Route path="/employees/:id/edit" element={<LazyRoute><EmployeeEdit /></LazyRoute>} />
+              <Route path="/employees/:id/view" element={<LazyRoute><EmployeeView /></LazyRoute>} />
               <Route 
                 path="/projects" 
                 element={
                   <ProtectedRoute requiredPermission="projects.view">
-                    <Projects />
+                    <LazyRoute><Projects /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -257,7 +247,7 @@ const AppContent = () => {
                 path="/projects/new" 
                 element={
                   <ProtectedRoute requiredPermission="projects.create">
-                    <ProjectCreate />
+                    <LazyRoute><ProjectCreate /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -265,7 +255,7 @@ const AppContent = () => {
                 path="/projects/:id" 
                 element={
                   <ProtectedRoute requiredPermission="projects.view">
-                    <ProjectDetail />
+                    <LazyRoute><ProjectDetail /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -273,7 +263,7 @@ const AppContent = () => {
                 path="/projects/:id/edit" 
                 element={
                   <ProtectedRoute requiredPermission="projects.edit">
-                    <ProjectEdit />
+                    <LazyRoute><ProjectEdit /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -281,7 +271,7 @@ const AppContent = () => {
                 path="/tasks"
                 element={
                   <ProtectedRoute requiredPermission="tasks.view">
-                    <Tasks />
+                    <LazyRoute><Tasks /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -289,7 +279,7 @@ const AppContent = () => {
                 path="/tasks/new"
                 element={
                   <ProtectedRoute requiredPermission="tasks.create">
-                    <TaskCreate />
+                    <LazyRoute><TaskCreate /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -297,7 +287,7 @@ const AppContent = () => {
                 path="/tasks/:id"
                 element={
                   <ProtectedRoute requiredPermission="tasks.view">
-                    <TaskView />
+                    <LazyRoute><TaskView /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -305,7 +295,7 @@ const AppContent = () => {
                 path="/tasks/:id/edit"
                 element={
                   <ProtectedRoute requiredPermission="tasks.edit">
-                    <TaskEdit />
+                    <LazyRoute><TaskEdit /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -313,7 +303,7 @@ const AppContent = () => {
                 path="/bugs" 
                 element={
                   <ProtectedRoute requiredPermission="bugs.view">
-                    <Bugs />
+                    <LazyRoute><Bugs /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -321,7 +311,7 @@ const AppContent = () => {
                 path="/bugs/new" 
                 element={
                   <ProtectedRoute requiredPermission="bugs.create">
-                    <BugCreate />
+                    <LazyRoute><BugCreate /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -329,7 +319,7 @@ const AppContent = () => {
                 path="/bugs/:id" 
                 element={
                   <ProtectedRoute requiredPermission="bugs.view">
-                    <BugDetail />
+                    <LazyRoute><BugDetail /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -337,19 +327,16 @@ const AppContent = () => {
                 path="/bugs/:id/edit" 
                 element={
                   <ProtectedRoute requiredPermission="bugs.edit">
-                    <BugEdit />
+                    <LazyRoute><BugEdit /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/leaves" 
-                element={<Leaves />} 
-              />
+              <Route path="/leaves" element={<LazyRoute><Leaves /></LazyRoute>} />
               <Route 
                 path="/reimbursements" 
                 element={
                   <ProtectedRoute requiredPermission="reimbursements.view">
-                    <Reimbursements />
+                    <LazyRoute><Reimbursements /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -357,7 +344,7 @@ const AppContent = () => {
                 path="/reimbursements/new" 
                 element={
                   <ProtectedRoute requiredPermission="reimbursements.create">
-                    <ReimbursementCreate />
+                    <LazyRoute><ReimbursementCreate /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -365,7 +352,7 @@ const AppContent = () => {
                 path="/reimbursements/:id" 
                 element={
                   <ProtectedRoute requiredPermission="reimbursements.view">
-                    <ReimbursementView />
+                    <LazyRoute><ReimbursementView /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -373,38 +360,35 @@ const AppContent = () => {
                 path="/reimbursements/:id/edit" 
                 element={
                   <ProtectedRoute requiredPermission="reimbursements.edit">
-                    <ReimbursementEdit />
+                    <LazyRoute><ReimbursementEdit /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
-              <Route path="/prompts" element={<AIPrompts />} />
+              <Route path="/prompts" element={<LazyRoute><AIPrompts /></LazyRoute>} />
               <Route 
                 path="/audit-logs" 
                 element={
                   <ProtectedRoute allowedRoles={['Super Admin', 'Admin']}>
-                    <AuditLogs />
+                    <LazyRoute><AuditLogs /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
-              <Route path="/files" element={<FileManager />} />
-              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/files" element={<LazyRoute><FileManager /></LazyRoute>} />
+              <Route path="/notifications" element={<LazyRoute><Notifications /></LazyRoute>} />
               <Route 
                 path="/reports" 
                 element={
                   <ProtectedRoute requiredPermission="reports.view">
-                    <Reports />
+                    <LazyRoute><Reports /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/timesheet" 
-                element={<Timesheet />} 
-              />
+              <Route path="/timesheet" element={<LazyRoute><Timesheet /></LazyRoute>} />
               <Route 
                 path="/user-hierarchy" 
                 element={
                   <ProtectedRoute allowedRoles={['Super Admin']}>
-                    <UserHierarchy />
+                    <LazyRoute><UserHierarchy /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -412,21 +396,18 @@ const AppContent = () => {
                 path="/roles-positions" 
                 element={
                   <ProtectedRoute allowedRoles={['Super Admin']}>
-                    <RolesPositions />
+                    <LazyRoute><RolesPositions /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
-              <Route path="/employee-profile/:id" element={<EmployeeProfile />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route 
-                path="/profile-setup" 
-                element={<ProfileSetup />} 
-              />
+              <Route path="/employee-profile/:id" element={<LazyRoute><EmployeeProfile /></LazyRoute>} />
+              <Route path="/settings" element={<LazyRoute><Settings /></LazyRoute>} />
+              <Route path="/profile-setup" element={<LazyRoute><ProfileSetup /></LazyRoute>} />
               <Route 
                 path="/roles-permissions" 
                 element={
                   <ProtectedRoute requiredPermission="roles_permissions.view">
-                    <RolesPermissions />
+                    <LazyRoute><RolesPermissions /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -434,7 +415,7 @@ const AppContent = () => {
                 path="/permissions" 
                 element={
                   <ProtectedRoute allowedRoles={['Super Admin']}>
-                    <Permissions />
+                    <LazyRoute><Permissions /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -443,7 +424,7 @@ const AppContent = () => {
                 path="/it-assets/dashboard" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <ITAssetDashboard />
+                    <LazyRoute><ITAssetDashboard /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -451,7 +432,7 @@ const AppContent = () => {
                 path="/it-assets/assets" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <Assets />
+                    <LazyRoute><Assets /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -459,7 +440,7 @@ const AppContent = () => {
                 path="/it-assets/assets/new" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetCreate />
+                    <LazyRoute><AssetCreate /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -467,7 +448,7 @@ const AppContent = () => {
                 path="/it-assets/assets/:id" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetView />
+                    <LazyRoute><AssetView /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -475,7 +456,7 @@ const AppContent = () => {
                 path="/it-assets/assets/:id/edit" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetEdit />
+                    <LazyRoute><AssetEdit /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -483,7 +464,7 @@ const AppContent = () => {
                 path="/it-assets/assignments" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetAssignments />
+                    <LazyRoute><AssetAssignments /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -491,7 +472,7 @@ const AppContent = () => {
                 path="/it-assets/assignments/new" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssignAsset />
+                    <LazyRoute><AssignAsset /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -499,7 +480,7 @@ const AppContent = () => {
                 path="/it-assets/assignments/:id/return" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <ReturnAsset />
+                    <LazyRoute><ReturnAsset /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -507,7 +488,7 @@ const AppContent = () => {
                 path="/it-assets/tickets"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin', 'Developer', 'Employee', 'Tester', 'Designer', 'Team Leader', 'Team Lead']}>
-                    <AssetTickets />
+                    <LazyRoute><AssetTickets /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -515,7 +496,7 @@ const AppContent = () => {
                 path="/it-assets/tickets/:id"
                 element={
                   <ProtectedRoute>
-                    <AssetTicketDetail />
+                    <LazyRoute><AssetTicketDetail /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -524,7 +505,7 @@ const AppContent = () => {
                 path="/support" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
-                    <MyTickets />
+                    <LazyRoute><MyTickets /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -532,7 +513,7 @@ const AppContent = () => {
                 path="/support/new"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
-                    <SupportTicketCreate />
+                    <LazyRoute><SupportTicketCreate /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -540,7 +521,7 @@ const AppContent = () => {
                 path="/support/tickets/:id"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
-                    <SupportTicketView />
+                    <LazyRoute><SupportTicketView /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -548,7 +529,7 @@ const AppContent = () => {
                 path="/it-assets/maintenance" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetMaintenance />
+                    <LazyRoute><AssetMaintenance /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -556,7 +537,7 @@ const AppContent = () => {
                 path="/it-assets/inventory/create"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <InventoryCreate />
+                    <LazyRoute><InventoryCreate /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -564,7 +545,7 @@ const AppContent = () => {
                 path="/it-assets/inventory/history"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <InventoryHistory />
+                    <LazyRoute><InventoryHistory /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -572,7 +553,7 @@ const AppContent = () => {
                 path="/it-assets/inventory/reports"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <InventoryReports />
+                    <LazyRoute><InventoryReports /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -580,7 +561,7 @@ const AppContent = () => {
                 path="/it-assets/inventory/:id/edit"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <InventoryEdit />
+                    <LazyRoute><InventoryEdit /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -588,7 +569,7 @@ const AppContent = () => {
                 path="/it-assets/inventory/:id/adjust"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <InventoryAdjustment />
+                    <LazyRoute><InventoryAdjustment /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -596,7 +577,7 @@ const AppContent = () => {
                 path="/it-assets/inventory"
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetInventory />
+                    <LazyRoute><AssetInventory /></LazyRoute>
                   </ProtectedRoute>
                 }
               />
@@ -604,7 +585,7 @@ const AppContent = () => {
                 path="/it-assets/reports" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetReports />
+                    <LazyRoute><AssetReports /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -612,7 +593,7 @@ const AppContent = () => {
                 path="/it-assets/approvals" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetApprovals />
+                    <LazyRoute><AssetApprovals /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -620,7 +601,7 @@ const AppContent = () => {
                 path="/it-assets/settings" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Super Admin']}>
-                    <AssetSettings />
+                    <LazyRoute><AssetSettings /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -629,7 +610,7 @@ const AppContent = () => {
                 path="/my-devices" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
-                    <MyDevices />
+                    <LazyRoute><MyDevices /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -637,7 +618,7 @@ const AppContent = () => {
                 path="/my-devices/:id" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
-                    <MyDeviceView />
+                    <LazyRoute><MyDeviceView /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -646,7 +627,7 @@ const AppContent = () => {
                 path="/my-it-assets" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
-                    <MyITAssets />
+                    <LazyRoute><MyITAssets /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -654,13 +635,13 @@ const AppContent = () => {
                 path="/my-it-assets/raise-request" 
                 element={
                   <ProtectedRoute allowedRoles={['Admin', 'Team Leader', 'Team Lead', 'Employee', 'Developer', 'Tester', 'Designer']}>
-                    <RaiseTicket />
+                    <LazyRoute><RaiseTicket /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
             </Route>
             
-            <Route path="*" element={<NotFound />} />
+            <Route path="*" element={<LazyRoute><NotFound /></LazyRoute>} />
           </Routes>
     </BrowserRouter>
   );

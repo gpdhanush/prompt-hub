@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { mfaApi } from "@/lib/api";
+import { mfaApi } from "@/features/auth/api";
 import { toast } from "@/hooks/use-toast";
 import { secureStorageWithCache } from "@/lib/secureStorage";
 

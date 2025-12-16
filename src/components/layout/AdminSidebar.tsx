@@ -35,7 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
 import { getCurrentUser, clearAuth } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
-import { authApi } from "@/lib/api";
+import { authApi } from "@/features/auth/api";
 
 // All menu items in one list - organized by sections
 const allMenuItems = [

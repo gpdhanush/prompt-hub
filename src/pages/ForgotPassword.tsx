@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useSecurityValidation } from "@/hooks/useSecurityValidation";
 import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { authApi } from "@/lib/api";
+import { authApi } from "@/features/auth/api";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
 

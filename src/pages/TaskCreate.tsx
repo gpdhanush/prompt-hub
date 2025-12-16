@@ -5,7 +5,7 @@ import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { tasksApi } from "@/lib/api";
+import { tasksApi } from "@/features/tasks/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TaskForm } from "@/components/task/TaskForm";
 

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge, taskStageMap, taskPriorityMap } from "@/components/ui/status-badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { tasksApi } from "@/lib/api";
+import { tasksApi } from "@/features/tasks/api";
 import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { TaskCommentsSection, TaskHistorySection, TaskTimesheetsSection } from "./Tasks";

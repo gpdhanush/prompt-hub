@@ -22,7 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { assetsApi, settingsApi } from "@/lib/api";
+import { assetsApi } from "@/features/assets/api";
+import { settingsApi } from "@/features/settings/api";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";

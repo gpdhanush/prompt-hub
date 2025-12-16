@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { assetsApi, settingsApi } from "@/lib/api";
+import { assetsApi } from "@/features/assets/api";
+import { settingsApi } from "@/features/settings/api";
 import { toast } from "@/hooks/use-toast";
 
 export default function InventoryCreate() {

@@ -50,7 +50,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { tasksApi, projectsApi, usersApi } from "@/lib/api";
+import { tasksApi } from "@/features/tasks/api";
+import { projectsApi } from "@/features/projects/api";
+import { usersApi } from "@/features/users/api";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";

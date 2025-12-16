@@ -82,7 +82,7 @@ export async function forceLogout(reason?: string): Promise<void> {
     
     // Try to call backend logout API to revoke refresh token
     try {
-      const { authApi } = await import('./api');
+      const { authApi } = await import('@/features/auth/api');
       const { secureStorageWithCache } = await import('./secureStorage');
       const refreshToken = await secureStorageWithCache.getItem('refresh_token');
       if (refreshToken) {

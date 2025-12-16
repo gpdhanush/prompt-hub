@@ -56,7 +56,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { usersApi, rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
+import { rolesApi, positionsApi, rolePositionsApi } from "@/lib/api";
+import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { getProfilePhotoUrl } from "@/lib/imageUtils";

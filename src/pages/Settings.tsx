@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Settings as SettingsIcon, Shield, Building, Palette, DollarSign } from "lucide-react";
-import { settingsApi } from "@/lib/api";
+import { settingsApi } from "@/features/settings/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Key, Copy, AlertCircle, Clock, Lock, CheckCircle2, XCircle, Timer } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
-import { mfaApi, authApi } from "@/lib/api";
+import { mfaApi, authApi } from "@/features/auth/api";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";

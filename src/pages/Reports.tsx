@@ -46,7 +46,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { reportsApi } from "@/lib/api";
+import { reportsApi } from "@/features/reports/api";
 import { toast } from "@/hooks/use-toast";
 import { exportLeaveReport } from "@/utils/excelExport";
 import { Badge } from "@/components/ui/badge";

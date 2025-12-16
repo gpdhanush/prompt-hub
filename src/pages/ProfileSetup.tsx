@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
-import { authApi, employeesApi } from "@/lib/api";
+import { authApi } from "@/features/auth/api";
+import { employeesApi } from "@/features/employees/api";
 import { logger } from "@/lib/logger";
 import { ProfilePhotoUpload } from "@/components/ui/profile-photo-upload";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";

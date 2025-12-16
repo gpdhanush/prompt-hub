@@ -26,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { assetsApi } from "@/lib/api";
+import { assetsApi } from "@/features/assets/api";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { getItemSync } from "@/lib/secureStorage";

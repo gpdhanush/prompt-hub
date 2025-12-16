@@ -29,7 +29,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { assetsApi, settingsApi } from "@/lib/api";
+import { assetsApi } from "@/features/assets/api";
+import { settingsApi } from "@/features/settings/api";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

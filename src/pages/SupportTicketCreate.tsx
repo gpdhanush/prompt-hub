@@ -11,7 +11,7 @@ import { useSecurityValidation } from "@/hooks/useSecurityValidation";
 import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { assetsApi } from "@/lib/api";
+import { assetsApi } from "@/features/assets/api";
 import { toast } from "@/hooks/use-toast";
 
 export default function SupportTicketCreate() {

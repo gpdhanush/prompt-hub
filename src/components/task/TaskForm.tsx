@@ -18,7 +18,9 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
-import { projectsApi, usersApi, employeesApi } from "@/lib/api";
+import { projectsApi } from "@/features/projects/api";
+import { employeesApi } from "@/features/employees/api";
+import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
 
 interface TaskFormData {

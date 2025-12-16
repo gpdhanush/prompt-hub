@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import { bugsApi } from "@/lib/api";
+import { bugsApi } from "@/features/bugs/api";
 import { BugForm } from "@/components/bug/BugForm";
 import {
   AlertDialog,

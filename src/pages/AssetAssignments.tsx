@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Plus, Printer } from "lucide-react";
-import { assetsApi } from "@/lib/api";
+import { assetsApi } from "@/features/assets/api";
 import {
   Dialog,
   DialogContent,

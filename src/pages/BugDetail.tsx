@@ -10,7 +10,7 @@ import { StatusBadge, bugSeverityMap, bugStatusMap } from "@/components/ui/statu
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { bugsApi } from "@/lib/api";
+import { bugsApi } from "@/features/bugs/api";
 import { BugComments } from "@/components/bug/BugComments";
 import { getCurrentUser, getAuthToken } from "@/lib/auth";
 import { API_CONFIG } from "@/lib/config";

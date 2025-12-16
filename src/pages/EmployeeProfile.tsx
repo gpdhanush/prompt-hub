@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { employeesApi } from "@/lib/api";
+import { employeesApi } from "@/features/employees/api";
 import { getCurrentUser } from "@/lib/auth";
 import { Loader2 } from "lucide-react";
 import {

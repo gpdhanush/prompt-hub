@@ -17,7 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { projectsApi, tasksApi, usersApi, employeesApi } from "@/lib/api";
+import { tasksApi } from "@/features/tasks/api";
+import { projectsApi } from "@/features/projects/api";
+import { employeesApi } from "@/features/employees/api";
+import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
 
 interface BugFormData {

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Shield, UserCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { employeesApi } from "@/lib/api";
+import { employeesApi } from "@/features/employees/api";
 import { getCurrentUser } from "@/lib/auth";
 import { getProfilePhotoUrl } from "@/lib/imageUtils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

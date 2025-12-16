@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { employeesApi, rolesApi } from "@/lib/api";
+import { rolesApi } from "@/lib/api";
+import { employeesApi } from "@/features/employees/api";
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Filter, Loader2, AlertCircle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/select";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
-import { notificationsApi } from "@/lib/api";
+import { notificationsApi } from "@/features/notifications/api";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 

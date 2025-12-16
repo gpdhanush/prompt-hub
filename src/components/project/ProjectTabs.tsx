@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DatePicker } from "@/components/ui/date-picker";
-import { projectsApi } from "@/lib/api";
+import { projectsApi } from "@/features/projects/api";
 import { toast } from "@/hooks/use-toast";
 // Date formatting utilities
 const formatDate = (dateString?: string) => {

@@ -9,7 +9,7 @@ import { useFCM } from "@/hooks/useFCM";
 import { logger } from "@/lib/logger";
 import { useIdleTimeout } from "@/hooks/useIdleTimeout";
 import { useQuery } from "@tanstack/react-query";
-import { authApi } from "@/lib/api";
+import { authApi } from "@/features/auth/api";
 import { PWAService } from "@/lib/pwaService";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
