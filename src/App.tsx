@@ -39,7 +39,6 @@ const Reimbursements = lazy(() => import("./pages/Reimbursements"));
 const ReimbursementCreate = lazy(() => import("./pages/ReimbursementCreate"));
 const ReimbursementEdit = lazy(() => import("./pages/ReimbursementEdit"));
 const ReimbursementView = lazy(() => import("./pages/ReimbursementView"));
-const AIPrompts = lazy(() => import("./pages/AIPrompts"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Settings = lazy(() => import("./pages/Settings"));
 const FileManager = lazy(() => import("./pages/FileManager"));
@@ -364,7 +363,6 @@ const AppContent = () => {
                   </ProtectedRoute>
                 } 
               />
-              <Route path="/prompts" element={<LazyRoute><AIPrompts /></LazyRoute>} />
               <Route 
                 path="/audit-logs" 
                 element={
