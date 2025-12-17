@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState } from "react";
 import {
   FolderOpen,
   Upload,
@@ -121,31 +121,15 @@ export default function FileManager() {
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedFile, setSelectedFile] = useState<typeof sampleFiles[0] | null>(null);
 
-  // Memoized filtered files
-  const filteredFiles = useMemo(() => {
-    return sampleFiles.filter((file) => {
-      const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        file.uploadedBy.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType = filterType === "all" || 
-        (filterType === "task" && file.taskId) ||
-        (filterType === "bug" && file.bugId) ||
-        (filterType === "reimbursement" && file.reimbursementId);
-      return matchesSearch && matchesType;
-    });
-  }, [searchQuery, filterType]);
-
-  // Memoized handlers
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  }, []);
-
-  const handleFilterTypeChange = useCallback((value: string) => {
-    setFilterType(value);
-  }, []);
-
-  const handleFileSelect = useCallback((file: typeof sampleFiles[0]) => {
-    setSelectedFile(file);
-  }, []);
+  const filteredFiles = sampleFiles.filter((file) => {
+    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      file.uploadedBy.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = filterType === "all" || 
+      (filterType === "task" && file.taskId) ||
+      (filterType === "bug" && file.bugId) ||
+      (filterType === "reimbursement" && file.reimbursementId);
+    return matchesSearch && matchesType;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -226,10 +210,10 @@ export default function FileManager() {
             placeholder="Search files..."
             className="pl-9"
             value={searchQuery}
-            onChange={handleSearchChange}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Select value={filterType} onValueChange={handleFilterTypeChange}>
+        <Select value={filterType} onValueChange={setFilterType}>
           <SelectTrigger className="w-48">
             <SelectValue />
           </SelectTrigger>
@@ -314,7 +298,7 @@ export default function FileManager() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleFileSelect(file)}>
+                          <DropdownMenuItem onClick={() => setSelectedFile(file)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>

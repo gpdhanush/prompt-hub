@@ -5,8 +5,17 @@ import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi } from "@/features/bugs/api";
-import { BugForm } from "../components/BugForm";
-import ConfirmationDialog from "@/shared/components/ConfirmationDialog";
+import { BugForm } from "@/components/bug/BugForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface BugFormData {
   title: string;
@@ -66,7 +75,7 @@ export default function BugEdit() {
   const [showDeleteAttachmentDialog, setShowDeleteAttachmentDialog] = useState(false);
   const [attachmentToDelete, setAttachmentToDelete] = useState<number | null>(null);
 
-  // Fetch bug data
+  // Fetch bug data - optimized query
   const { data: bugData, isLoading, error } = useQuery({
     queryKey: ['bug', id],
     queryFn: () => bugsApi.getById(Number(id)),
@@ -77,7 +86,8 @@ export default function BugEdit() {
     refetchOnReconnect: false,
   });
 
-  const bug = bugData?.data;
+  // Memoized derived value
+  const bug = useMemo(() => bugData?.data, [bugData?.data]);
 
   // Load bug data into form
   useEffect(() => {
@@ -122,8 +132,6 @@ export default function BugEdit() {
         title: "Success",
         description: "Attachment deleted successfully.",
       });
-      setShowDeleteAttachmentDialog(false);
-      setAttachmentToDelete(null);
     },
     onError: (error: any) => {
       toast({
@@ -248,22 +256,16 @@ export default function BugEdit() {
     }
 
     updateMutation.mutate(updateData);
-  }, [formData, updateMutation, toast]);
+  }, [formData, attachments, updateMutation, id]);
 
-  const handleCancel = useCallback(() => {
+  // Memoized navigation handlers
+  const handleNavigateBack = useCallback(() => {
+    navigate('/bugs');
+  }, [navigate]);
+
+  const handleNavigateView = useCallback(() => {
     navigate(`/bugs/${id}`);
   }, [navigate, id]);
-
-  const handleDeleteAttachment = useCallback((attachmentId: number) => {
-    setAttachmentToDelete(attachmentId);
-    setShowDeleteAttachmentDialog(true);
-  }, []);
-
-  const confirmDeleteAttachment = useCallback(() => {
-    if (attachmentToDelete) {
-      deleteAttachmentMutation.mutate(attachmentToDelete);
-    }
-  }, [attachmentToDelete, deleteAttachmentMutation]);
 
   if (isLoading) {
     return (
@@ -280,7 +282,7 @@ export default function BugEdit() {
       <div className="container mx-auto p-6">
         <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
           <div className="text-destructive">Error loading bug details.</div>
-          <Button onClick={() => navigate('/bugs')} variant="outline">
+          <Button onClick={handleNavigateBack} variant="outline">
             Back to Bugs
           </Button>
         </div>
@@ -295,7 +297,7 @@ export default function BugEdit() {
           <Button
             variant="outline"
             size="icon"
-            onClick={handleCancel}
+            onClick={handleNavigateView}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -313,24 +315,27 @@ export default function BugEdit() {
           attachments={attachments}
           onAttachmentsChange={setAttachments}
           existingAttachments={existingAttachments}
-          onDeleteAttachment={handleDeleteAttachment}
+          onDeleteAttachment={(attachmentId) => {
+            setAttachmentToDelete(attachmentId);
+            setShowDeleteAttachmentDialog(true);
+          }}
           isEdit={true}
         />
 
         <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" onClick={handleCancel}>
+          <Button type="button" variant="outline" onClick={() => navigate(`/bugs/${id}`)}>
             Cancel
           </Button>
           <Button type="submit" disabled={updateMutation.isPending}>
             {updateMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
+                Updating...
               </>
             ) : (
               <>
                 <Save className="mr-2 h-4 w-4" />
-                Save Changes
+                Update Bug
               </>
             )}
           </Button>
@@ -338,17 +343,37 @@ export default function BugEdit() {
       </form>
 
       {/* Delete Attachment Confirmation Dialog */}
-      <ConfirmationDialog
-        open={showDeleteAttachmentDialog}
-        onOpenChange={setShowDeleteAttachmentDialog}
-        title="Delete File"
-        description="Are you sure you want to delete this file? This action cannot be undone."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        variant="destructive"
-        isLoading={deleteAttachmentMutation.isPending}
-        onConfirm={confirmDeleteAttachment}
-      />
+      <AlertDialog open={showDeleteAttachmentDialog} onOpenChange={setShowDeleteAttachmentDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Attachment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this attachment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowDeleteAttachmentDialog(false);
+              setAttachmentToDelete(null);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (attachmentToDelete) {
+                  deleteAttachmentMutation.mutate(attachmentToDelete);
+                  setShowDeleteAttachmentDialog(false);
+                  setAttachmentToDelete(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteAttachmentMutation.isPending}
+            >
+              {deleteAttachmentMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
