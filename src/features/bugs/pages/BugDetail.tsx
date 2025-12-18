@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, AlertCircle, Clock } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, AlertCircle, Clock, MessageSquare } from "lucide-react";
 import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -561,7 +561,17 @@ export default function BugDetail() {
       </div>
 
       {/* Comments Section */}
-      <BugComments bugId={Number(id)} />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5" />
+            Comments
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <BugComments bugId={Number(id)} />
+        </CardContent>
+      </Card>
 
       {/* Delete Confirmation Dialog */}
       <ConfirmationDialog

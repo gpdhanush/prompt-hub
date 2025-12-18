@@ -2,7 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { db } from '../config/database.js';
 import { logger } from '../utils/logger.js';
-import { parseCommits, parseCommitMessage, validateGitHubSignature } from '../utils/commitParser.js';
+import { parseCommits, validateGitHubSignature } from '../utils/commitParser.js';
 import { emitToBoard } from '../utils/socketService.js';
 
 const router = express.Router();
@@ -290,9 +290,6 @@ async function handlePushEvent(payload, project) {
 
         processedCount++;
         logger.debug(`Stored commit ${commitSha.substring(0, 7)} for project ${project.project_code}`);
-
-        // Process Kanban task updates from commit message
-        await handleKanbanTaskUpdate(commitMessage, commitSha, repoHtmlUrl, project.id);
       } catch (commitError) {
         logger.error(`Error processing individual commit:`, commitError);
         errorCount++;
@@ -310,174 +307,6 @@ async function handlePushEvent(payload, project) {
   } catch (error) {
     logger.error('Error handling push event:', error);
     throw error;
-  }
-}
-
-// Handle Kanban task update from GitHub commit
-async function handleKanbanTaskUpdate(commitMessage, commitSha, repoUrl, projectId) {
-  try {
-    // Parse commit message for Kanban task ID and status
-    const parsed = parseCommitMessage(commitMessage);
-    
-    if (!parsed.taskId || !parsed.status) {
-      // No Kanban task ID or status found in commit
-      return { success: true, skipped: true, reason: 'No task ID or status in commit' };
-    }
-
-    logger.info(`Processing Kanban task update: ${parsed.taskId} -> ${parsed.status} from commit ${commitSha.substring(0, 7)}`);
-
-    // Find Kanban boards with GitHub integration enabled for this repo
-    const [integrations] = await db.query(
-      `SELECT ki.*, kb.id as board_id, kb.name as board_name
-       FROM kanban_integrations ki
-       INNER JOIN kanban_boards kb ON ki.board_id = kb.id
-       WHERE ki.github_repo = ? AND ki.auto_status_enabled = TRUE AND kb.is_active = TRUE`,
-      [repoUrl]
-    );
-
-    if (integrations.length === 0) {
-      logger.debug(`No Kanban boards found with GitHub integration for repo: ${repoUrl}`);
-      return { success: true, skipped: true, reason: 'No matching Kanban board integration' };
-    }
-
-    let updatedCount = 0;
-    let errorCount = 0;
-
-    // Process each board integration
-    for (const integration of integrations) {
-      try {
-        // Find task by task_code
-        const [tasks] = await db.query(
-          `SELECT kt.*, kc.status as column_status, kc.id as column_id
-           FROM kanban_tasks kt
-           INNER JOIN kanban_columns kc ON kt.column_id = kc.id
-           WHERE kt.task_code = ? AND kt.board_id = ? AND kt.is_locked = FALSE`,
-          [parsed.taskId, integration.board_id]
-        );
-
-        if (tasks.length === 0) {
-          logger.debug(`Task ${parsed.taskId} not found in board ${integration.board_id}`);
-          continue;
-        }
-
-        const task = tasks[0];
-        const newStatus = parsed.status;
-
-        // Check if status change is needed
-        if (task.column_status === newStatus) {
-          logger.debug(`Task ${parsed.taskId} already in status ${newStatus}`);
-          continue;
-        }
-
-        // Find column with matching status
-        const [targetColumns] = await db.query(
-          `SELECT id, position
-           FROM kanban_columns
-           WHERE board_id = ? AND status = ?
-           ORDER BY position ASC
-           LIMIT 1`,
-          [integration.board_id, newStatus]
-        );
-
-        if (targetColumns.length === 0) {
-          logger.warn(`No column found with status ${newStatus} in board ${integration.board_id}`);
-          errorCount++;
-          continue;
-        }
-
-        const targetColumn = targetColumns[0];
-
-        // Get max position in target column
-        const [maxPositionResult] = await db.query(
-          `SELECT COALESCE(MAX(position), -1) + 1 as new_position
-           FROM kanban_tasks
-           WHERE column_id = ?`,
-          [targetColumn.id]
-        );
-        const newPosition = maxPositionResult[0].new_position;
-
-        // Update task
-        await db.query(
-          `UPDATE kanban_tasks
-           SET column_id = ?, position = ?, status = ?, 
-               github_repo = ?, last_commit_hash = ?, last_commit_message = ?, 
-               auto_updated = TRUE, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ?`,
-          [
-            targetColumn.id,
-            newPosition,
-            newStatus,
-            repoUrl,
-            commitSha,
-            commitMessage.substring(0, 500),
-            task.id
-          ]
-        );
-
-        // Log to task history
-        await db.query(
-          `INSERT INTO kanban_task_history 
-           (task_id, source, old_status, new_status, changed_by, metadata)
-           VALUES (?, 'github', ?, ?, NULL, ?)`,
-          [
-            task.id,
-            task.column_status,
-            newStatus,
-            JSON.stringify({
-              commit_sha: commitSha,
-              commit_message: commitMessage.substring(0, 500),
-              repo_url: repoUrl,
-              keywords: parsed.keywords,
-            })
-          ]
-        );
-
-        // Add system comment
-        await db.query(
-          `INSERT INTO task_comments (task_id, user_id, comment, role)
-           SELECT ?, NULL, ?, 'System'
-           FROM kanban_tasks
-           WHERE id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ?)`,
-          [
-            task.id,
-            `Auto-updated via GitHub commit: ${commitMessage.substring(0, 200)}${commitMessage.length > 200 ? '...' : ''}`,
-            task.id,
-            task.id
-          ]
-        ).catch((err) => {
-          // Ignore if task_comments table doesn't exist or task_id doesn't match
-          logger.debug('Could not add system comment:', err.message);
-        });
-
-        // Emit socket event
-        emitToBoard(integration.board_id, 'kanban:task_updated', {
-          taskId: task.id,
-          taskCode: parsed.taskId,
-          boardId: integration.board_id,
-          oldStatus: task.column_status,
-          newStatus: newStatus,
-          source: 'github',
-          commitSha: commitSha,
-        });
-
-        updatedCount++;
-        logger.info(`Updated Kanban task ${parsed.taskId} (${task.id}) from ${task.column_status} to ${newStatus} via GitHub commit`);
-      } catch (boardError) {
-        logger.error(`Error updating task in board ${integration.board_id}:`, boardError);
-        errorCount++;
-      }
-    }
-
-    return {
-      success: true,
-      taskId: parsed.taskId,
-      status: parsed.status,
-      boardsUpdated: updatedCount,
-      errors: errorCount,
-    };
-  } catch (error) {
-    logger.error('Error handling Kanban task update:', error);
-    return { success: false, error: error.message };
   }
 }
 

@@ -10,7 +10,6 @@ import { tasksApi } from "@/features/tasks/api";
 import { getCurrentUser } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { setupMessageListener } from "@/lib/firebase";
-import { subscribeToComments } from "@/lib/socket";
 
 interface TaskCommentsSectionProps {
   taskId: number;
@@ -52,16 +51,6 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
         // Refetch comments when a new comment/reply is received for this task
         refetch();
       }
-    });
-
-    return cleanup;
-  }, [taskId, refetch]);
-
-  // Socket.IO real-time updates
-  useEffect(() => {
-    const cleanup = subscribeToComments('task', taskId, () => {
-      // Refetch comments when socket event is received
-      refetch();
     });
 
     return cleanup;

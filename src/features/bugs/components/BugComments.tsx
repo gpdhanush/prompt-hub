@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback, memo, useRef, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Clock, MessageSquare, User, Send, Reply, ChevronDown, ChevronUp } from "lucide-react";
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { MessageSquare, Reply, Send, Clock, User, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,20 @@ import { bugsApi } from "@/features/bugs/api";
 import { getCurrentUser } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { setupMessageListener } from "@/lib/firebase";
-import { logger } from "@/lib/logger";
+
+interface Comment {
+  id: number;
+  bug_id: number;
+  user_id: number;
+  parent_id: number | null;
+  comment_text: string;
+  created_at: string;
+  updated_at: string;
+  user_name: string;
+  user_email: string;
+  user_role: string;
+  replies?: Comment[];
+}
 
 interface BugCommentsProps {
   bugId: number;
@@ -57,27 +70,19 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
     return cleanup;
   }, [bugId, refetch]);
 
-  // Organize comments into tree structure
+  // Organize comments into tree structure (API already returns tree, but ensure structure)
   const { rootComments } = useMemo(() => {
     const commentMap = new Map();
     const rootComments: any[] = [];
 
     comments.forEach((comment: any) => {
-      // Normalize comment structure to match task comments
-      const normalizedComment = {
-        ...comment,
-        comment: comment.comment_text || comment.comment,
-        parent_comment_id: comment.parent_id || null,
-        replies: [],
-      };
-      commentMap.set(comment.id, normalizedComment);
+      commentMap.set(comment.id, { ...comment, replies: comment.replies || [] });
     });
 
     comments.forEach((comment: any) => {
       const commentNode = commentMap.get(comment.id);
-      const parentId = comment.parent_id;
-      if (parentId) {
-        const parent = commentMap.get(parentId);
+      if (comment.parent_id) {
+        const parent = commentMap.get(comment.parent_id);
         if (parent) {
           parent.replies.push(commentNode);
         }
@@ -90,12 +95,9 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
   }, [comments]);
 
   const createCommentMutation = useMutation({
-    mutationFn: (data: { comment_text: string; parent_id?: number }) => {
-      logger.debug('Creating bug comment:', { bugId, hasParentId: !!data.parent_id, parentId: data.parent_id });
-      return bugsApi.createComment(bugId, data);
-    },
-    onSuccess: async (response) => {
-      logger.debug('Bug comment created successfully:', response);
+    mutationFn: (data: { comment_text: string; parent_id?: number }) =>
+      bugsApi.createComment(bugId, data),
+    onSuccess: async () => {
       // Invalidate and immediately refetch to show new comment
       await queryClient.invalidateQueries({ queryKey: ['bug-comments', bugId] });
       await queryClient.refetchQueries({ queryKey: ['bug-comments', bugId] });
@@ -104,13 +106,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
       toast({ title: "Success", description: "Comment added successfully." });
     },
     onError: (error: any) => {
-      logger.error('Error creating bug comment:', error);
-      const errorMessage = error.response?.data?.error || error.message || "Failed to add comment.";
-      toast({ 
-        title: "Error", 
-        description: errorMessage, 
-        variant: "destructive" 
-      });
+      toast({ title: "Error", description: error.message || "Failed to add comment.", variant: "destructive" });
     },
   });
 
@@ -119,7 +115,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
     // Top form is only for new top-level comments, not replies
     createCommentMutation.mutate({
       comment_text: commentText,
-      // Don't send parent_id for top-level comments
+      parent_id: undefined,
     });
   }, [commentText, createCommentMutation]);
 
@@ -130,19 +126,10 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
 
   const handleReplySubmit = useCallback((parentCommentId: number) => {
     const replyText = replyTexts[parentCommentId];
-    if (!replyText?.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a reply.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    logger.debug('Submitting bug comment reply:', { bugId, parentCommentId, replyLength: replyText.length });
+    if (!replyText?.trim()) return;
     
     createCommentMutation.mutate({
-      comment_text: replyText.trim(),
+      comment_text: replyText,
       parent_id: parentCommentId,
     }, {
       onSuccess: () => {
@@ -152,17 +139,9 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
           return newTexts;
         });
         setReplyingTo(null);
-      },
-      onError: (error: any) => {
-        logger.error('Error submitting bug comment reply:', error);
-        toast({
-          title: "Error",
-          description: error.response?.data?.error || error.message || "Failed to add reply.",
-          variant: "destructive",
-        });
       }
     });
-  }, [replyTexts, createCommentMutation, bugId, toast]);
+  }, [replyTexts, createCommentMutation]);
 
   const handleReplyCancel = useCallback((commentId: number) => {
     setReplyTexts(prev => {
@@ -311,8 +290,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
     const isRootComment = depth === 0;
     const replyText = replyTexts[comment.id] || '';
     const isExpanded = expandedComments.has(comment.id);
-    const commentText = comment.comment || '';
-    const isLong = isCommentLong(commentText);
+    const isLong = isCommentLong(comment.comment_text);
 
     return (
       <div className="space-y-2">
@@ -349,7 +327,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
                   textOverflow: 'ellipsis',
                 } : {}}
               >
-                {renderTextWithLinks(commentText)}
+                {renderTextWithLinks(comment.comment_text)}
               </div>
               {isLong && (
                 <Button

@@ -104,18 +104,6 @@ export function initializeSocketIO(server) {
       logger.debug(`User ${socket.userId} left board ${boardId}`);
     });
 
-    // Join room for comments (task or bug)
-    socket.on('join_room', (roomName) => {
-      socket.join(roomName);
-      logger.debug(`User ${socket.userId} joined room: ${roomName}`);
-    });
-
-    // Leave room for comments
-    socket.on('leave_room', (roomName) => {
-      socket.leave(roomName);
-      logger.debug(`User ${socket.userId} left room: ${roomName}`);
-    });
-
     // Disconnect handler
     socket.on('disconnect', (reason) => {
       logger.info(`Socket disconnected: User ${socket.userId} - ${reason}`);
@@ -168,21 +156,5 @@ export function emitToAll(event, data) {
 
   io.emit(event, data);
   logger.debug(`Emitted ${event} to all clients`);
-}
-
-/**
- * Emit event to a specific room (e.g., task:123, bug:456)
- * @param {string} roomName - Room name
- * @param {string} event - Event name
- * @param {Object} data - Event data
- */
-export function emitToRoom(roomName, event, data) {
-  if (!io) {
-    logger.warn('Socket.IO not initialized, cannot emit event');
-    return;
-  }
-
-  io.to(roomName).emit(event, data);
-  logger.debug(`Emitted ${event} to room ${roomName}`);
 }
 
