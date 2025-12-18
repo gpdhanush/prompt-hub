@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Mail, Lock, KeyRound, CheckCircle2, Shield, Clock } from "lucide-react";
+import { ArrowLeft, Mail, Lock, KeyRound, CheckCircle2, Shield, Clock, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,8 @@ export default function ForgotPassword() {
   const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [emailExists, setEmailExists] = useState<boolean | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { securityAlertProps } = useSecurityValidation();
 
   // Pre-fill email from location state if available
@@ -215,15 +217,6 @@ export default function ForgotPassword() {
       {/* Left side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-gradient-to-br from-primary/20 via-background to-background p-12 relative overflow-hidden">
         <div className="relative z-10">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/login")}
-            className="mb-8"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            <span>Back to Login</span>
-          </Button>
           
           <div className="flex flex-col items-center gap-4">
             <Logo iconSize={128} showText={false} noBox={true} />
@@ -264,17 +257,6 @@ export default function ForgotPassword() {
       {/* Right side - Form */}
       <div className="flex w-full lg:w-1/2 items-center justify-center p-8">
         <div className="w-full max-w-md space-y-6 animate-fade-in">
-          {/* Mobile back button */}
-          <div className="lg:hidden">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/login")}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Login
-            </Button>
-          </div>
 
           {/* Mobile logo */}
           <div className="lg:hidden flex flex-col items-center justify-center mb-6 gap-3">
@@ -314,13 +296,13 @@ export default function ForgotPassword() {
           {/* Main Card */}
           <Card className="border shadow-xl">
             <CardHeader className="space-y-1 text-center pb-6">
-              <CardTitle className="text-3xl font-bold">
+              <CardTitle className="text-3xl font-bold text-foreground">
                 {step === "email" && "Forgot Password?"}
                 {step === "otp" && "Verify Your Email"}
                 {step === "reset" && "Create New Password"}
                 {step === "success" && "Password Reset Successful"}
               </CardTitle>
-              <CardDescription className="text-base">
+              <CardDescription className="text-base text-muted-foreground">
                 {step === "email" && "Enter your email address and we'll send you a verification code"}
                 {step === "otp" && "Enter the 6-digit code we sent to your email"}
                 {step === "reset" && "Choose a strong password for your account"}
@@ -356,7 +338,7 @@ export default function ForgotPassword() {
                       </p>
                     )}
                     {emailExists === true && (
-                      <p className="text-sm text-green-600 mt-2 flex items-center gap-2">
+                      <p className="text-sm text-status-success mt-2 flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4" />
                         OTP has been sent to your email
                       </p>
@@ -429,7 +411,7 @@ export default function ForgotPassword() {
                       }}
                       className="flex-1 h-12"
                     >
-                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      <ArrowLeft className="mr-2 h-4 w-4 text-foreground" />
                       Back
                     </Button>
                     <Button
@@ -461,17 +443,24 @@ export default function ForgotPassword() {
                       <SecureInput
                         id="new-password"
                         fieldName="New Password"
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         placeholder="Enter new password"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="pl-11 h-12 text-base"
+                        className="pl-11 pr-11 h-12 text-base"
                         required
                         autoFocus
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
-                      <div className={`h-1.5 w-1.5 rounded-full ${newPassword.length >= 8 ? "bg-green-500" : "bg-muted"}`} />
+                      <div className={`h-1.5 w-1.5 rounded-full ${newPassword.length >= 8 ? "bg-status-success" : "bg-muted"}`} />
                       <span>Must be at least 8 characters long</span>
                     </div>
                   </div>
@@ -482,13 +471,20 @@ export default function ForgotPassword() {
                       <SecureInput
                         id="confirm-password"
                         fieldName="Confirm Password"
-                        type="password"
+                        type={showConfirmPassword ? "text" : "password"}
                         placeholder="Confirm new password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="pl-11 h-12 text-base"
+                        className="pl-11 pr-11 h-12 text-base"
                         required
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
                     </div>
                     {confirmPassword && newPassword !== confirmPassword && (
                       <p className="text-sm text-destructive mt-2 flex items-center gap-2">
@@ -497,7 +493,7 @@ export default function ForgotPassword() {
                       </p>
                     )}
                     {confirmPassword && newPassword === confirmPassword && newPassword.length >= 8 && (
-                      <p className="text-sm text-green-600 mt-2 flex items-center gap-2">
+                      <p className="text-sm text-status-success mt-2 flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4" />
                         Passwords match
                       </p>
@@ -539,8 +535,8 @@ export default function ForgotPassword() {
               {step === "success" && (
                 <div className="space-y-6 text-center py-4">
                   <div className="flex justify-center">
-                    <div className="rounded-full bg-green-100 dark:bg-green-900/20 p-6 animate-in zoom-in duration-500">
-                      <CheckCircle2 className="h-16 w-16 text-green-600 dark:text-green-500" />
+                    <div className="rounded-full bg-status-success-bg p-6 animate-in zoom-in duration-500">
+                      <CheckCircle2 className="h-16 w-16 text-status-success" />
                     </div>
                   </div>
                   <div className="space-y-3">

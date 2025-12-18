@@ -2,7 +2,8 @@ import express from 'express';
 import { db } from '../config/database.js';
 import { authenticate, authorize, requirePermission } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
-import { notifyTaskAssigned } from '../utils/notificationService.js';
+import { notifyTaskAssigned, notifyTaskComment } from '../utils/notificationService.js';
+import { emitToRoom } from '../utils/socketService.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
 import { columnExists } from '../utils/dbHealthCheck.js';
@@ -723,6 +724,19 @@ router.post('/:id/comments', async (req, res) => {
       return res.status(400).json({ error: 'Comment is required' });
     }
     
+    // Get task details for notification
+    const [tasks] = await db.query(`
+      SELECT id, title, assigned_to
+      FROM tasks
+      WHERE id = ?
+    `, [id]);
+    
+    if (tasks.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    const task = tasks[0];
+    
     const [result] = await db.query(`
       INSERT INTO task_comments (task_id, user_id, comment, parent_comment_id, role)
       VALUES (?, ?, ?, ?, ?)
@@ -739,6 +753,28 @@ router.post('/:id/comments', async (req, res) => {
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE tc.id = ?
     `, [result.insertId]);
+    
+    // Notify relevant users about the comment/reply
+    await notifyTaskComment(
+      parseInt(id),
+      result.insertId,
+      userId,
+      newComment[0].user_name || 'Someone',
+      comment.trim(),
+      task.title || 'Task',
+      parent_comment_id || null,
+      task.assigned_to
+    );
+
+    // Emit socket event for real-time updates
+    const roomName = `task:${id}`;
+    const eventName = parent_comment_id ? 'task_comment_reply' : 'task_comment';
+    emitToRoom(roomName, eventName, {
+      taskId: parseInt(id),
+      comment: newComment[0],
+      commentId: result.insertId,
+      parentId: parent_comment_id || null,
+    });
     
     res.status(201).json({ data: newComment[0] });
   } catch (error) {

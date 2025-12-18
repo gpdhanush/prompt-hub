@@ -113,62 +113,63 @@ export function useFCM() {
   }, []);
 
   // Listen for foreground messages - continuous listener
+  // Set up listener regardless of permission to handle data-only messages
   useEffect(() => {
-    if (Notification.permission === 'granted') {
-      logger.info('🔔 Setting up FCM message listener...');
-      console.log('🔔 [FCM] Setting up message listener, permission:', Notification.permission);
-      
-      const cleanup = setupMessageListener((payload) => {
-        console.log('📨 [FCM] Message received:', payload);
+    logger.info('🔔 Setting up FCM message listener...');
+    console.log('🔔 [FCM] Setting up message listener, permission:', Notification.permission);
+    console.log('🔔 [FCM] showNotification function available:', !!showNotification);
+    
+    if (!showNotification) {
+      console.error('❌ [FCM] showNotification is not available! Cannot set up listener.');
+      return;
+    }
+    
+    const cleanup = setupMessageListener((payload) => {
+        console.log('📨 [FCM] Message received (full payload):', JSON.stringify(payload, null, 2));
         logger.info('📨 FCM message received:', payload);
         
         try {
           // Show modern notification popup
-          if (payload?.notification) {
+          // Check both notification object and data object
+          if (payload?.notification || payload?.data) {
             const notificationData = {
-              title: payload.notification.title || 'New Notification',
-              body: payload.notification.body || '',
-              icon: payload.notification.icon,
-              image: payload.notification.image || payload.notification.imageUrl,
-              link: payload.data?.link || payload.fcmOptions?.link || payload.webpush?.fcmOptions?.link,
+              title: payload.notification?.title || payload.data?.title || 'New Notification',
+              body: payload.notification?.body || payload.data?.body || payload.data?.message || '',
+              icon: payload.notification?.icon || payload.data?.icon,
+              image: payload.notification?.image || payload.notification?.imageUrl || payload.data?.image,
+              link: payload.data?.link || payload.fcmOptions?.link || payload.webpush?.fcmOptions?.link || payload.data?.link,
               type: payload.data?.type || 'general',
-              data: payload.data,
+              data: payload.data || {},
             };
 
-            console.log('📢 [FCM] Showing notification alert:', notificationData);
+            console.log('📢 [FCM] Prepared notification data:', notificationData);
+            console.log('📢 [FCM] Calling showNotification with:', notificationData);
             logger.info('📢 Showing notification alert:', notificationData);
 
             // Show modern alert popup
-            showNotification(notificationData);
+            if (showNotification) {
+              console.log('📢 [FCM] showNotification function exists, calling it...');
+              showNotification(notificationData);
+              console.log('📢 [FCM] showNotification called successfully');
+            } else {
+              console.error('❌ [FCM] showNotification function is not available!');
+            }
 
             // Also show toast for quick feedback
             toast({
-              title: payload.notification.title || 'Notification',
-              description: payload.notification.body || '',
+              title: notificationData.title,
+              description: notificationData.body,
             });
 
             // Show browser notification as well
             if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(payload.notification.title || 'Notification', {
-                body: payload.notification.body || '',
-                icon: payload.notification.icon || '/favicon.ico',
+              new Notification(notificationData.title, {
+                body: notificationData.body,
+                icon: notificationData.icon || '/favicon.ico',
                 badge: '/favicon.ico',
-                tag: payload.data?.type || 'notification',
+                tag: notificationData.type || 'notification',
               });
             }
-          } else if (payload?.data) {
-            // Handle data-only messages (no notification object)
-            console.log('📨 [FCM] Data-only message received:', payload.data);
-            logger.debug('📨 Data-only message received:', payload.data);
-            const notificationData = {
-              title: payload.data.title || 'New Notification',
-              body: payload.data.body || payload.data.message || '',
-              link: payload.data.link,
-              type: payload.data.type || 'general',
-              data: payload.data,
-            };
-            console.log('📢 [FCM] Showing data-only notification:', notificationData);
-            showNotification(notificationData);
           } else {
             console.warn('⚠️ [FCM] Received message with no notification or data:', payload);
             logger.warn('⚠️ Received message with no notification or data:', payload);
@@ -188,10 +189,6 @@ export function useFCM() {
         console.log('🧹 [FCM] Cleaning up message listener');
         cleanup();
       };
-    } else {
-      console.log('⏸️ [FCM] Notification permission not granted:', Notification.permission);
-      logger.debug('⏸️  Notification permission not granted, skipping message listener setup');
-    }
   }, [showNotification]);
 
   // Unregister FCM token

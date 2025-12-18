@@ -37,11 +37,13 @@ import assetsRoutes from './routes/assets.js';
 import remindersRoutes from './routes/reminders.js';
 import webhooksRoutes from './routes/webhooks.js';
 import documentRequestsRoutes from './routes/documentRequests.js';
+import kanbanRoutes from './routes/kanban.js';
 import { performHealthCheck } from './utils/dbHealthCheck.js';
 import { initializeFirebase } from './utils/fcmService.js';
 import { reportFatalError, createErrorContext } from './utils/errorReporting.js';
 import { initializeReminderScheduler } from './utils/reminderScheduler.js';
 import { initializeTicketEscalationScheduler } from './utils/ticketEscalationScheduler.js';
+import { initializeSocketIO } from './utils/socketService.js';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger.js';
 
@@ -126,8 +128,7 @@ const globalRateLimiter = SERVER_CONFIG.NODE_ENV === 'production' ? rateLimit({
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  // Configure trust proxy properly - only trust first proxy in production
-  trustProxy: true,
+  // Note: trustProxy is configured on the Express app (line 86), not here
   skip: (req) => {
     // Skip rate limiting for health checks
     return req.path === '/health' || req.path === '/api/test-db';
@@ -147,8 +148,7 @@ const authRateLimiter = SERVER_CONFIG.NODE_ENV === 'production' ? rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Configure trust proxy properly - only trust first proxy in production
-  trustProxy: true,
+  // Note: trustProxy is configured on the Express app (line 86), not here
   skipSuccessfulRequests: true // Don't count successful requests
 }) : (req, res, next) => next(); // No-op middleware for non-production
 
@@ -292,6 +292,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/assets', assetsRoutes);
 app.use('/api/reminders', remindersRoutes);
 app.use('/api/document-requests', documentRequestsRoutes);
+app.use('/api/kanban', kanbanRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -357,9 +358,15 @@ app.use((req, res) => {
     }
   }
 
-  server.listen(PORT, async () => {
+  // Initialize Socket.IO
+  initializeSocketIO(server);
+
+  // Listen on all interfaces (0.0.0.0) for cPanel compatibility
+  // cPanel will automatically set the PORT environment variable
+  server.listen(PORT, '0.0.0.0', async () => {
     const protocol = useHttps && server !== app ? 'https' : 'http';
-    logger.info(`✅ Server running on ${protocol}://localhost:${PORT}`);
+    logger.info(`✅ Server running on ${protocol}://0.0.0.0:${PORT}`);
+    logger.info(`✅ Health check available at: ${protocol}://0.0.0.0:${PORT}/health`);
     
     // Perform database health check on startup
     try {

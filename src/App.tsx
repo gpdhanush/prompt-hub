@@ -35,6 +35,8 @@ const Tasks = lazy(() => import("./features/tasks/pages/Tasks"));
 const TaskCreate = lazy(() => import("./features/tasks/pages/TaskCreate"));
 const TaskEdit = lazy(() => import("./features/tasks/pages/TaskEdit"));
 const TaskView = lazy(() => import("./features/tasks/pages/TaskView"));
+const Kanban = lazy(() => import("./features/kanban/pages/Kanban"));
+const KanbanBoardDetail = lazy(() => import("./features/kanban/pages/KanbanBoardDetail"));
 const Bugs = lazy(() => import("./features/bugs/pages/Bugs"));
 const Leaves = lazy(() => import("./features/leaves/pages/Leaves"));
 const Reimbursements = lazy(() => import("./features/reimbursements/pages/Reimbursements"));
@@ -298,6 +300,22 @@ const AppContent = () => {
                 element={
                   <ProtectedRoute requiredPermission="tasks.edit">
                     <LazyRoute><TaskEdit /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/kanban"
+                element={
+                  <ProtectedRoute requiredPermission="tasks.view">
+                    <LazyRoute><Kanban /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/kanban/:id"
+                element={
+                  <ProtectedRoute requiredPermission="tasks.view">
+                    <LazyRoute><KanbanBoardDetail /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -653,7 +671,7 @@ const App = () => {
   useEffect(() => {
     const root = document.documentElement;
     const savedColor = localStorage.getItem("theme-color");
-    const defaultColor = "217 91% 60%"; // Default blue color
+    const defaultColor = "242 57% 58%"; // Default indigo color
     
     // Use saved color or default
     const colorToUse = savedColor || defaultColor;

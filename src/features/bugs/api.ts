@@ -49,7 +49,15 @@ export const bugsApi = {
   },
 
   createComment: async (id: number, data: { comment_text: string; parent_id?: number }) => {
-    const response = await apiClient.post<{ data: any }>(`/bugs/${id}/comments`, data);
+    // Prepare request body - only include parent_id if it's provided
+    const requestBody: { comment_text: string; parent_id?: number } = {
+      comment_text: data.comment_text,
+    };
+    // Only include parent_id if it's a valid number (for replies)
+    if (data.parent_id !== undefined && data.parent_id !== null && typeof data.parent_id === 'number') {
+      requestBody.parent_id = data.parent_id;
+    }
+    const response = await apiClient.post<{ data: any }>(`/bugs/${id}/comments`, requestBody);
     return response.data;
   },
 

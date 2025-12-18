@@ -199,20 +199,22 @@ export async function sendMulticastNotification(fcmTokens, notification, data = 
       response.responses.forEach((resp, idx) => {
         if (!resp.success) {
           const error = resp.error;
-          const errorDetails = {
-            code: error?.code,
-            message: error?.message,
-            token: fcmTokens[idx]?.substring(0, 20) + '...',
-            fullError: error,
-          };
-          logger.error(`❌ Failed to send notification to token ${idx}:`, errorDetails);
-          console.error(`❌ FCM Error Details:`, JSON.stringify(errorDetails, null, 2));
+          const isInvalidToken = error?.code === 'messaging/invalid-registration-token' ||
+                                 error?.code === 'messaging/registration-token-not-registered' ||
+                                 error?.code === 'messaging/invalid-argument';
           
-          if (error?.code === 'messaging/invalid-registration-token' ||
-              error?.code === 'messaging/registration-token-not-registered' ||
-              error?.code === 'messaging/invalid-argument') {
+          if (isInvalidToken) {
+            // Invalid tokens are expected (user uninstalled app, cleared data, etc.) - log as warning
             invalidTokens.push(fcmTokens[idx]);
-            logger.warn(`⚠️  Token ${idx} is invalid or not registered, will be deactivated`);
+            logger.debug(`⚠️  Token ${idx} is invalid or not registered (will be deactivated): ${fcmTokens[idx]?.substring(0, 20)}...`);
+          } else {
+            // Other errors are unexpected - log as error
+            const errorDetails = {
+              code: error?.code,
+              message: error?.message,
+              token: fcmTokens[idx]?.substring(0, 20) + '...',
+            };
+            logger.error(`❌ Failed to send notification to token ${idx}:`, errorDetails);
           }
         }
       });

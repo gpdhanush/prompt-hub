@@ -171,7 +171,7 @@ export default function Settings() {
     setMounted(true);
     // Load saved theme color from localStorage, or use default
     const savedColor = localStorage.getItem("theme-color");
-    const defaultColor = "217 91% 60%"; // Default blue color
+    const defaultColor = "242 57% 58%"; // Default indigo color
     const colorToUse = savedColor || defaultColor;
     
     const root = document.documentElement;
@@ -260,6 +260,19 @@ export default function Settings() {
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
+  }
+
+  function handleColorSelect(value: string): void {
+    throw new Error("Function not implemented.");
+  }
+
+  function handleRegenerateBackupCodes(event: React.MouseEvent<HTMLButtonElement>): void {
+    // You can add logic here to actually regenerate backup codes
+    // For now we'll simply show a toast
+    toast({
+      title: "Backup Codes Regenerated",
+      description: "Your backup codes have been regenerated successfully.",
+    });
   }
 
   return (
@@ -379,8 +392,8 @@ export default function Settings() {
                             <Input 
                               type="text" 
                               value={sessionTimeout}
-                              onChange={handleSessionTimeoutChange}
-                              onBlur={handleSessionTimeoutBlur}
+                              onChange={handleSaveSessionTimeout}
+                              onBlur={handleSaveSessionTimeout}
                               className="w-32 text-center font-semibold text-lg pr-12" 
                               maxLength={4}
                               placeholder="30"

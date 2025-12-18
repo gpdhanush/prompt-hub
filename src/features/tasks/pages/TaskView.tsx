@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Edit, CheckSquare, MessageSquare, History, Timer, Paperclip, Clock, AlertCircle } from "lucide-react";
+import { ArrowLeft, Edit, CheckSquare, MessageSquare, History, Timer, Paperclip, Clock, AlertCircle, User, Calendar } from "lucide-react";
 import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -108,8 +108,12 @@ export default function TaskView() {
         </div>
       </div>
 
+      <Separator />
+
       {/* Main Content */}
-      <div className="space-y-6">
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* Left Column - Main Details */}
+        <div className="md:col-span-2 space-y-6">
           {/* Header Card */}
           <Card>
             <CardHeader>
@@ -138,59 +142,6 @@ export default function TaskView() {
                 </div>
               </div>
 
-              <Separator />
-
-              {/* First Row: Priority, Stage, Status, Deadline in 4 columns */}
-              <div className="grid grid-cols-4 gap-4">
-                <div>
-                  <Label className="text-muted-foreground text-sm">Priority</Label>
-                  <div className="mt-1">
-                    <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]} className="text-xs">
-                      {getPriorityLabel(task.priority)}
-                    </StatusBadge>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-sm">Stage</Label>
-                  <div className="mt-1">
-                    <StatusBadge variant={taskStageMap[task.stage || 'Analysis']} className="text-xs">
-                      {task.stage || 'Analysis'}
-                    </StatusBadge>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-sm">Status</Label>
-                  <div className="text-sm font-medium mt-1">{task.status || 'Open'}</div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-sm">Deadline</Label>
-                  <div className="text-sm font-medium mt-1">
-                    {formatDate(task.deadline)}
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Team Assignment */}
-              <div>
-                <Label className="text-muted-foreground text-sm">Team Assignment</Label>
-                <div className="grid grid-cols-3 gap-4 mt-1">
-                  <div>
-                    <Label className="text-muted-foreground text-xs">Developer</Label>
-                    <div className="text-sm font-medium mt-1">{task.developer_name || 'Not assigned'}</div>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground text-xs">Designer</Label>
-                    <div className="text-sm font-medium mt-1">{task.designer_name || 'Not assigned'}</div>
-                  </div>
-                  <div>
-                    <Label className="text-muted-foreground text-xs">Tester</Label>
-                    <div className="text-sm font-medium mt-1">{task.tester_name || 'Not assigned'}</div>
-                  </div>
-                </div>
-              </div>
-
               {/* Attachments */}
               {task.attachments && task.attachments.length > 0 && (
                 <>
@@ -210,44 +161,133 @@ export default function TaskView() {
             </CardContent>
           </Card>
 
-        {/* Comments Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Comments
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TaskCommentsSection taskId={task.id} />
-          </CardContent>
-        </Card>
+          {/* Comments Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Comments
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TaskCommentsSection taskId={task.id} />
+            </CardContent>
+          </Card>
 
-        {/* History Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <History className="h-5 w-5" />
-              History
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TaskHistorySection taskId={task.id} />
-          </CardContent>
-        </Card>
+          {/* History Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TaskHistorySection taskId={task.id} />
+            </CardContent>
+          </Card>
 
-        {/* Timesheets Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Timer className="h-5 w-5" />
-              Timesheets
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TaskTimesheetsSection taskId={task.id} />
-          </CardContent>
-        </Card>
+          {/* Timesheets Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Timer className="h-5 w-5" />
+                Timesheets
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TaskTimesheetsSection taskId={task.id} />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Sidebar */}
+        <div className="space-y-6">
+          {/* Task Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckSquare className="h-5 w-5" />
+                Task Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Priority */}
+              <div>
+                <Label className="text-muted-foreground text-sm">Priority</Label>
+                <div className="mt-1">
+                  <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]} className="text-xs">
+                    {getPriorityLabel(task.priority)}
+                  </StatusBadge>
+                </div>
+              </div>
+
+              {/* Stage */}
+              <div>
+                <Label className="text-muted-foreground text-sm">Stage</Label>
+                <div className="mt-1">
+                  <StatusBadge variant={taskStageMap[task.stage || 'Analysis']} className="text-xs">
+                    {task.stage || 'Analysis'}
+                  </StatusBadge>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <Label className="text-muted-foreground text-sm">Status</Label>
+                <div className="text-sm font-medium mt-1">{task.status || 'Open'}</div>
+              </div>
+
+              {/* Deadline */}
+              <div>
+                <Label className="text-muted-foreground text-sm flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Deadline
+                </Label>
+                <div className="text-sm font-medium mt-1">
+                  {formatDate(task.deadline)}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Team Assignment */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Team Assignment
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Assigned To */}
+              {task.assigned_to_name && (
+                <div>
+                  <Label className="text-muted-foreground text-sm">Assigned To</Label>
+                  <div className="text-sm font-medium mt-1">{task.assigned_to_name}</div>
+                </div>
+              )}
+
+              {/* Developer */}
+              <div>
+                <Label className="text-muted-foreground text-sm">Developer</Label>
+                <div className="text-sm font-medium mt-1">{task.developer_name || 'Not assigned'}</div>
+              </div>
+
+              {/* Designer */}
+              <div>
+                <Label className="text-muted-foreground text-sm">Designer</Label>
+                <div className="text-sm font-medium mt-1">{task.designer_name || 'Not assigned'}</div>
+              </div>
+
+              {/* Tester */}
+              <div>
+                <Label className="text-muted-foreground text-sm">Tester</Label>
+                <div className="text-sm font-medium mt-1">{task.tester_name || 'Not assigned'}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { db } from '../config/database.js';
 import { sendNotificationToUser } from './fcmService.js';
+import { sendEmail } from './emailService.js';
 import { logger } from './logger.js';
 
 /**
@@ -74,6 +75,12 @@ export async function createNotification(
     // Send push notification if enabled
     if (sendPush) {
       try {
+        // Convert all payload values to strings (FCM requirement)
+        const stringifiedPayload = payload ? Object.entries(payload).reduce((acc, [key, value]) => {
+          acc[key] = value !== null && value !== undefined ? String(value) : '';
+          return acc;
+        }, {}) : {};
+        
         await sendNotificationToUser(userId, {
           title,
           body: message,
@@ -82,7 +89,7 @@ export async function createNotification(
         }, {
           notificationId: notificationId.toString(),
           type,
-          ...payload,
+          ...stringifiedPayload,
         });
       } catch (pushError) {
         logger.error(`Error sending push notification to user ${userId}:`, pushError);
@@ -458,8 +465,16 @@ export async function notifyBugComment(bugId, commentId, commenterId, commenterN
       ? `${commenterName} replied to your comment on bug "${bugTitle}": ${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}`
       : `${commenterName} commented on bug "${bugTitle}": ${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}`;
 
-    const promises = uniqueUserIds.map(userId =>
-      createNotification(
+    // Get user emails for email notifications
+    const [users] = await db.query(
+      'SELECT id, email, name FROM users WHERE id IN (?)',
+      [uniqueUserIds]
+    );
+    const userEmailMap = new Map(users.map(u => [u.id, { email: u.email, name: u.name }]));
+
+    const promises = uniqueUserIds.map(async (userId) => {
+      // Create notification (includes FCM push)
+      await createNotification(
         userId,
         parentCommentId ? 'bug_comment_reply' : 'bug_comment',
         title,
@@ -473,8 +488,46 @@ export async function notifyBugComment(bugId, commentId, commenterId, commenterN
           parentCommentId: parentCommentId,
           link: `/bugs/${bugId}`,
         }
-      )
-    );
+      );
+
+      // Send email notification
+      const userInfo = userEmailMap.get(userId);
+      if (userInfo && userInfo.email) {
+        try {
+          const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:8080';
+          const bugLink = `${baseUrl}/bugs/${bugId}`;
+          const emailSubject = parentCommentId 
+            ? `Reply to your comment on bug: ${bugTitle}`
+            : `New comment on bug: ${bugTitle}`;
+          
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">${emailSubject}</h2>
+              <p>Hello ${userInfo.name || 'User'},</p>
+              <p>${message}</p>
+              <p style="margin-top: 20px;">
+                <a href="${bugLink}" style="background-color: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                  View Bug
+                </a>
+              </p>
+              <p style="margin-top: 20px; color: #666; font-size: 12px;">
+                This is an automated notification from the Project Management System.
+              </p>
+            </div>
+          `;
+
+          await sendEmail({
+            to: userInfo.email,
+            subject: emailSubject,
+            html: emailHtml,
+          });
+          logger.debug(`Email notification sent to ${userInfo.email} for bug comment`);
+        } catch (emailError) {
+          logger.error(`Failed to send email notification to user ${userId}:`, emailError);
+          // Don't fail the whole notification if email fails
+        }
+      }
+    });
 
     await Promise.allSettled(promises);
   } catch (error) {
@@ -513,6 +566,114 @@ export async function notifyTicketStatusUpdated(userId, ticketId, ticketNumber, 
     );
   } catch (error) {
     logger.error('Error notifying ticket status update:', error);
+  }
+}
+
+/**
+ * Notify users when someone comments on a task
+ */
+export async function notifyTaskComment(taskId, commentId, commenterId, commenterName, commentText, taskTitle, parentCommentId = null, assignedTo = null) {
+  try {
+    const userIdsToNotify = [];
+
+    if (parentCommentId) {
+      // This is a reply - notify the parent comment author
+      const [parentComments] = await db.query(`
+        SELECT user_id
+        FROM task_comments
+        WHERE id = ?
+      `, [parentCommentId]);
+
+      if (parentComments.length > 0) {
+        const parentAuthorId = parentComments[0].user_id;
+        if (parentAuthorId !== commenterId) {
+          userIdsToNotify.push(parentAuthorId);
+        }
+      }
+    } else {
+      // This is a new comment - notify the assigned person (excluding commenter)
+      if (assignedTo && assignedTo !== commenterId) {
+        userIdsToNotify.push(assignedTo);
+      }
+    }
+
+    // Remove duplicates
+    const uniqueUserIds = [...new Set(userIdsToNotify)];
+
+    if (uniqueUserIds.length === 0) return;
+
+    const title = parentCommentId ? 'Reply to Your Comment' : 'New Comment on Task';
+    const message = parentCommentId
+      ? `${commenterName} replied to your comment on task "${taskTitle}": ${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}`
+      : `${commenterName} added a comment on task "${taskTitle}": ${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}`;
+
+    // Get user emails for email notifications
+    const [users] = await db.query(
+      'SELECT id, email, name FROM users WHERE id IN (?)',
+      [uniqueUserIds]
+    );
+    const userEmailMap = new Map(users.map(u => [u.id, { email: u.email, name: u.name }]));
+
+    const promises = uniqueUserIds.map(async (userId) => {
+      // Create notification (includes FCM push)
+      await createNotification(
+        userId,
+        parentCommentId ? 'task_comment_reply' : 'task_comment',
+        title,
+        message,
+        {
+          taskId: taskId,
+          taskTitle: taskTitle,
+          commentId: commentId,
+          commenterId: commenterId,
+          commenterName: commenterName,
+          parentCommentId: parentCommentId,
+          link: `/tasks/${taskId}`,
+        }
+      );
+
+      // Send email notification
+      const userInfo = userEmailMap.get(userId);
+      if (userInfo && userInfo.email) {
+        try {
+          const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:8080';
+          const taskLink = `${baseUrl}/tasks/${taskId}`;
+          const emailSubject = parentCommentId 
+            ? `Reply to your comment on task: ${taskTitle}`
+            : `New comment on task: ${taskTitle}`;
+          
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">${emailSubject}</h2>
+              <p>Hello ${userInfo.name || 'User'},</p>
+              <p>${message}</p>
+              <p style="margin-top: 20px;">
+                <a href="${taskLink}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                  View Task
+                </a>
+              </p>
+              <p style="margin-top: 20px; color: #666; font-size: 12px;">
+                This is an automated notification from the Project Management System.
+              </p>
+            </div>
+          `;
+
+          await sendEmail({
+            to: userInfo.email,
+            subject: emailSubject,
+            html: emailHtml,
+          });
+          logger.debug(`Email notification sent to ${userInfo.email} for task comment`);
+        } catch (emailError) {
+          logger.error(`Failed to send email notification to user ${userId}:`, emailError);
+          // Don't fail the whole notification if email fails
+        }
+      }
+    });
+
+    await Promise.allSettled(promises);
+  } catch (error) {
+    logger.error('Error notifying task comment:', error);
   }
 }
 

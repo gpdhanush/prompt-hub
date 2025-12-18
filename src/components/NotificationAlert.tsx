@@ -18,9 +18,12 @@ export function NotificationAlert() {
   const [isOpen, setIsOpen] = React.useState(false);
 
   useEffect(() => {
+    console.log('🔔 [NotificationAlert] currentNotification changed:', currentNotification);
     if (currentNotification) {
+      console.log('🔔 [NotificationAlert] Opening dialog with notification:', currentNotification);
       setIsOpen(true);
     } else {
+      console.log('🔔 [NotificationAlert] No notification, closing dialog');
       setIsOpen(false);
     }
   }, [currentNotification]);
@@ -61,15 +64,18 @@ export function NotificationAlert() {
     }
   };
 
+  console.log('🔔 [NotificationAlert] Rendering, isOpen:', isOpen, 'currentNotification:', currentNotification);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
+      console.log('🔔 [NotificationAlert] Dialog onOpenChange:', open);
       if (!open) {
         handleClose();
       }
     }}>
       <DialogContent
         className={cn(
-          'sm:max-w-md p-0 overflow-hidden',
+          'sm:max-w-md p-0 overflow-hidden z-[9999]',
           getTypeStyles()
         )}
         onInteractOutside={(e) => {

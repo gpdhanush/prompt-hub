@@ -3,6 +3,7 @@ import { db } from '../config/database.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyBugAssigned, notifyBugStatusUpdated, notifyBugComment } from '../utils/notificationService.js';
+import { emitToRoom } from '../utils/socketService.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
 import multer from 'multer';
@@ -934,6 +935,8 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
     const { comment_text, parent_id } = req.body;
     const userId = req.user.id;
     
+    logger.debug('Bug comment creation request:', { bugId: id, userId, comment_text: comment_text?.substring(0, 50), parent_id });
+    
     if (!comment_text || comment_text.trim() === '') {
       return res.status(400).json({ error: 'Comment text is required' });
     }
@@ -941,26 +944,45 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
     // Verify bug exists and get details for notification
     const [bugs] = await db.query('SELECT id, title, assigned_to, reported_by FROM bugs WHERE id = ?', [id]);
     if (bugs.length === 0) {
+      logger.warn(`Bug not found: ${id}`);
       return res.status(404).json({ error: 'Bug not found' });
     }
     const bug = bugs[0];
     
-    // If parent_id is provided, verify it exists and belongs to the same bug
-    if (parent_id) {
+    // Process parent_id - convert to number if needed
+    let parentIdValue = null;
+    if (parent_id !== undefined && parent_id !== null && parent_id !== '') {
+      parentIdValue = typeof parent_id === 'string' ? parseInt(parent_id, 10) : parent_id;
+      if (isNaN(parentIdValue) || parentIdValue <= 0) {
+        logger.warn(`Invalid parent_id: ${parent_id} for bug ${id}`);
+        return res.status(400).json({ error: 'Invalid parent comment ID' });
+      }
+      
+      // Verify parent comment exists and belongs to the same bug
       const [parentComments] = await db.query(
         'SELECT id FROM bug_comments WHERE id = ? AND bug_id = ?',
-        [parent_id, id]
+        [parentIdValue, id]
       );
       if (parentComments.length === 0) {
+        logger.warn(`Parent comment not found: ${parentIdValue} for bug ${id}`);
         return res.status(400).json({ error: 'Parent comment not found or does not belong to this bug' });
       }
     }
     
-    // Insert comment
+    logger.debug('Inserting bug comment:', { 
+      bugId: id, 
+      userId, 
+      parentId: parentIdValue, 
+      commentLength: comment_text.trim().length,
+      isReply: parentIdValue !== null 
+    });
+    
     const [result] = await db.query(`
       INSERT INTO bug_comments (bug_id, user_id, parent_id, comment_text)
       VALUES (?, ?, ?, ?)
-    `, [id, userId, parent_id || null, comment_text.trim()]);
+    `, [id, userId, parentIdValue, comment_text.trim()]);
+    
+    logger.info(`Bug comment created successfully: ID ${result.insertId} for bug ${id}`);
     
     // Fetch the created comment with user info
     const [newComments] = await db.query(`
@@ -983,10 +1005,20 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
       newComments[0].user_name || 'Someone',
       comment_text.trim(),
       bug.title || 'Bug',
-      parent_id || null,
+      parentIdValue,
       bug.assigned_to,
       bug.reported_by
     );
+
+    // Emit socket event for real-time updates
+    const roomName = `bug:${id}`;
+    const eventName = parentIdValue ? 'bug_comment_reply' : 'bug_comment';
+    emitToRoom(roomName, eventName, {
+      bugId: parseInt(id),
+      comment: newComments[0],
+      commentId: result.insertId,
+      parentId: parentIdValue,
+    });
     
     res.status(201).json({ data: newComments[0] });
   } catch (error) {

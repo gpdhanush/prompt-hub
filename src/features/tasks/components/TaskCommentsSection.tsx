@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, memo, useRef } from "react";
+import React, { useState, useMemo, useCallback, memo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock, MessageSquare, User, Send, Reply, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { tasksApi } from "@/features/tasks/api";
 import { getCurrentUser } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
+import { setupMessageListener } from "@/lib/firebase";
+import { subscribeToComments } from "@/lib/socket";
 
 interface TaskCommentsSectionProps {
   taskId: number;
@@ -23,16 +25,47 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
   const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set());
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: commentsData, isLoading } = useQuery({
+  const { data: commentsData, isLoading, refetch } = useQuery({
     queryKey: ['task-comments', taskId],
     queryFn: () => tasksApi.getComments(taskId),
-    staleTime: 1000 * 60 * 2, // 2 minutes (comments may change more frequently)
+    staleTime: 1000 * 30, // 30 seconds (comments change frequently)
     gcTime: 1000 * 60 * 10, // 10 minutes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchOnReconnect: true, // Refetch when reconnecting
+    refetchInterval: 1000 * 10, // Poll every 10 seconds for real-time updates
   });
 
   const comments = commentsData?.data || [];
+
+  // Listen for FCM notifications about task comments and refetch
+  useEffect(() => {
+    const cleanup = setupMessageListener((payload) => {
+      // Check if this is a task comment notification for this task
+      const data = payload.data || {};
+      const notificationType = data.type;
+      const notificationTaskId = data.taskId ? parseInt(data.taskId, 10) : null;
+
+      if (
+        (notificationType === 'task_comment' || notificationType === 'task_comment_reply') &&
+        notificationTaskId === taskId
+      ) {
+        // Refetch comments when a new comment/reply is received for this task
+        refetch();
+      }
+    });
+
+    return cleanup;
+  }, [taskId, refetch]);
+
+  // Socket.IO real-time updates
+  useEffect(() => {
+    const cleanup = subscribeToComments('task', taskId, () => {
+      // Refetch comments when socket event is received
+      refetch();
+    });
+
+    return cleanup;
+  }, [taskId, refetch]);
 
   // Organize comments into tree structure
   const { rootComments } = useMemo(() => {
@@ -61,8 +94,10 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
   const createCommentMutation = useMutation({
     mutationFn: (data: { comment: string; parent_comment_id?: number }) =>
       tasksApi.createComment(taskId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['task-comments', taskId] });
+    onSuccess: async () => {
+      // Invalidate and immediately refetch to show new comment
+      await queryClient.invalidateQueries({ queryKey: ['task-comments', taskId] });
+      await queryClient.refetchQueries({ queryKey: ['task-comments', taskId] });
       setCommentText('');
       setReplyingTo(null);
       toast({ title: "Success", description: "Comment added successfully." });
@@ -146,6 +181,76 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   }, []);
 
+  // Parse text and convert URLs to clickable links
+  const renderTextWithLinks = useCallback((text: string): React.ReactNode => {
+    if (!text) return text;
+
+    // URL regex pattern - matches http://, https://, www., and common domains
+    // Excludes trailing punctuation (., !, ?, ,, ;, :) from the URL match
+    const urlRegex = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(?:\/[^\s<>"']*)?)/g;
+    
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        const beforeText = text.substring(lastIndex, match.index);
+        parts.push(<span key={`text-${key++}`}>{beforeText}</span>);
+      }
+
+      // Process the URL
+      let url = match[0];
+      let originalUrl = url;
+      
+      // Remove trailing punctuation from URL (but keep it in the text)
+      const trailingPunctuation = /[.,!?;:]+$/.exec(url);
+      let trailingPunct = '';
+      if (trailingPunctuation) {
+        trailingPunct = trailingPunctuation[0];
+        url = url.slice(0, -trailingPunct.length);
+      }
+
+      // Add protocol if missing (for www. or domain-only URLs)
+      let hrefUrl = url;
+      if (!hrefUrl.startsWith('http://') && !hrefUrl.startsWith('https://')) {
+        hrefUrl = `https://${hrefUrl}`;
+      }
+
+      // Add the link
+      parts.push(
+        <a
+          key={`link-${key++}`}
+          href={hrefUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {url}
+        </a>
+      );
+      
+      // Add trailing punctuation as regular text
+      if (trailingPunct) {
+        parts.push(<span key={`text-${key++}`}>{trailingPunct}</span>);
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text after the last URL
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      parts.push(<span key={`text-${key++}`}>{remainingText}</span>);
+    }
+
+    // If no URLs found, return the original text
+    return parts.length > 0 ? parts : text;
+  }, []);
+
   // Comment Item Component
   const CommentItem = ({ 
     comment, 
@@ -160,6 +265,7 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
     expandedComments,
     onToggleExpand,
     isCommentLong,
+    renderTextWithLinks,
     depth = 0 
   }: { 
     comment: any; 
@@ -174,6 +280,7 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
     expandedComments: Set<number>;
     onToggleExpand: (id: number) => void;
     isCommentLong: (text: string) => boolean;
+    renderTextWithLinks: (text: string) => React.ReactNode;
     depth?: number;
   }) => {
     const isReplying = replyingTo === comment.id;
@@ -184,8 +291,12 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
 
     return (
       <div className="space-y-2">
-        <div className={`flex items-start gap-3 p-3 rounded-lg ${isRootComment ? 'bg-muted/50' : 'bg-muted/30'}`}>
-          <div className={`${isRootComment ? 'h-8 w-8' : 'h-6 w-6'} rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0`}>
+        <div className={`flex items-start gap-3 p-3 rounded-lg ${
+          isRootComment 
+            ? 'bg-muted border border-border' 
+            : 'bg-muted/80 border border-border/50'
+        }`}>
+          <div className={`${isRootComment ? 'h-8 w-8' : 'h-6 w-6'} rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 border border-primary/30`}>
             <User className={`${isRootComment ? 'h-4 w-4' : 'h-3 w-3'} text-primary`} />
           </div>
           <div className="flex-1 min-w-0">
@@ -201,7 +312,7 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
               </span>
             </div>
             <div>
-              <p 
+              <div 
                 className={`${isRootComment ? 'text-sm' : 'text-xs'} whitespace-pre-wrap ${
                   isLong && !isExpanded ? 'overflow-hidden' : ''
                 }`}
@@ -213,8 +324,8 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
                   textOverflow: 'ellipsis',
                 } : {}}
               >
-                {comment.comment}
-              </p>
+                {renderTextWithLinks(comment.comment)}
+              </div>
               {isLong && (
                 <Button
                   variant="ghost"
@@ -250,18 +361,103 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
 
         {/* Reply Input Box - appears inline below the comment */}
         {isReplying && (
-          <div className="ml-11 space-y-2 p-3 rounded-lg bg-muted/30 border border-primary/20" dir="ltr">
+          <div className="ml-11 space-y-2 p-3 rounded-lg bg-muted/90 border border-primary/30" dir="ltr">
             <Textarea
               placeholder="Write a reply..."
               value={replyText}
-              onChange={(e) => onReplyTextChange(comment.id, e.target.value)}
+              onChange={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.setAttribute('lang', 'en');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                target.style.unicodeBidi = 'embed';
+                target.style.writingMode = 'horizontal-tb';
+                onReplyTextChange(comment.id, e.target.value);
+                // Ensure cursor is at the end (right side in LTR)
+                requestAnimationFrame(() => {
+                  const length = target.value.length;
+                  target.setSelectionRange(length, length);
+                });
+              }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.setAttribute('lang', 'en');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                target.style.unicodeBidi = 'embed';
+                target.style.writingMode = 'horizontal-tb';
+                // Ensure cursor is at the end
+                requestAnimationFrame(() => {
+                  const length = target.value.length;
+                  target.setSelectionRange(length, length);
+                });
+              }}
+              onKeyDown={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                
+                // Handle Enter key to submit reply (Shift+Enter for new line)
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  const replyText = replyTexts[comment.id] || '';
+                  if (replyText.trim() && !createCommentMutation.isPending) {
+                    onReplySubmit(comment.id);
+                  }
+                }
+              }}
+              onKeyUp={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                // Ensure cursor position is correct
+                requestAnimationFrame(() => {
+                  const length = target.value.length;
+                  const cursorPos = target.selectionStart;
+                  // If cursor is at start, move to end
+                  if (cursorPos === 0 && length > 0) {
+                    target.setSelectionRange(length, length);
+                  }
+                });
+              }}
+              onFocus={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.setAttribute('lang', 'en');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                target.style.unicodeBidi = 'embed';
+                target.style.writingMode = 'horizontal-tb';
+                // Move cursor to end when focused
+                requestAnimationFrame(() => {
+                  const length = target.value.length;
+                  target.setSelectionRange(length, length);
+                });
+              }}
+              onBlur={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                target.style.unicodeBidi = 'embed';
+                target.style.writingMode = 'horizontal-tb';
+              }}
               rows={3}
               className="text-sm"
               autoFocus
               dir="ltr"
+              lang="en"
+              inputMode="text"
+              spellCheck={false}
               style={{ 
                 direction: 'ltr', 
-                textAlign: 'left'
+                textAlign: 'left',
+                unicodeBidi: 'embed',
+                writingMode: 'horizontal-tb'
               }}
             />
             <div className="flex gap-2">
@@ -302,6 +498,7 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
                 expandedComments={expandedComments}
                 onToggleExpand={onToggleExpand}
                 isCommentLong={isCommentLong}
+                renderTextWithLinks={renderTextWithLinks}
                 depth={depth + 1}
               />
             ))}
@@ -354,6 +551,14 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
             target.setAttribute('dir', 'ltr');
             target.style.direction = 'ltr';
             target.style.textAlign = 'left';
+            
+            // Handle Enter key to submit (Shift+Enter for new line)
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (commentText.trim() && !createCommentMutation.isPending) {
+                handleSubmit();
+              }
+            }
           }}
           onKeyUp={(e) => {
             const target = e.target as HTMLTextAreaElement;
@@ -445,6 +650,7 @@ export const TaskCommentsSection = memo(function TaskCommentsSection({ taskId }:
               expandedComments={expandedComments}
               onToggleExpand={toggleCommentExpand}
               isCommentLong={isCommentLong}
+              renderTextWithLinks={renderTextWithLinks}
             />
           ))}
         </div>

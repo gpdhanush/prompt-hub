@@ -27,6 +27,7 @@ import {
   UserSearch,
   LogOut,
   Clock,
+  LayoutGrid,
 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +37,16 @@ import { Logo } from "@/components/Logo";
 import { getCurrentUser, clearAuth } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { authApi } from "@/features/auth/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // All menu items in one list - organized by sections
 const allMenuItems = [
@@ -51,6 +62,7 @@ const allMenuItems = [
   { name: "Employee Directory", href: "/employees/list", icon: UserSearch, section: "main" },
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
   { name: "Tasks", href: "/tasks", icon: CheckSquare, section: "main" },
+  { name: "Kanban", href: "/kanban", icon: LayoutGrid, section: "main" },
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
@@ -72,6 +84,7 @@ const allMenuItems = [
 
 export function AdminSidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -91,6 +104,7 @@ export function AdminSidebar() {
   const canAccessEmployees = isSuperAdmin || hasPermission('employees.view');
   const canAccessProjects = isSuperAdmin || hasPermission('projects.view');
   const canAccessTasks = isSuperAdmin || hasPermission('tasks.view');
+  const canAccessKanban = isSuperAdmin || hasPermission('tasks.view'); // Use tasks.view permission for Kanban
   const canAccessBugs = isSuperAdmin || hasPermission('bugs.view');
   // Permission-based access checks
   const canAccessLeaves = isSuperAdmin || hasPermission('leaves.view');
@@ -144,7 +158,7 @@ export function AdminSidebar() {
       return location.pathname === href;
     }
     // Routes that should match exactly (no sub-pages)
-    const exactMatchRoutes = ['/audit-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/timesheet', '/my-devices', '/user-hierarchy', '/employees/list', '/support'];
+    const exactMatchRoutes = ['/audit-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/timesheet', '/my-devices', '/user-hierarchy', '/employees/list', '/support', '/kanban'];
     if (exactMatchRoutes.includes(href)) {
       return location.pathname === href;
     }
@@ -238,6 +252,7 @@ export function AdminSidebar() {
             if (item.href === '/employees' && !canAccessEmployees) return false;
             if (item.href === '/projects' && !canAccessProjects) return false;
             if (item.href === '/tasks' && !canAccessTasks) return false;
+            if (item.href === '/kanban' && !canAccessKanban) return false;
             if (item.href === '/bugs' && !canAccessBugs) return false;
             if (item.href === '/leaves' && !canAccessLeaves) return false;
             if (item.href === '/reimbursements' && !canAccessReimbursements) return false;
@@ -318,12 +333,35 @@ export function AdminSidebar() {
         <Button
           variant="ghost"
           className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 dark:text-red-400 dark:hover:text-red-300"
-          onClick={handleLogout}
+          onClick={() => setShowLogoutDialog(true)}
         >
           <LogOut className="h-4 w-4 shrink-0 mr-3" />
           {!collapsed && <span>Logout</span>}
         </Button>
       </div>
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to logout? You will need to login again to access the system.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowLogoutDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Logout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }

@@ -1,29 +1,16 @@
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Reply, Send } from "lucide-react";
+import React, { useState, useMemo, useCallback, memo, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Clock, MessageSquare, User, Send, Reply, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { bugsApi } from "@/features/bugs/api";
-import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { bugsApi } from "@/features/bugs/api";
 import { getCurrentUser } from "@/lib/auth";
-
-interface Comment {
-  id: number;
-  bug_id: number;
-  user_id: number;
-  parent_id: number | null;
-  comment_text: string;
-  created_at: string;
-  updated_at: string;
-  user_name: string;
-  user_email: string;
-  user_role: string;
-  replies?: Comment[];
-}
+import { toast } from "@/hooks/use-toast";
+import { setupMessageListener } from "@/lib/firebase";
+import { logger } from "@/lib/logger";
 
 interface BugCommentsProps {
   bugId: number;
@@ -31,57 +18,119 @@ interface BugCommentsProps {
 
 export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps) {
   const queryClient = useQueryClient();
-  const [newComment, setNewComment] = useState("");
+  const currentUser = getCurrentUser();
+  const [commentText, setCommentText] = useState('');
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
   const [replyTexts, setReplyTexts] = useState<Record<number, string>>({});
-  const replyTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set());
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Get current user info
-  const currentUser = getCurrentUser();
-
-  // Fetch comments
-  const { data: commentsData, isLoading } = useQuery({
+  const { data: commentsData, isLoading, refetch } = useQuery({
     queryKey: ['bug-comments', bugId],
     queryFn: () => bugsApi.getComments(bugId),
+    staleTime: 1000 * 30, // 30 seconds (comments change frequently)
+    gcTime: 1000 * 60 * 10, // 10 minutes
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchOnReconnect: true, // Refetch when reconnecting
+    refetchInterval: 1000 * 10, // Poll every 10 seconds for real-time updates
   });
 
   const comments = commentsData?.data || [];
 
-  // Create comment mutation
+  // Listen for FCM notifications about bug comments and refetch
+  useEffect(() => {
+    const cleanup = setupMessageListener((payload) => {
+      // Check if this is a bug comment notification for this bug
+      const data = payload.data || {};
+      const notificationType = data.type;
+      const notificationBugId = data.bugId ? parseInt(data.bugId, 10) : null;
+
+      if (
+        (notificationType === 'bug_comment' || notificationType === 'bug_comment_reply') &&
+        notificationBugId === bugId
+      ) {
+        // Refetch comments when a new comment/reply is received for this bug
+        refetch();
+      }
+    });
+
+    return cleanup;
+  }, [bugId, refetch]);
+
+  // Organize comments into tree structure
+  const { rootComments } = useMemo(() => {
+    const commentMap = new Map();
+    const rootComments: any[] = [];
+
+    comments.forEach((comment: any) => {
+      // Normalize comment structure to match task comments
+      const normalizedComment = {
+        ...comment,
+        comment: comment.comment_text || comment.comment,
+        parent_comment_id: comment.parent_id || null,
+        replies: [],
+      };
+      commentMap.set(comment.id, normalizedComment);
+    });
+
+    comments.forEach((comment: any) => {
+      const commentNode = commentMap.get(comment.id);
+      const parentId = comment.parent_id;
+      if (parentId) {
+        const parent = commentMap.get(parentId);
+        if (parent) {
+          parent.replies.push(commentNode);
+        }
+      } else {
+        rootComments.push(commentNode);
+      }
+    });
+
+    return { rootComments };
+  }, [comments]);
+
   const createCommentMutation = useMutation({
-    mutationFn: (data: { comment_text: string; parent_id?: number }) =>
-      bugsApi.createComment(bugId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bug-comments', bugId] });
-      setNewComment("");
+    mutationFn: (data: { comment_text: string; parent_id?: number }) => {
+      logger.debug('Creating bug comment:', { bugId, hasParentId: !!data.parent_id, parentId: data.parent_id });
+      return bugsApi.createComment(bugId, data);
+    },
+    onSuccess: async (response) => {
+      logger.debug('Bug comment created successfully:', response);
+      // Invalidate and immediately refetch to show new comment
+      await queryClient.invalidateQueries({ queryKey: ['bug-comments', bugId] });
+      await queryClient.refetchQueries({ queryKey: ['bug-comments', bugId] });
+      setCommentText('');
       setReplyingTo(null);
-      setReplyTexts({});
       toast({ title: "Success", description: "Comment added successfully." });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add comment.",
-        variant: "destructive",
+      logger.error('Error creating bug comment:', error);
+      const errorMessage = error.response?.data?.error || error.message || "Failed to add comment.";
+      toast({ 
+        title: "Error", 
+        description: errorMessage, 
+        variant: "destructive" 
       });
     },
   });
 
-  const handleSubmitComment = useCallback(() => {
-    if (!newComment.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a comment.",
-        variant: "destructive",
-      });
-      return;
-    }
-    createCommentMutation.mutate({ comment_text: newComment });
-  }, [newComment, createCommentMutation, toast]);
+  const handleSubmit = useCallback(() => {
+    if (!commentText.trim()) return;
+    // Top form is only for new top-level comments, not replies
+    createCommentMutation.mutate({
+      comment_text: commentText,
+      // Don't send parent_id for top-level comments
+    });
+  }, [commentText, createCommentMutation]);
 
-  const handleSubmitReply = useCallback((parentId: number) => {
-    const replyText = replyTexts[parentId] || "";
-    if (!replyText.trim()) {
+  const handleReply = useCallback((commentId: number) => {
+    setReplyingTo(commentId);
+    setReplyTexts(prev => ({ ...prev, [commentId]: '' }));
+  }, []);
+
+  const handleReplySubmit = useCallback((parentCommentId: number) => {
+    const replyText = replyTexts[parentCommentId];
+    if (!replyText?.trim()) {
       toast({
         title: "Validation Error",
         description: "Please enter a reply.",
@@ -89,322 +138,394 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
       });
       return;
     }
-    createCommentMutation.mutate({ comment_text: replyText, parent_id: parentId });
-  }, [replyTexts, createCommentMutation]);
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const getRoleColor = useCallback((role: string) => {
-    if (role === 'Tester') return 'bg-blue-500';
-    if (role === 'Developer') return 'bg-green-500';
-    if (role === 'Designer') return 'bg-purple-500';
-    if (role === 'Team Lead' || role === 'Super Admin' || role === 'Admin') return 'bg-orange-500';
-    return 'bg-gray-500';
-  }, []);
-
-  // Focus the reply textarea when replying starts and force LTR direction
-  useEffect(() => {
-    if (replyingTo !== null) {
-      // Small delay to ensure the textarea is rendered
-      const timer = setTimeout(() => {
-        const textarea = replyTextareaRefs.current[replyingTo];
-        if (textarea) {
-          // Force LTR direction multiple ways to ensure it sticks
-          textarea.setAttribute('dir', 'ltr');
-          textarea.setAttribute('lang', 'en');
-          textarea.style.direction = 'ltr';
-          textarea.style.textAlign = 'left';
-          textarea.style.unicodeBidi = 'embed';
-          textarea.style.writingMode = 'horizontal-tb';
-          textarea.focus();
-          // Set cursor to end
-          const length = textarea.value.length;
-          textarea.setSelectionRange(length, length);
-        }
-      }, 10);
-      return () => clearTimeout(timer);
-    }
-  }, [replyingTo]);
-
-  // Monitor reply text changes and ensure LTR direction is maintained
-  useEffect(() => {
-    const observers: MutationObserver[] = [];
     
-    Object.keys(replyTexts).forEach((commentIdStr) => {
-      const commentId = parseInt(commentIdStr);
-      const textarea = replyTextareaRefs.current[commentId];
-      if (textarea) {
-        // Continuously enforce LTR direction
-        const enforceLTR = () => {
-          textarea.setAttribute('dir', 'ltr');
-          textarea.setAttribute('lang', 'en');
-          textarea.style.direction = 'ltr';
-          textarea.style.textAlign = 'left';
-          textarea.style.unicodeBidi = 'embed';
-          textarea.style.writingMode = 'horizontal-tb';
-        };
-        
-        enforceLTR();
-        
-        // Use MutationObserver to watch for any direction changes
-        const observer = new MutationObserver((mutations) => {
-          mutations.forEach((mutation) => {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'dir') {
-              if (textarea.getAttribute('dir') !== 'ltr') {
-                enforceLTR();
-              }
-            }
-            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-              if (textarea.style.direction !== 'ltr') {
-                enforceLTR();
-              }
-            }
-          });
+    logger.debug('Submitting bug comment reply:', { bugId, parentCommentId, replyLength: replyText.length });
+    
+    createCommentMutation.mutate({
+      comment_text: replyText.trim(),
+      parent_id: parentCommentId,
+    }, {
+      onSuccess: () => {
+        setReplyTexts(prev => {
+          const newTexts = { ...prev };
+          delete newTexts[parentCommentId];
+          return newTexts;
         });
-        
-        observer.observe(textarea, {
-          attributes: true,
-          attributeFilter: ['dir', 'style'],
-          subtree: false
+        setReplyingTo(null);
+      },
+      onError: (error: any) => {
+        logger.error('Error submitting bug comment reply:', error);
+        toast({
+          title: "Error",
+          description: error.response?.data?.error || error.message || "Failed to add reply.",
+          variant: "destructive",
         });
-        
-        observers.push(observer);
       }
     });
-    
-    return () => {
-      observers.forEach(obs => obs.disconnect());
-    };
-  }, [replyTexts]);
+  }, [replyTexts, createCommentMutation, bugId, toast]);
+
+  const handleReplyCancel = useCallback((commentId: number) => {
+    setReplyTexts(prev => {
+      const newTexts = { ...prev };
+      delete newTexts[commentId];
+      return newTexts;
+    });
+    setReplyingTo(null);
+  }, []);
 
   const setReplyText = useCallback((commentId: number, text: string) => {
     setReplyTexts(prev => ({ ...prev, [commentId]: text }));
   }, []);
 
-  const CommentItem = ({ comment, depth = 0 }: { comment: Comment; depth?: number }) => {
-    const isReplying = replyingTo === comment.id;
-    const isCurrentUser = currentUser?.id === comment.user_id;
-    const replyText = replyTexts[comment.id] || "";
-
-    const handleReplyClick = useCallback(() => {
-      if (isReplying) {
-        setReplyingTo(null);
-        setReplyTexts(prev => {
-          const newTexts = { ...prev };
-          delete newTexts[comment.id];
-          return newTexts;
-        });
+  const toggleCommentExpand = useCallback((commentId: number) => {
+    setExpandedComments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(commentId)) {
+        newSet.delete(commentId);
       } else {
-        setReplyingTo(comment.id);
-        setReplyTexts(prev => ({ ...prev, [comment.id]: "" }));
+        newSet.add(commentId);
       }
-    }, [isReplying, comment.id]);
+      return newSet;
+    });
+  }, []);
 
-    const handleCancel = useCallback(() => {
-      setReplyingTo(null);
-      setReplyTexts(prev => {
-        const newTexts = { ...prev };
-        delete newTexts[comment.id];
-        return newTexts;
-      });
-    }, [comment.id]);
+  // Check if comment text exceeds 2 lines
+  const isCommentLong = useCallback((text: string) => {
+    // Approximate: 2 lines = ~100 characters (adjust based on your design)
+    return text.length > 100 || text.split('\n').length > 2;
+  }, []);
 
-    const handleReplyChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const textarea = e.target;
-      // Force LTR direction immediately
-      textarea.setAttribute('dir', 'ltr');
-      textarea.setAttribute('lang', 'en');
-      textarea.style.direction = 'ltr';
-      textarea.style.textAlign = 'left';
-      textarea.style.unicodeBidi = 'embed';
-      textarea.style.writingMode = 'horizontal-tb';
-      
-      // Get the new value
-      const newValue = textarea.value;
-      
-      // Store cursor position
-      const cursorPos = textarea.selectionStart;
-      
-      // Update state immediately
-      setReplyText(comment.id, newValue);
-      
-      // Force LTR again after a microtask to ensure it sticks
-      requestAnimationFrame(() => {
-        if (replyTextareaRefs.current[comment.id]) {
-          const el = replyTextareaRefs.current[comment.id];
-          // Ensure direction is still LTR
-          el.setAttribute('dir', 'ltr');
-          el.setAttribute('lang', 'en');
-          el.style.direction = 'ltr';
-          el.style.textAlign = 'left';
-          el.style.unicodeBidi = 'embed';
-          el.style.writingMode = 'horizontal-tb';
-          
-          // Restore cursor position (at end for LTR)
-          const length = el.value.length;
-          const newCursorPos = Math.min(cursorPos + 1, length);
-          el.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      });
-    }, [comment.id, setReplyText]);
+  const formatTimeAgo = useCallback((date: string) => {
+    const now = new Date();
+    const then = new Date(date);
+    const diffInSeconds = Math.floor((now.getTime() - then.getTime()) / 1000);
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  }, []);
 
-    const handleSubmit = useCallback(() => {
-      handleSubmitReply(comment.id);
-    }, [comment.id, handleSubmitReply]);
+  // Parse text and convert URLs to clickable links
+  const renderTextWithLinks = useCallback((text: string): React.ReactNode => {
+    if (!text) return text;
+
+    // URL regex pattern - matches http://, https://, www., and common domains
+    // Excludes trailing punctuation (., !, ?, ,, ;, :) from the URL match
+    const urlRegex = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(?:\/[^\s<>"']*)?)/g;
+    
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        const beforeText = text.substring(lastIndex, match.index);
+        parts.push(<span key={`text-${key++}`}>{beforeText}</span>);
+      }
+
+      // Process the URL
+      let url = match[0];
+      let originalUrl = url;
+      
+      // Remove trailing punctuation from URL (but keep it in the text)
+      const trailingPunctuation = /[.,!?;:]+$/.exec(url);
+      let trailingPunct = '';
+      if (trailingPunctuation) {
+        trailingPunct = trailingPunctuation[0];
+        url = url.slice(0, -trailingPunct.length);
+      }
+
+      // Add protocol if missing (for www. or domain-only URLs)
+      let hrefUrl = url;
+      if (!hrefUrl.startsWith('http://') && !hrefUrl.startsWith('https://')) {
+        hrefUrl = `https://${hrefUrl}`;
+      }
+
+      // Add the link
+      parts.push(
+        <a
+          key={`link-${key++}`}
+          href={hrefUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {url}
+        </a>
+      );
+      
+      // Add trailing punctuation as regular text
+      if (trailingPunct) {
+        parts.push(<span key={`text-${key++}`}>{trailingPunct}</span>);
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text after the last URL
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      parts.push(<span key={`text-${key++}`}>{remainingText}</span>);
+    }
+
+    // If no URLs found, return the original text
+    return parts.length > 0 ? parts : text;
+  }, []);
+
+  // Comment Item Component
+  const CommentItem = ({ 
+    comment, 
+    replyingTo, 
+    replyTexts, 
+    onReply, 
+    onReplyTextChange, 
+    onReplySubmit, 
+    onReplyCancel,
+    formatTimeAgo,
+    createCommentMutation,
+    expandedComments,
+    onToggleExpand,
+    isCommentLong,
+    renderTextWithLinks,
+    depth = 0 
+  }: { 
+    comment: any; 
+    replyingTo: number | null;
+    replyTexts: Record<number, string>;
+    onReply: (id: number) => void;
+    onReplyTextChange: (commentId: number, text: string) => void;
+    onReplySubmit: (id: number) => void;
+    onReplyCancel: (id: number) => void;
+    formatTimeAgo: (date: string) => string;
+    createCommentMutation: any;
+    expandedComments: Set<number>;
+    onToggleExpand: (id: number) => void;
+    isCommentLong: (text: string) => boolean;
+    renderTextWithLinks: (text: string) => React.ReactNode;
+    depth?: number;
+  }) => {
+    const isReplying = replyingTo === comment.id;
+    const isRootComment = depth === 0;
+    const replyText = replyTexts[comment.id] || '';
+    const isExpanded = expandedComments.has(comment.id);
+    const commentText = comment.comment || '';
+    const isLong = isCommentLong(commentText);
 
     return (
-      <div className={`space-y-3 ${depth > 0 ? 'ml-8 mt-3 border-l-2 border-muted pl-4' : ''}`} dir="ltr" style={{ direction: 'ltr' }}>
-        <div className="flex gap-3">
-          <Avatar className="h-10 w-10">
-            <AvatarFallback className={getRoleColor(comment.user_role)}>
-              {comment.user_name?.charAt(0)?.toUpperCase() || 'U'}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 space-y-1" dir="ltr" style={{ direction: 'ltr' }}>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">{comment.user_name}</span>
-              <Badge variant="outline" className="text-xs">
-                {comment.user_role}
-              </Badge>
-              {isCurrentUser && (
-                <Badge variant="secondary" className="text-xs">
-                  You
+      <div className="space-y-2">
+        <div className={`flex items-start gap-3 p-3 rounded-lg ${
+          isRootComment 
+            ? 'bg-muted border border-border' 
+            : 'bg-muted/80 border border-border/50'
+        }`}>
+          <div className={`${isRootComment ? 'h-8 w-8' : 'h-6 w-6'} rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 border border-primary/30`}>
+            <User className={`${isRootComment ? 'h-4 w-4' : 'h-3 w-3'} text-primary`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <p className={`${isRootComment ? 'text-sm' : 'text-xs'} font-medium`}>{comment.user_name || 'Unknown'}</p>
+              {comment.user_role && isRootComment && (
+                <Badge variant="outline" className="text-xs">
+                  {comment.user_role}
                 </Badge>
               )}
-              <span className="text-xs text-muted-foreground">
-                {formatDate(comment.created_at)}
+              <span className={`${isRootComment ? 'text-xs' : 'text-[10px]'} text-muted-foreground`}>
+                {formatTimeAgo(comment.created_at)}
               </span>
             </div>
-            <p className="text-sm whitespace-pre-wrap">{comment.comment_text}</p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={handleReplyClick}
+            <div>
+              <div 
+                className={`${isRootComment ? 'text-sm' : 'text-xs'} whitespace-pre-wrap ${
+                  isLong && !isExpanded ? 'overflow-hidden' : ''
+                }`}
+                style={isLong && !isExpanded ? {
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                } : {}}
               >
-                <Reply className="mr-1 h-3 w-3" />
-                {isReplying ? "Cancel" : "Reply"}
-              </Button>
-            </div>
-            {isReplying && (
-              <div className="mt-2 space-y-2" dir="ltr" style={{ direction: 'ltr', textAlign: 'left' }}>
-                <Textarea
-                  ref={(el) => {
-                    if (el) {
-                      replyTextareaRefs.current[comment.id] = el;
-                      // Force LTR direction on the element with multiple methods
-                      el.setAttribute('dir', 'ltr');
-                      el.setAttribute('lang', 'en');
-                      el.style.direction = 'ltr';
-                      el.style.textAlign = 'left';
-                      el.style.unicodeBidi = 'embed';
-                      el.style.writingMode = 'horizontal-tb';
-                      // Prevent browser RTL auto-detection by setting inputmode
-                      el.setAttribute('inputmode', 'text');
-                      // Ensure no RTL inheritance
-                      el.style.unicodeBidi = 'embed';
-                    } else {
-                      delete replyTextareaRefs.current[comment.id];
-                    }
-                  }}
-                  key={`reply-textarea-${comment.id}`}
-                  placeholder="Write a reply..."
-                  value={replyText}
-                  onChange={handleReplyChange}
-                  onInput={(e) => {
-                    // Additional safeguard on input event
-                    const target = e.target as HTMLTextAreaElement;
-                    target.setAttribute('dir', 'ltr');
-                    target.setAttribute('lang', 'en');
-                    target.style.direction = 'ltr';
-                    target.style.textAlign = 'left';
-                    target.style.unicodeBidi = 'embed';
-                    target.style.writingMode = 'horizontal-tb';
-                    
-                    // Ensure cursor is at the end (LTR behavior)
-                    requestAnimationFrame(() => {
-                      const length = target.value.length;
-                      target.setSelectionRange(length, length);
-                    });
-                  }}
-                  onKeyDown={(e) => {
-                    // Force LTR on every keystroke
-                    const target = e.target as HTMLTextAreaElement;
-                    target.setAttribute('dir', 'ltr');
-                    target.style.direction = 'ltr';
-                  }}
-                  onKeyUp={(e) => {
-                    // Force LTR after keystroke
-                    const target = e.target as HTMLTextAreaElement;
-                    target.setAttribute('dir', 'ltr');
-                    target.style.direction = 'ltr';
-                    target.style.textAlign = 'left';
-                  }}
-                  onFocus={(e) => {
-                    // Force LTR when focused
-                    const target = e.target as HTMLTextAreaElement;
-                    target.setAttribute('dir', 'ltr');
-                    target.setAttribute('lang', 'en');
-                    target.style.direction = 'ltr';
-                    target.style.textAlign = 'left';
-                    target.style.unicodeBidi = 'embed';
-                    target.style.writingMode = 'horizontal-tb';
-                  }}
-                  onBlur={(e) => {
-                    // Ensure LTR is maintained even when blurred
-                    const target = e.target as HTMLTextAreaElement;
-                    target.setAttribute('dir', 'ltr');
-                    target.style.direction = 'ltr';
-                  }}
-                  rows={3}
-                  className="text-sm"
-                  autoFocus
-                  spellCheck={false}
-                  dir="ltr"
-                  lang="en"
-                  inputMode="text"
-                  style={{ 
-                    direction: 'ltr', 
-                    textAlign: 'left', 
-                    unicodeBidi: 'embed',
-                    writingMode: 'horizontal-tb'
-                  }}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleSubmit}
-                    disabled={createCommentMutation.isPending}
-                  >
-                    <Send className="mr-1 h-3 w-3" />
-                    Reply
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCancel}
-                  >
-                    Cancel
-                  </Button>
-                </div>
+                {renderTextWithLinks(commentText)}
               </div>
-            )}
+              {isLong && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`mt-1 h-6 text-xs text-primary`}
+                  onClick={() => onToggleExpand(comment.id)}
+                >
+                  {isExpanded ? (
+                    <>
+                      <ChevronUp className="mr-1 h-3 w-3" />
+                      Show less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="mr-1 h-3 w-3" />
+                      ... more
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`mt-2 ${isRootComment ? 'h-7 text-xs' : 'h-6 text-[10px]'}`}
+              onClick={() => onReply(comment.id)}
+            >
+              <Reply className={`mr-1 ${isRootComment ? 'h-3 w-3' : 'h-2.5 w-2.5'}`} />
+              Reply
+            </Button>
           </div>
         </div>
-        {/* Render replies */}
+
+        {/* Reply Input Box - appears inline below the comment */}
+        {isReplying && (
+          <div className="ml-11 space-y-2 p-3 rounded-lg bg-muted/90 border border-primary/30" dir="ltr">
+            <Textarea
+              placeholder="Write a reply..."
+              value={replyText}
+              onChange={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.setAttribute('lang', 'en');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                target.style.unicodeBidi = 'embed';
+                target.style.writingMode = 'horizontal-tb';
+                onReplyTextChange(comment.id, e.target.value);
+                // Ensure cursor is at the end (right side in LTR)
+                requestAnimationFrame(() => {
+                  const length = target.value.length;
+                  target.setSelectionRange(length, length);
+                });
+              }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.setAttribute('lang', 'en');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                target.style.unicodeBidi = 'embed';
+                target.style.writingMode = 'horizontal-tb';
+                // Ensure cursor is at the end
+                requestAnimationFrame(() => {
+                  const length = target.value.length;
+                  target.setSelectionRange(length, length);
+                });
+              }}
+              onKeyDown={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                
+                // Handle Enter key to submit reply (Shift+Enter for new line)
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  const replyText = replyTexts[comment.id] || '';
+                  if (replyText.trim() && !createCommentMutation.isPending) {
+                    onReplySubmit(comment.id);
+                  }
+                }
+              }}
+              onKeyUp={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                // Ensure cursor position is correct
+                requestAnimationFrame(() => {
+                  const length = target.value.length;
+                  const cursorPos = target.selectionStart;
+                  // If cursor is at start, move to end
+                  if (cursorPos === 0 && length > 0) {
+                    target.setSelectionRange(length, length);
+                  }
+                });
+              }}
+              onFocus={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.setAttribute('lang', 'en');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                target.style.unicodeBidi = 'embed';
+                target.style.writingMode = 'horizontal-tb';
+                // Move cursor to end when focused
+                requestAnimationFrame(() => {
+                  const length = target.value.length;
+                  target.setSelectionRange(length, length);
+                });
+              }}
+              onBlur={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+                target.style.unicodeBidi = 'embed';
+                target.style.writingMode = 'horizontal-tb';
+              }}
+              rows={3}
+              className="text-sm"
+              autoFocus
+              dir="ltr"
+              lang="en"
+              inputMode="text"
+              spellCheck={false}
+              style={{ 
+                direction: 'ltr', 
+                textAlign: 'left',
+                unicodeBidi: 'embed',
+                writingMode: 'horizontal-tb'
+              }}
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => onReplySubmit(comment.id)}
+                disabled={!replyText.trim() || createCommentMutation.isPending}
+              >
+                <Send className="mr-1 h-3 w-3" />
+                {createCommentMutation.isPending ? 'Posting...' : 'Reply'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onReplyCancel(comment.id)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Replies */}
         {comment.replies && comment.replies.length > 0 && (
-          <div className="space-y-3 mt-3">
-            {comment.replies.map((reply) => (
-              <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
+          <div className="ml-11 space-y-2 border-l-2 border-muted pl-4">
+            {comment.replies.map((reply: any) => (
+              <CommentItem
+                key={reply.id}
+                comment={reply}
+                replyingTo={replyingTo}
+                replyTexts={replyTexts}
+                onReply={onReply}
+                onReplyTextChange={onReplyTextChange}
+                onReplySubmit={onReplySubmit}
+                onReplyCancel={onReplyCancel}
+                formatTimeAgo={formatTimeAgo}
+                createCommentMutation={createCommentMutation}
+                expandedComments={expandedComments}
+                onToggleExpand={onToggleExpand}
+                isCommentLong={isCommentLong}
+                renderTextWithLinks={renderTextWithLinks}
+                depth={depth + 1}
+              />
             ))}
           </div>
         )}
@@ -413,52 +534,152 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <MessageSquare className="h-5 w-5" />
-          Comments ({comments.length})
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Add new comment */}
-        <div className="space-y-2">
-          <Textarea
-            placeholder="Add a comment..."
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            rows={4}
-            dir="ltr"
-            style={{ direction: 'ltr', textAlign: 'left' }}
-          />
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSubmitComment}
-              disabled={createCommentMutation.isPending || !newComment.trim()}
-            >
-              <Send className="mr-2 h-4 w-4" />
-              {createCommentMutation.isPending ? "Posting..." : "Post Comment"}
-            </Button>
-          </div>
+    <div className="space-y-4">
+      {/* Add Comment Form - Only for new top-level comments */}
+      <div className="space-y-2" dir="ltr">
+        <Label>Add Comment</Label>
+        <Textarea
+          ref={commentTextareaRef}
+          placeholder="Write a comment..."
+          value={commentText}
+          onChange={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.setAttribute('dir', 'ltr');
+            target.setAttribute('lang', 'en');
+            target.style.direction = 'ltr';
+            target.style.textAlign = 'left';
+            target.style.unicodeBidi = 'embed';
+            target.style.writingMode = 'horizontal-tb';
+            setCommentText(e.target.value);
+            // Ensure cursor is at the end (right side in LTR)
+            requestAnimationFrame(() => {
+              const length = target.value.length;
+              target.setSelectionRange(length, length);
+            });
+          }}
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.setAttribute('dir', 'ltr');
+            target.setAttribute('lang', 'en');
+            target.style.direction = 'ltr';
+            target.style.textAlign = 'left';
+            target.style.unicodeBidi = 'embed';
+            target.style.writingMode = 'horizontal-tb';
+            // Ensure cursor is at the end
+            requestAnimationFrame(() => {
+              const length = target.value.length;
+              target.setSelectionRange(length, length);
+            });
+          }}
+          onKeyDown={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.setAttribute('dir', 'ltr');
+            target.style.direction = 'ltr';
+            target.style.textAlign = 'left';
+            
+            // Handle Enter key to submit (Shift+Enter for new line)
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (commentText.trim() && !createCommentMutation.isPending) {
+                handleSubmit();
+              }
+            }
+          }}
+          onKeyUp={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.setAttribute('dir', 'ltr');
+            target.style.direction = 'ltr';
+            target.style.textAlign = 'left';
+            // Ensure cursor position is correct
+            requestAnimationFrame(() => {
+              const length = target.value.length;
+              const cursorPos = target.selectionStart;
+              // If cursor is at start, move to end
+              if (cursorPos === 0 && length > 0) {
+                target.setSelectionRange(length, length);
+              }
+            });
+          }}
+          onFocus={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.setAttribute('dir', 'ltr');
+            target.setAttribute('lang', 'en');
+            target.style.direction = 'ltr';
+            target.style.textAlign = 'left';
+            target.style.unicodeBidi = 'embed';
+            target.style.writingMode = 'horizontal-tb';
+            // Move cursor to end when focused
+            requestAnimationFrame(() => {
+              const length = target.value.length;
+              target.setSelectionRange(length, length);
+            });
+          }}
+          onBlur={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.setAttribute('dir', 'ltr');
+            target.style.direction = 'ltr';
+            target.style.textAlign = 'left';
+            target.style.unicodeBidi = 'embed';
+            target.style.writingMode = 'horizontal-tb';
+          }}
+          rows={3}
+          dir="ltr"
+          lang="en"
+          inputMode="text"
+          spellCheck={false}
+          style={{ 
+            direction: 'ltr', 
+            textAlign: 'left',
+            unicodeBidi: 'embed',
+            writingMode: 'horizontal-tb'
+          }}
+        />
+        <div className="flex items-center justify-end">
+          <Button
+            onClick={handleSubmit}
+            disabled={!commentText.trim() || createCommentMutation.isPending}
+            size="sm"
+          >
+            <Send className="mr-2 h-4 w-4" />
+            {createCommentMutation.isPending ? 'Posting...' : 'Post Comment'}
+          </Button>
         </div>
+      </div>
 
-        <Separator />
+      <Separator />
 
-        {/* Comments list */}
-        {isLoading ? (
-          <div className="text-center text-muted-foreground py-8">Loading comments...</div>
-        ) : comments.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8">
-            No comments yet. Be the first to comment!
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {comments.map((comment) => (
-              <CommentItem key={comment.id} comment={comment} />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {/* Comments List */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Clock className="h-5 w-5 animate-spin text-primary" />
+        </div>
+      ) : rootComments.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No comments yet. Be the first to comment!</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {rootComments.map((comment: any) => (
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              replyingTo={replyingTo}
+              replyTexts={replyTexts}
+              onReply={handleReply}
+              onReplyTextChange={setReplyText}
+              onReplySubmit={handleReplySubmit}
+              onReplyCancel={handleReplyCancel}
+              formatTimeAgo={formatTimeAgo}
+              createCommentMutation={createCommentMutation}
+              expandedComments={expandedComments}
+              onToggleExpand={toggleCommentExpand}
+              isCommentLong={isCommentLong}
+              renderTextWithLinks={renderTextWithLinks}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 });

@@ -24,11 +24,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [currentNotification, setCurrentNotification] = useState<NotificationData | null>(null);
 
   const showNotification = useCallback((notification: Omit<NotificationData, 'id' | 'timestamp'>) => {
+    console.log('🔔 [NotificationContext] showNotification called with:', notification);
     const notificationData: NotificationData = {
       ...notification,
       id: `notification-${Date.now()}-${Math.random()}`,
       timestamp: new Date(),
     };
+    console.log('🔔 [NotificationContext] Setting currentNotification:', notificationData);
     setCurrentNotification(notificationData);
   }, []);
 
