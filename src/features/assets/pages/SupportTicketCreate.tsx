@@ -84,14 +84,14 @@ export default function SupportTicketCreate() {
     const sanitizedData = validateFormData(formData, ['subject', 'category', 'description']);
     
     createTicketMutation.mutate(sanitizedData);
-  };
+  }, [formData, validateForm, validateFormData, createTicketMutation]);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={handleNavigateBack}>
+          <Button variant="outline" size="icon" onClick={() => navigate('/support')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

@@ -76,12 +76,12 @@ export default function RaiseTicket() {
       description: formData.description,
       priority: formData.priority,
     });
-  };
+  }, [formData, createTicketMutation]);
 
   return (
     <div className="mx-auto p-6 space-y-6 max-w-4xl">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={handleNavigateBack}>
+        <Button variant="outline" size="icon" onClick={() => navigate('/my-it-assets')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
