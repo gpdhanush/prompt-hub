@@ -5,6 +5,7 @@ import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyTaskAssigned } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
+import { columnExists } from '../utils/dbHealthCheck.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -57,6 +58,42 @@ const upload = multer({
 // Apply authentication to all routes
 router.use(authenticate);
 
+/**
+ * @swagger
+ * /api/tasks:
+ *   get:
+ *     summary: Get all tasks
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Items per page
+ *       - in: query
+ *         name: project_id
+ *         schema:
+ *           type: integer
+ *         description: Filter by project ID
+ *     responses:
+ *       200:
+ *         description: List of tasks
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedResponse'
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 10, project_id, my_tasks } = req.query;
@@ -119,6 +156,34 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/tasks/{id}:
+ *   get:
+ *     summary: Get task by ID
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Task ID
+ *     responses:
+ *       200:
+ *         description: Task details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   $ref: '#/components/schemas/Task'
+ *       404:
+ *         description: Task not found
+ */
 router.get('/:id', async (req, res) => {
   try {
     const [tasks] = await db.query(`
@@ -173,6 +238,60 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/tasks:
+ *   post:
+ *     summary: Create a new task
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - project_id
+ *               - title
+ *             properties:
+ *               project_id:
+ *                 type: integer
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [Open, In Progress, Completed, Closed]
+ *               priority:
+ *                 type: string
+ *                 enum: [Low, Med, High]
+ *               stage:
+ *                 type: string
+ *               assigned_to:
+ *                 type: integer
+ *               developer_id:
+ *                 type: integer
+ *               designer_id:
+ *                 type: integer
+ *               tester_id:
+ *                 type: integer
+ *               deadline:
+ *                 type: string
+ *                 format: date
+ *               attachments:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *     responses:
+ *       201:
+ *         description: Task created successfully
+ *       400:
+ *         description: Invalid input
+ */
 // Create task - check for tasks.create permission
 router.post('/', requirePermission('tasks.create'), upload.array('attachments', 10), async (req, res) => {
   try {
@@ -309,6 +428,47 @@ router.post('/', requirePermission('tasks.create'), upload.array('attachments', 
 });
 
 // Update task - check for tasks.edit permission
+/**
+ * @swagger
+ * /api/tasks/{id}:
+ *   put:
+ *     summary: Update a task
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               priority:
+ *                 type: string
+ *               stage:
+ *                 type: string
+ *               assigned_to:
+ *                 type: integer
+ *               deadline:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: Task updated successfully
+ *       404:
+ *         description: Task not found
+ */
 router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -432,6 +592,26 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
 });
 
 // Delete task - check for tasks.delete permission
+/**
+ * @swagger
+ * /api/tasks/{id}:
+ *   delete:
+ *     summary: Delete a task
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Task deleted successfully
+ *       404:
+ *         description: Task not found
+ */
 router.delete('/:id', requirePermission('tasks.delete'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -459,6 +639,24 @@ router.delete('/:id', requirePermission('tasks.delete'), async (req, res) => {
 // ============================================
 
 // Get task comments
+/**
+ * @swagger
+ * /api/tasks/{id}/comments:
+ *   get:
+ *     summary: Get task comments
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of comments
+ */
 router.get('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
@@ -484,6 +682,37 @@ router.get('/:id/comments', async (req, res) => {
 });
 
 // Create task comment
+/**
+ * @swagger
+ * /api/tasks/{id}/comments:
+ *   post:
+ *     summary: Add a comment to a task
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - comment
+ *             properties:
+ *               comment:
+ *                 type: string
+ *               parent_comment_id:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Comment added successfully
+ */
 router.post('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
@@ -590,10 +819,27 @@ router.get('/timesheets/by-project', async (req, res) => {
       params.push(employeeId);
     }
     
+    // Check if project_id column exists in timesheets table
+    const hasProjectIdColumn = await columnExists('timesheets', 'project_id');
+    
+    // Build query based on whether project_id column exists
+    let projectIdExpression;
+    let whereClause;
+    
+    if (hasProjectIdColumn) {
+      // Use ts.project_id if column exists
+      projectIdExpression = 'COALESCE(ts.project_id, t.project_id, b.project_id)';
+      whereClause = '(ts.project_id IS NOT NULL OR ts.task_id IS NOT NULL OR ts.bug_id IS NOT NULL)';
+    } else {
+      // Fallback to only task_id and bug_id if column doesn't exist
+      projectIdExpression = 'COALESCE(t.project_id, b.project_id)';
+      whereClause = '(ts.task_id IS NOT NULL OR ts.bug_id IS NOT NULL)';
+    }
+    
     // Updated query to support timesheets with project_id, task_id, or bug_id
     const query = `
       SELECT 
-        COALESCE(ts.project_id, t.project_id, b.project_id) as project_id,
+        ${projectIdExpression} as project_id,
         p.name as project_name,
         p.project_code as project_code,
         SUM(ts.hours) as total_hours,
@@ -603,10 +849,10 @@ router.get('/timesheets/by-project', async (req, res) => {
       FROM timesheets ts
       LEFT JOIN tasks t ON ts.task_id = t.id
       LEFT JOIN bugs b ON ts.bug_id = b.id
-      LEFT JOIN projects p ON COALESCE(ts.project_id, t.project_id, b.project_id) = p.id
-      WHERE (ts.project_id IS NOT NULL OR ts.task_id IS NOT NULL OR ts.bug_id IS NOT NULL)
+      LEFT JOIN projects p ON ${projectIdExpression} = p.id
+      WHERE ${whereClause}
         ${dateFilter}
-      GROUP BY COALESCE(ts.project_id, t.project_id, b.project_id), p.name, p.project_code
+      GROUP BY ${projectIdExpression}, p.name, p.project_code
       ORDER BY total_hours DESC, p.name ASC
     `;
     
@@ -624,7 +870,7 @@ router.get('/timesheets/by-project', async (req, res) => {
           FROM timesheets ts
           LEFT JOIN tasks t ON ts.task_id = t.id
           LEFT JOIN bugs b ON ts.bug_id = b.id
-          WHERE COALESCE(ts.project_id, t.project_id, b.project_id) = ?
+          WHERE ${projectIdExpression} = ?
         `;
         const dailyParams = [project.project_id];
         
@@ -658,7 +904,7 @@ router.get('/timesheets/by-project', async (req, res) => {
             ts.notes,
             ts.task_id,
             ts.bug_id,
-            ts.project_id,
+            ${hasProjectIdColumn ? 'ts.project_id,' : ''}
             t.id as task_id_full,
             t.title as task_title,
             t.task_code,
@@ -672,7 +918,7 @@ router.get('/timesheets/by-project', async (req, res) => {
           LEFT JOIN bugs b ON ts.bug_id = b.id
           LEFT JOIN employees e ON ts.employee_id = e.id
           LEFT JOIN users u ON e.user_id = u.id
-          WHERE COALESCE(ts.project_id, t.project_id, b.project_id) = ?
+          WHERE ${projectIdExpression} = ?
         `;
         const detailParams = [project.project_id];
         
@@ -709,7 +955,7 @@ router.get('/timesheets/by-project', async (req, res) => {
           FROM timesheets ts
           LEFT JOIN tasks t ON ts.task_id = t.id
           LEFT JOIN bugs b ON ts.bug_id = b.id
-          WHERE COALESCE(ts.project_id, t.project_id, b.project_id) = ?
+          WHERE ${projectIdExpression} = ?
             AND ts.task_id IS NOT NULL
         `;
         const taskParams = [project.project_id];
@@ -778,9 +1024,15 @@ router.get('/timesheets/today-summary', async (req, res) => {
       }
     }
     
+    // Check if project_id column exists in timesheets table
+    const hasProjectIdColumn = await columnExists('timesheets', 'project_id');
+    const projectIdExpression = hasProjectIdColumn 
+      ? 'COALESCE(ts.project_id, t.project_id, b.project_id)'
+      : 'COALESCE(t.project_id, b.project_id)';
+    
     let query = `
       SELECT 
-        COUNT(DISTINCT COALESCE(ts.project_id, t.project_id, b.project_id)) as projects_count,
+        COUNT(DISTINCT ${projectIdExpression}) as projects_count,
         COUNT(DISTINCT ts.task_id) as tasks_count,
         COUNT(DISTINCT ts.bug_id) as bugs_count,
         SUM(ts.hours) as total_hours,
@@ -808,7 +1060,7 @@ router.get('/timesheets/today-summary', async (req, res) => {
         ts.notes,
         ts.task_id,
         ts.bug_id,
-        ts.project_id,
+        ${hasProjectIdColumn ? 'ts.project_id,' : ''}
         t.title as task_title,
         t.task_code,
         b.bug_code,
@@ -820,7 +1072,7 @@ router.get('/timesheets/today-summary', async (req, res) => {
       FROM timesheets ts
       LEFT JOIN tasks t ON ts.task_id = t.id
       LEFT JOIN bugs b ON ts.bug_id = b.id
-      LEFT JOIN projects p ON COALESCE(ts.project_id, t.project_id, b.project_id) = p.id
+      LEFT JOIN projects p ON ${projectIdExpression} = p.id
       LEFT JOIN employees e ON ts.employee_id = e.id
       LEFT JOIN users u ON e.user_id = u.id
       WHERE ts.date = ?
@@ -899,10 +1151,31 @@ router.post('/timesheets', async (req, res) => {
       }
     }
     
-    const [result] = await db.query(`
-      INSERT INTO timesheets (employee_id, project_id, task_id, bug_id, date, hours, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [employee[0].id, finalProjectId, finalTaskId, finalBugId, date, hours, notes || null]);
+    // Check if project_id column exists in timesheets table
+    const hasProjectIdColumn = await columnExists('timesheets', 'project_id');
+    const projectIdExpression = hasProjectIdColumn 
+      ? 'COALESCE(ts.project_id, t.project_id, b.project_id)'
+      : 'COALESCE(t.project_id, b.project_id)';
+    
+    // Build INSERT query based on whether project_id column exists
+    let insertQuery;
+    let insertParams;
+    
+    if (hasProjectIdColumn) {
+      insertQuery = `
+        INSERT INTO timesheets (employee_id, project_id, task_id, bug_id, date, hours, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+      insertParams = [employee[0].id, finalProjectId, finalTaskId, finalBugId, date, hours, notes || null];
+    } else {
+      insertQuery = `
+        INSERT INTO timesheets (employee_id, task_id, bug_id, date, hours, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `;
+      insertParams = [employee[0].id, finalTaskId, finalBugId, date, hours, notes || null];
+    }
+    
+    const [result] = await db.query(insertQuery, insertParams);
     
     const [newTimesheet] = await db.query(`
       SELECT 
@@ -916,9 +1189,9 @@ router.post('/timesheets', async (req, res) => {
       FROM timesheets ts
       LEFT JOIN employees e ON ts.employee_id = e.id
       LEFT JOIN users u ON e.user_id = u.id
-      LEFT JOIN projects p ON ts.project_id = p.id
       LEFT JOIN tasks t ON ts.task_id = t.id
       LEFT JOIN bugs b ON ts.bug_id = b.id
+      LEFT JOIN projects p ON ${projectIdExpression} = p.id
       WHERE ts.id = ?
     `, [result.insertId]);
     

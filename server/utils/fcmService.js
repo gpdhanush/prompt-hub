@@ -123,11 +123,20 @@ export async function sendPushNotification(fcmToken, notification, data = {}) {
     logger.info('✅ Push notification sent successfully');
     return { success: true, messageId: response };
   } catch (error) {
-    logger.error('❌ Error sending push notification:', error);
+    const errorDetails = {
+      code: error.code,
+      message: error.message,
+      token: fcmToken?.substring(0, 20) + '...',
+      stack: error.stack,
+    };
+    logger.error('❌ Error sending push notification:', errorDetails);
+    console.error('❌ FCM Send Error Details:', JSON.stringify(errorDetails, null, 2));
     
     // Handle invalid token
     if (error.code === 'messaging/invalid-registration-token' || 
-        error.code === 'messaging/registration-token-not-registered') {
+        error.code === 'messaging/registration-token-not-registered' ||
+        error.code === 'messaging/invalid-argument') {
+      logger.warn('⚠️  Token is invalid or not registered, deactivating...');
       // Mark token as inactive in database
       await deactivateFCMToken(fcmToken);
     }
@@ -184,19 +193,32 @@ export async function sendMulticastNotification(fcmTokens, notification, data = 
 
     logger.info(`✅ Sent ${response.successCount} notifications, ${response.failureCount} failed`);
 
-    // Handle invalid tokens
+    // Handle invalid tokens and log errors
     if (response.failureCount > 0) {
       const invalidTokens = [];
       response.responses.forEach((resp, idx) => {
         if (!resp.success) {
-          if (resp.error?.code === 'messaging/invalid-registration-token' ||
-              resp.error?.code === 'messaging/registration-token-not-registered') {
+          const error = resp.error;
+          const errorDetails = {
+            code: error?.code,
+            message: error?.message,
+            token: fcmTokens[idx]?.substring(0, 20) + '...',
+            fullError: error,
+          };
+          logger.error(`❌ Failed to send notification to token ${idx}:`, errorDetails);
+          console.error(`❌ FCM Error Details:`, JSON.stringify(errorDetails, null, 2));
+          
+          if (error?.code === 'messaging/invalid-registration-token' ||
+              error?.code === 'messaging/registration-token-not-registered' ||
+              error?.code === 'messaging/invalid-argument') {
             invalidTokens.push(fcmTokens[idx]);
+            logger.warn(`⚠️  Token ${idx} is invalid or not registered, will be deactivated`);
           }
         }
       });
 
       if (invalidTokens.length > 0) {
+        logger.info(`🗑️  Deactivating ${invalidTokens.length} invalid token(s)`);
         await deactivateFCMTokens(invalidTokens);
       }
     }

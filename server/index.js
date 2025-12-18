@@ -42,6 +42,8 @@ import { initializeFirebase } from './utils/fcmService.js';
 import { reportFatalError, createErrorContext } from './utils/errorReporting.js';
 import { initializeReminderScheduler } from './utils/reminderScheduler.js';
 import { initializeTicketEscalationScheduler } from './utils/ticketEscalationScheduler.js';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger.js';
 
 // Initialize Firebase Admin SDK (async)
 initializeFirebase().catch(err => {
@@ -167,6 +169,13 @@ if (!fs.existsSync(uploadsPath)) {
 
 app.use('/uploads', express.static(uploadsPath));
 
+// Serve Swagger UI custom CSS
+const publicPath = path.join(__dirname, 'public');
+if (!fs.existsSync(publicPath)) {
+  fs.mkdirSync(publicPath, { recursive: true });
+}
+app.use('/swagger-ui-assets', express.static(publicPath));
+
 // Health check endpoint
 app.get('/health', async (req, res) => {
   try {
@@ -213,6 +222,37 @@ app.get('/api/test-db', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Swagger API Documentation with Modern UI
+const swaggerOptions = {
+  customCssUrl: '/swagger-ui-assets/swagger-ui-custom.css',
+  customSiteTitle: 'Admin Dashboard API',
+  customfavIcon: '/favicon.ico',
+  customCss: `
+    .swagger-ui .topbar { display: none !important; }
+    .swagger-ui .info { margin-bottom: 40px; }
+    .swagger-ui { background: #f8fafc; }
+  `,
+  swaggerOptions: {
+    persistAuthorization: true,
+    displayRequestDuration: true,
+    filter: true,
+    showExtensions: true,
+    showCommonExtensions: true,
+    docExpansion: 'list',
+    defaultModelsExpandDepth: 2,
+    defaultModelExpandDepth: 2,
+    tryItOutEnabled: true,
+  },
+};
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerOptions));
+
+// Swagger JSON endpoint
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
 });
 
 // API Routes

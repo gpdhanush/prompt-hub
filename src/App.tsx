@@ -6,6 +6,8 @@ import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AdminLayout } from "./components/layout/AdminLayout";
 import { LoadingProvider, useLoading } from "./contexts/LoadingContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
+import { NotificationAlert } from "./components/NotificationAlert";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { logger } from "./lib/logger";
 import { ENV_CONFIG } from "./lib/config";
@@ -197,6 +199,7 @@ const AppContent = () => {
         v7_relativeSplatPath: true,
       }}
     >
+          <NotificationAlert />
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<LazyRoute><Login /></LazyRoute>} />
@@ -732,13 +735,15 @@ const App = () => {
     <ErrorBoundary>
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
         <QueryClientProvider client={queryClient}>
-          <LoadingProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <AppContent />
-            </TooltipProvider>
-          </LoadingProvider>
+          <NotificationProvider>
+            <LoadingProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <AppContent />
+              </TooltipProvider>
+            </LoadingProvider>
+          </NotificationProvider>
         </QueryClientProvider>
       </ThemeProvider>
     </ErrorBoundary>

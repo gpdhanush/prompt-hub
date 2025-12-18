@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { 
   requestNotificationPermission, 
   getCurrentFCMToken,
-  onMessageListener,
+  setupMessageListener,
   initializeFirebase,
   logAnalyticsEvent,
   logError
@@ -12,12 +12,14 @@ import { toast } from '@/hooks/use-toast';
 import { getCurrentUser } from '@/lib/auth';
 import { getDeviceInfo } from '@/lib/deviceUtils';
 import { logger } from '@/lib/logger';
+import { useNotification } from '@/contexts/NotificationContext';
 
 export function useFCM() {
   const [token, setToken] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [permission, setPermission] = useState<NotificationPermission>('default');
+  const { showNotification } = useNotification();
 
   // Initialize Firebase and register FCM token
   useEffect(() => {
@@ -110,21 +112,42 @@ export function useFCM() {
     initializeFCM();
   }, []);
 
-  // Listen for foreground messages
+  // Listen for foreground messages - continuous listener
   useEffect(() => {
     if (Notification.permission === 'granted') {
-      const setupMessageListener = async () => {
+      logger.info('🔔 Setting up FCM message listener...');
+      console.log('🔔 [FCM] Setting up message listener, permission:', Notification.permission);
+      
+      const cleanup = setupMessageListener((payload) => {
+        console.log('📨 [FCM] Message received:', payload);
+        logger.info('📨 FCM message received:', payload);
+        
         try {
-          const { payload } = await onMessageListener();
-          
-          // Show notification toast
+          // Show modern notification popup
           if (payload?.notification) {
+            const notificationData = {
+              title: payload.notification.title || 'New Notification',
+              body: payload.notification.body || '',
+              icon: payload.notification.icon,
+              image: payload.notification.image || payload.notification.imageUrl,
+              link: payload.data?.link || payload.fcmOptions?.link || payload.webpush?.fcmOptions?.link,
+              type: payload.data?.type || 'general',
+              data: payload.data,
+            };
+
+            console.log('📢 [FCM] Showing notification alert:', notificationData);
+            logger.info('📢 Showing notification alert:', notificationData);
+
+            // Show modern alert popup
+            showNotification(notificationData);
+
+            // Also show toast for quick feedback
             toast({
               title: payload.notification.title || 'Notification',
               description: payload.notification.body || '',
             });
 
-            // You can also show a browser notification
+            // Show browser notification as well
             if ('Notification' in window && Notification.permission === 'granted') {
               new Notification(payload.notification.title || 'Notification', {
                 body: payload.notification.body || '',
@@ -133,15 +156,43 @@ export function useFCM() {
                 tag: payload.data?.type || 'notification',
               });
             }
+          } else if (payload?.data) {
+            // Handle data-only messages (no notification object)
+            console.log('📨 [FCM] Data-only message received:', payload.data);
+            logger.debug('📨 Data-only message received:', payload.data);
+            const notificationData = {
+              title: payload.data.title || 'New Notification',
+              body: payload.data.body || payload.data.message || '',
+              link: payload.data.link,
+              type: payload.data.type || 'general',
+              data: payload.data,
+            };
+            console.log('📢 [FCM] Showing data-only notification:', notificationData);
+            showNotification(notificationData);
+          } else {
+            console.warn('⚠️ [FCM] Received message with no notification or data:', payload);
+            logger.warn('⚠️ Received message with no notification or data:', payload);
           }
         } catch (error) {
+          console.error('❌ [FCM] Error handling message:', error);
+          logger.error('❌ Error handling FCM message:', error);
           logError(error as Error, { source: 'useFCM_messageListener' });
         }
-      };
+      });
 
-      setupMessageListener();
+      console.log('✅ [FCM] Message listener setup complete');
+      logger.info('✅ FCM message listener setup complete');
+
+      // Cleanup on unmount
+      return () => {
+        console.log('🧹 [FCM] Cleaning up message listener');
+        cleanup();
+      };
+    } else {
+      console.log('⏸️ [FCM] Notification permission not granted:', Notification.permission);
+      logger.debug('⏸️  Notification permission not granted, skipping message listener setup');
     }
-  }, []);
+  }, [showNotification]);
 
   // Unregister FCM token
   const unregister = async () => {

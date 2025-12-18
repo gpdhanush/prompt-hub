@@ -23,6 +23,8 @@
     "mysql2": "^3.6.5",
     "nodemailer": "^6.9.8",
     "qrcode": "^1.5.4",
-    "speakeasy": "^2.0.0"
+    "speakeasy": "^2.0.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   }
 }

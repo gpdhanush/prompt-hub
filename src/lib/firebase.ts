@@ -238,7 +238,42 @@ export async function requestNotificationPermission(): Promise<string | null> {
   }
 }
 
-// Listen for foreground messages
+// Listen for foreground messages - sets up a continuous listener
+export function setupMessageListener(callback: (payload: any) => void): () => void {
+  let unsubscribe: (() => void) | null = null;
+  let isSetup = false;
+  
+  getFirebaseMessaging().then((messagingInstance) => {
+    if (messagingInstance && !isSetup) {
+      isSetup = true;
+      logger.debug('🔔 Setting up FCM message listener...');
+      const unsubscribeFn = onMessage(messagingInstance, (payload) => {
+        logger.debug('📨 Message received in foreground:', payload);
+        logAnalyticsEvent('fcm_message_received', { 
+          hasNotification: !!payload.notification,
+          hasData: !!payload.data 
+        });
+        callback(payload);
+      });
+      unsubscribe = unsubscribeFn;
+      logger.debug('✅ FCM message listener set up successfully');
+    }
+  }).catch((error) => {
+    logger.error('❌ Error setting up message listener:', error);
+  });
+
+  // Return cleanup function
+  return () => {
+    if (unsubscribe) {
+      logger.debug('🧹 Cleaning up FCM message listener');
+      unsubscribe();
+      unsubscribe = null;
+      isSetup = false;
+    }
+  };
+}
+
+// Legacy function for backward compatibility (deprecated - use setupMessageListener instead)
 export async function onMessageListener(): Promise<{
   payload: any;
 }> {

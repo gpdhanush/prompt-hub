@@ -10,6 +10,51 @@ import crypto from 'crypto';
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: User login
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: user@example.com
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 example: password123
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken:
+ *                   type: string
+ *                 refreshToken:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // Login with JWT Access + Refresh Tokens
 router.post('/login', validate(schemas.login), async (req, res) => {
   try {
@@ -145,6 +190,44 @@ router.post('/login', validate(schemas.login), async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Refresh access token
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     responses:
+ *       200:
+ *         description: Token refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken:
+ *                   type: string
+ *                 expiresIn:
+ *                   type: number
+ *                   description: Expiration time in seconds
+ *       401:
+ *         description: Invalid or expired refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // Refresh Access Token using Refresh Token
 router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
   try {
@@ -240,6 +323,34 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Logout user (revoke refresh token)
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Logged out successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Logged out successfully
+ */
 // Logout - Revoke refresh token
 router.post('/logout', authenticate, async (req, res) => {
   try {
@@ -263,6 +374,27 @@ router.post('/logout', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/logout-all:
+ *   post:
+ *     summary: Logout from all devices
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logged out from all devices
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 tokensRevoked:
+ *                   type: number
+ */
 // Logout from all devices - Revoke all refresh tokens
 router.post('/logout-all', authenticate, async (req, res) => {
   try {
@@ -279,6 +411,27 @@ router.post('/logout-all', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Get current user profile
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   $ref: '#/components/schemas/User'
+ *       404:
+ *         description: User not found
+ */
 // Get current user (requires authentication)
 router.get('/me', authenticate, async (req, res) => {
   try {
@@ -328,6 +481,43 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/me/profile:
+ *   put:
+ *     summary: Update current user profile
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               mobile:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 format: password
+ *               oldPassword:
+ *                 type: string
+ *                 format: password
+ *               session_timeout:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 1440
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ *       400:
+ *         description: Invalid input
+ */
 // Update current user's profile
 router.put('/me/profile', authenticate, validate(schemas.updateProfile), async (req, res) => {
   try {
@@ -417,6 +607,27 @@ router.put('/me/profile', authenticate, validate(schemas.updateProfile), async (
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/me/permissions:
+ *   get:
+ *     summary: Get current user permissions
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User permissions list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ */
 // Get current user's permissions
 router.get('/me/permissions', authenticate, async (req, res) => {
   try {
@@ -464,6 +675,30 @@ router.get('/me/permissions', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/forgot-password:
+ *   post:
+ *     summary: Request password reset OTP
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: OTP sent if email exists
+ *       403:
+ *         description: Account is not active
+ */
 // Forgot Password - Send OTP
 router.post('/forgot-password', async (req, res) => {
   try {
@@ -543,6 +778,34 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/verify-otp:
+ *   post:
+ *     summary: Verify password reset OTP
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: OTP verified successfully
+ *       400:
+ *         description: Invalid or expired OTP
+ */
 // Verify OTP
 router.post('/verify-otp', async (req, res) => {
   try {
@@ -601,6 +864,38 @@ router.post('/verify-otp', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/reset-password:
+ *   post:
+ *     summary: Reset password with reset token
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - resetToken
+ *               - newPassword
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               resetToken:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       400:
+ *         description: Invalid token or password requirements not met
+ */
 // Reset Password
 router.post('/reset-password', async (req, res) => {
   try {
