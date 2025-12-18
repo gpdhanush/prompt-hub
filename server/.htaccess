@@ -1,0 +1,128 @@
+# Apache Configuration for Node.js Backend API in cPanel
+# Place this file in your server directory (where index.js is located)
+
+# Enable Rewrite Engine
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # Don't rewrite if file exists
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  
+  # Don't rewrite API routes, static files, or Swagger UI
+  RewriteCond %{REQUEST_URI} !^/api/
+  RewriteCond %{REQUEST_URI} !^/api-docs
+  RewriteCond %{REQUEST_URI} !^/swagger-ui-assets/
+  RewriteCond %{REQUEST_URI} !^/uploads/
+  RewriteCond %{REQUEST_URI} !^/health
+  RewriteCond %{REQUEST_URI} !^/api-docs.json
+  
+  # For Node.js apps in cPanel, proxy to Node.js process
+  # This is handled by cPanel's Node.js selector
+</IfModule>
+
+# Set proper MIME types - CRITICAL for Swagger UI and API
+<IfModule mod_mime.c>
+  # JavaScript - Fix for module script errors
+  AddType application/javascript js
+  AddType application/javascript mjs
+  AddType text/javascript js
+  AddType text/javascript mjs
+  
+  # JSON
+  AddType application/json json
+  AddType application/manifest+json webmanifest
+  
+  # CSS
+  AddType text/css css
+  
+  # Images
+  AddType image/png png
+  AddType image/jpeg jpg jpeg
+  AddType image/gif gif
+  AddType image/svg+xml svg
+  AddType image/webp webp
+  AddType image/x-icon ico
+  
+  # Fonts
+  AddType font/woff woff
+  AddType font/woff2 woff2
+  AddType application/font-woff woff
+  AddType application/font-woff2 woff2
+  AddType font/ttf ttf
+  AddType font/otf otf
+  
+  # Documents
+  AddType application/pdf pdf
+  AddType application/msword doc
+  AddType application/vnd.openxmlformats-officedocument.wordprocessingml.document docx
+  AddType application/vnd.ms-excel xls
+  AddType application/vnd.openxmlformats-officedocument.spreadsheetml.sheet xlsx
+  
+  # Text files
+  AddType text/plain txt
+  AddType text/csv csv
+  AddType text/html html htm
+  
+  # Archives
+  AddType application/zip zip
+  AddType application/x-zip-compressed zip
+</IfModule>
+
+# Enable compression
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+  AddOutputFilterByType DEFLATE application/javascript application/json
+  AddOutputFilterByType DEFLATE application/xml application/xhtml+xml
+  AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# Cache static assets
+<IfModule mod_expires.c>
+  ExpiresActive On
+  
+  # Images
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/gif "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/x-icon "access plus 1 year"
+  
+  # CSS and JavaScript
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresByType application/javascript "access plus 1 month"
+  ExpiresByType text/javascript "access plus 1 month"
+  
+  # Fonts
+  ExpiresByType font/woff "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+  
+  # Don't cache API responses or Swagger JSON
+  ExpiresByType application/json "access plus 0 seconds"
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+  # Prevent MIME type sniffing
+  Header set X-Content-Type-Options "nosniff"
+  
+  # XSS Protection
+  Header set X-XSS-Protection "1; mode=block"
+  
+  # Frame options
+  Header set X-Frame-Options "SAMEORIGIN"
+  
+  # CORS headers (adjust as needed)
+  # Header set Access-Control-Allow-Origin "*"
+  # Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+  # Header set Access-Control-Allow-Headers "Content-Type, Authorization"
+</IfModule>
+
+# Disable directory browsing
+Options -Indexes
+
+# Custom error pages (optional)
+# ErrorDocument 404 /404.html
+# ErrorDocument 500 /500.html
+

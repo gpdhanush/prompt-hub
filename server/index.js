@@ -174,7 +174,18 @@ const publicPath = path.join(__dirname, 'public');
 if (!fs.existsSync(publicPath)) {
   fs.mkdirSync(publicPath, { recursive: true });
 }
-app.use('/swagger-ui-assets', express.static(publicPath));
+// Serve static files with proper MIME types for cPanel
+app.use('/swagger-ui-assets', express.static(publicPath, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (filePath.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json');
+    }
+  }
+}));
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
