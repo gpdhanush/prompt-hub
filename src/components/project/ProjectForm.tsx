@@ -327,7 +327,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   // Fetch users for dropdowns
   const { data: usersData } = useQuery({
     queryKey: ['users'],
-    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
+    queryFn: () => usersApi.getForDropdown({ limit: 100 }),
   });
 
   // Fetch employees to get team lead relationships

@@ -328,10 +328,10 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     refetchOnReconnect: false,
   });
 
-  // Fetch users for dropdowns
+  // Fetch users for dropdowns - use for-dropdown endpoint which doesn't require full permission
   const { data: usersData } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
+    queryKey: ['users-for-dropdown'],
+    queryFn: () => usersApi.getForDropdown({ limit: 100 }),
     staleTime: 1000 * 60 * 10, // 10 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
     refetchOnWindowFocus: false,
@@ -363,7 +363,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   const allEmployees = employeesData?.data || [];
   const teamLeads = allUsers.filter((user: any) => user.role === 'Team Lead');
   
-  // Filter assignable users based on selected team lead
+  // Filter assignable users based on selected team lead - show only employees that report to this team lead
   const assignableUsers = useMemo(() => {
     if (!formData.team_lead_id) {
       return [];
@@ -389,9 +389,14 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
       }
       visited.add(teamLeadEmpId);
       
-      const directReports = allEmployees.filter((emp: any) => 
-        emp.team_lead_id && emp.team_lead_id === teamLeadEmpId
-      );
+      // Convert both to numbers for comparison to handle string/number mismatches
+      const directReports = allEmployees.filter((emp: any) => {
+        if (!emp.team_lead_id) return false;
+        // Handle both string and number comparisons
+        const empTeamLeadId = typeof emp.team_lead_id === 'string' ? parseInt(emp.team_lead_id, 10) : emp.team_lead_id;
+        const leadEmpId = typeof teamLeadEmpId === 'string' ? parseInt(teamLeadEmpId, 10) : teamLeadEmpId;
+        return empTeamLeadId === leadEmpId;
+      });
       
       // Recursively get subordinates of subordinates
       const allSubordinates = [...directReports];
@@ -404,12 +409,15 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     };
     
     const teamEmployees = getSubordinateEmployees(teamLeadEmployee.id);
-    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
+    const teamEmployeeUserIds = teamEmployees
+      .map((emp: any) => emp.user_id)
+      .filter((id: any) => id !== null && id !== undefined);
     
-    // Return all users that are employees of this team lead, excluding team leads
+    // Return only users that are employees of this team lead, excluding team leads
     return allUsers.filter((user: any) => 
       teamEmployeeUserIds.includes(user.id) && 
-      user.role !== 'Team Lead' // Exclude other team leads
+      user.role !== 'Team Lead' && 
+      user.role !== 'Team Leader'
     );
   }, [formData.team_lead_id, allUsers, allEmployees]);
 
@@ -509,11 +517,45 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     mutationFn: async ({ id, data }: { id: number; data: any }) => {
       return await projectsApi.update(id, data);
     },
-    onSuccess: () => {
+    onSuccess: async (response) => {
+      // Invalidate all project-related queries first
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      toast({ title: "Success", description: "Project updated successfully." });
-      navigate(`/projects/${projectId}`);
+      queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['project-activities', projectId] });
+      
+      // Fetch the complete updated project data (includes members, milestones, files)
+      // Wait for the API call to complete before navigating
+      try {
+        logger.debug('Fetching updated project data after update...');
+        const updatedProject = await projectsApi.getById(Number(projectId));
+        logger.debug('Updated project data received:', updatedProject);
+        
+        // Update the cache with the complete project data
+        // This ensures ProjectDetail page sees the updated data immediately
+        queryClient.setQueryData(['project', projectId], updatedProject);
+        logger.debug('Cache updated with new project data');
+        
+        // Invalidate to ensure any other queries refetch
+        queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+        
+        // Wait a moment to ensure cache update is processed
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        toast({ title: "Success", description: "Project updated successfully." });
+        
+        // Navigate only after API call completes and cache is updated
+        logger.debug('Navigating to project detail page...');
+        navigate(`/projects/${projectId}`);
+      } catch (error) {
+        logger.error('Failed to fetch updated project:', error);
+        // If fetch fails, invalidate and refetch, then navigate
+        await queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+        await queryClient.refetchQueries({ queryKey: ['project', projectId] });
+        
+        toast({ title: "Success", description: "Project updated successfully." });
+        navigate(`/projects/${projectId}`);
+      }
     },
     onError: (error: any) => {
       logger.error('Project update error:', error);
@@ -1096,6 +1138,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                         </p>
                         <p className="text-xs text-muted-foreground italic">
                           You can proceed without assigning employees now. Employees can be added later.
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Note: Make sure employees have their "Reports To" field set to this team lead in their employee profile.
                         </p>
                       </div>
                     ) : (

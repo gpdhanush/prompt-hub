@@ -133,7 +133,7 @@ router.get('/:id/documents', async (req, res) => {
     
     const managerRoles = await getManagerRoles();
     const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
-    const allManagerRoles = [...managerRoles, 'Manager'];
+    const allManagerRoles = [...managerRoles, 'Manager', 'Admin', 'Team Lead', 'Team Leader'];
     const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
     
     logger.debug('Manager Roles:', managerRoles);
@@ -142,7 +142,14 @@ router.get('/:id/documents', async (req, res) => {
     logger.debug('Can Manage:', canManage);
     
     // Check if employee exists and user has access
-    const [employees] = await db.query('SELECT user_id FROM employees WHERE id = ?', [id]);
+    const [employees] = await db.query(`
+      SELECT e.user_id, r.level as role_level, p.level as position_level
+      FROM employees e
+      INNER JOIN users u ON e.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
+      WHERE e.id = ?
+    `, [id]);
     if (employees.length === 0) {
       return res.status(404).json({ error: 'Employee not found' });
     }
@@ -150,10 +157,47 @@ router.get('/:id/documents', async (req, res) => {
     const employeeUserId = employees[0].user_id;
     const isOwnProfile = parseInt(currentUserId) === parseInt(employeeUserId);
     
+    // Get target employee's level
+    const targetRoleLevel = employees[0].role_level;
+    const targetPositionLevel = employees[0].position_level;
+    const targetEmployeeLevel = targetRoleLevel !== null && targetRoleLevel !== undefined
+      ? targetRoleLevel
+      : (targetPositionLevel !== null && targetPositionLevel !== undefined
+        ? targetPositionLevel
+        : 2);
+    
+    // Get current user's level
+    const [currentUserData] = await db.query(`
+      SELECT 
+        r.level as role_level,
+        p.level as position_level
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
+      WHERE u.id = ?
+    `, [currentUserId]);
+    
+    let currentUserLevel = 2; // default
+    if (currentUserData.length > 0) {
+      const roleLevel = currentUserData[0].role_level;
+      const positionLevel = currentUserData[0].position_level;
+      currentUserLevel = roleLevel !== null && roleLevel !== undefined
+        ? roleLevel
+        : (positionLevel !== null && positionLevel !== undefined
+          ? positionLevel
+          : 2);
+    }
+    
+    // Level 1 employees can access documents of Level 2 employees
+    const isLevel1AccessingLevel2 = currentUserLevel === 1 && targetEmployeeLevel === 2;
+    
     logger.debug('Employee User ID:', employeeUserId);
     logger.debug('Is Own Profile:', isOwnProfile);
+    logger.debug('Current User Level:', currentUserLevel);
+    logger.debug('Target Employee Level:', targetEmployeeLevel);
+    logger.debug('Is Level 1 Accessing Level 2:', isLevel1AccessingLevel2);
     
-    if (!canManage && !isOwnProfile) {
+    if (!canManage && !isOwnProfile && !isLevel1AccessingLevel2) {
       logger.debug('Access denied - user cannot manage and it is not their own profile');
       return res.status(403).json({ error: 'You can only access your own documents' });
     }
@@ -246,7 +290,7 @@ router.get('/by-user/:userId', async (req, res) => {
     // Get manager roles from database
     const managerRoles = await getManagerRoles();
     const superAdminRole = await getSuperAdminRole();
-    const allManagerRoles = [...managerRoles, 'Manager']; // Include Manager as it might not be in DB
+    const allManagerRoles = [...managerRoles, 'Manager', 'Admin', 'Team Lead', 'Team Leader']; // Include Manager as it might not be in DB
     const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
     const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
     
@@ -370,6 +414,7 @@ router.get('/', async (req, res) => {
     let query = `
       SELECT 
         e.id,
+        e.user_id,
         e.emp_code,
         e.status,
         e.employee_status,
@@ -378,6 +423,8 @@ router.get('/', async (req, res) => {
         e.district,
         e.teams_id,
         e.whatsapp,
+        e.team_lead_id,
+        DATE_FORMAT(e.date_of_birth, '%Y-%m-%d') as date_of_birth,
         DATE_FORMAT(e.date_of_joining, '%Y-%m-%d') as date_of_joining,
         u.name,
         u.email,
@@ -985,6 +1032,41 @@ router.get('/hierarchy', requireSuperAdmin, async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role || '';
+    
+    // Check if user has employees.view permission
+    let hasPermission = false;
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    
+    if (isUserSuperAdmin || currentUserRole === 'Super Admin') {
+      hasPermission = true; // Super Admin always has permission
+    } else if (currentUserId) {
+      try {
+        const [users] = await db.query('SELECT role_id FROM users WHERE id = ?', [currentUserId]);
+        if (users.length > 0) {
+          const roleId = users[0].role_id;
+          const [permissions] = await db.query(`
+            SELECT COUNT(*) as count
+            FROM permissions p
+            INNER JOIN role_permissions rp ON p.id = rp.permission_id
+            WHERE rp.role_id = ? 
+            AND rp.allowed = TRUE
+            AND p.code = 'employees.view'
+          `, [roleId]);
+          hasPermission = permissions[0].count > 0;
+        }
+      } catch (permError) {
+        logger.warn('Error checking employees.view permission:', permError);
+      }
+    }
+    
+    // If no permission, deny access
+    if (!hasPermission) {
+      return res.status(403).json({ 
+        error: 'Access denied. You do not have permission to view this employee.' 
+      });
+    }
     
     const [employees] = await db.query(`
       SELECT 
@@ -1025,11 +1107,14 @@ router.get('/:id', async (req, res) => {
         u.mobile,
         u.status as user_status,
         r.name as role,
+        p.name as position,
         tl.name as team_lead_name,
-        tl.id as team_lead_user_id
+        tl.id as team_lead_user_id,
+        tl_emp.profile_photo_url as team_lead_photo_url
       FROM employees e
       INNER JOIN users u ON e.user_id = u.id
       LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
       LEFT JOIN employees tl_emp ON e.team_lead_id = tl_emp.id
       LEFT JOIN users tl ON tl_emp.user_id = tl.id
       WHERE e.id = ?
@@ -1620,54 +1705,35 @@ router.put('/:id', async (req, res) => {
     const currentUserRoleId = req.user?.role_id;
     const currentUserPositionId = req.user?.position_id;
     
-    // Get current user's level from database
-    let currentUserLevel = 2; // default
-    if (currentUserRoleId || currentUserPositionId) {
-      const [currentUserData] = await db.query(`
-        SELECT 
-          r.level as role_level,
-          p.level as position_level
-        FROM users u
-        LEFT JOIN roles r ON u.role_id = r.id
-        LEFT JOIN positions p ON u.position_id = p.id
-        WHERE u.id = ?
-      `, [currentUserId]);
-      
-      if (currentUserData.length > 0) {
-        const roleLevel = currentUserData[0].role_level;
-        const positionLevel = currentUserData[0].position_level;
-        currentUserLevel = roleLevel !== null && roleLevel !== undefined
-          ? roleLevel
-          : (positionLevel !== null && positionLevel !== undefined
-            ? positionLevel
-            : 2);
+    // Check if user has employees.edit permission
+    let hasEditPermission = false;
+    const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
+    
+    if (isUserSuperAdmin || currentUserRole === 'Super Admin') {
+      hasEditPermission = true; // Super Admin always has permission
+    } else if (currentUserId) {
+      try {
+        const [users] = await db.query('SELECT role_id FROM users WHERE id = ?', [currentUserId]);
+        if (users.length > 0) {
+          const roleId = users[0].role_id;
+          const [permissions] = await db.query(`
+            SELECT COUNT(*) as count
+            FROM permissions p
+            INNER JOIN role_permissions rp ON p.id = rp.permission_id
+            WHERE rp.role_id = ? 
+            AND rp.allowed = TRUE
+            AND p.code = 'employees.edit'
+          `, [roleId]);
+          hasEditPermission = permissions[0].count > 0;
+        }
+      } catch (permError) {
+        logger.warn('Error checking employees.edit permission:', permError);
       }
     }
     
-    const managerRoles = await getManagerRoles();
-    const superAdminRole = await getSuperAdminRole();
-    const allManagerRoles = [...managerRoles, 'Manager'];
-    const canManage = allManagerRoles.includes(currentUserRole) || (superAdminRole && currentUserRole === superAdminRole.name);
-    const isOwnProfile = currentUserId === userId;
-    
-    // Level 1 employees can edit Level 2 employees
-    const isLevel1EditingLevel2 = currentUserLevel === 1 && targetEmployeeLevel === 2;
-    
-    // Combined permission check: canManage OR isLevel1EditingLevel2 (for field-level permissions)
-    const canEditEmployee = canManage || isLevel1EditingLevel2;
-    
-    logger.debug('=== PERMISSION CHECK ===');
-    logger.debug('Current User ID:', currentUserId);
-    logger.debug('Current User Level:', currentUserLevel);
-    logger.debug('Target Employee ID:', userId);
-    logger.debug('Target Employee Level:', targetEmployeeLevel);
-    logger.debug('Can Manage:', canManage);
-    logger.debug('Is Own Profile:', isOwnProfile);
-    logger.debug('Is Level 1 Editing Level 2:', isLevel1EditingLevel2);
-    logger.debug('Can Edit Employee:', canEditEmployee);
-    
-    if (!canManage && !isOwnProfile && !isLevel1EditingLevel2) {
-      return res.status(403).json({ error: 'You can only update your own profile or Level 2 employees (if you are Level 1)' });
+    // If no permission, deny access
+    if (!hasEditPermission) {
+      return res.status(403).json({ error: 'Access denied. You do not have permission to edit this employee.' });
     }
     
     // Validation
@@ -1757,8 +1823,8 @@ router.put('/:id', async (req, res) => {
       }
     }
     
-    // Update user status if employee_status is provided (admins or Level 1 editing Level 2 can do this)
-    if (employee_status && canEditEmployee) {
+    // Update user status if employee_status is provided (users with edit permission can do this)
+    if (employee_status && hasEditPermission) {
       const userStatus = employee_status === 'Inactive' ? 'Inactive' : 'Active';
       await db.query('UPDATE users SET status = ? WHERE id = ?', [userStatus, userId]);
     }
@@ -1782,11 +1848,11 @@ router.put('/:id', async (req, res) => {
       return null;
     };
 
-    // Update employee - only admins can update most fields, users can update limited fields
+    // Update employee - users with edit permission can update all fields
     const empUpdates = [];
     const empParams = [];
 
-    if (canEditEmployee) {
+    if (hasEditPermission) {
       // Admins can update all fields
       if (empCode !== undefined) { empUpdates.push('emp_code = ?'); empParams.push(empCode); }
       if (status !== undefined) { empUpdates.push('status = ?'); empParams.push(status); }
@@ -1986,109 +2052,9 @@ router.put('/:id', async (req, res) => {
         empUpdates.push('whatsapp = ?'); 
         empParams.push(whatsappDigits || null); 
       }
-    } else if (isOwnProfile) {
-      // Users can update limited fields on their own profile
-      if (mobile !== undefined) { 
-        // Already handled in user update above
-      }
-      // Allow users to update their own basic employee information
-      // Always process these fields if they're in the request (including null values)
-      if ('date_of_birth' in req.body) {
-        if (date_of_birth && date_of_birth !== '') {
-          const formattedDate = formatDateForDB(date_of_birth);
-          empUpdates.push('date_of_birth = ?');
-          empParams.push(formattedDate);
-          logger.debug('Processing date_of_birth:', date_of_birth, '-> formatted:', formattedDate);
-        } else {
-          // Explicitly set to null if empty
-          empUpdates.push('date_of_birth = ?');
-          empParams.push(null);
-          logger.debug('Setting date_of_birth to NULL (empty value)');
-        }
-      }
-      if ('gender' in req.body) { 
-        empUpdates.push('gender = ?'); 
-        empParams.push(gender || null);
-        logger.debug('Processing gender:', gender);
-      }
-      if ('date_of_joining' in req.body) {
-        if (date_of_joining && date_of_joining !== '') {
-          const formattedDate = formatDateForDB(date_of_joining);
-          empUpdates.push('date_of_joining = ?');
-          empParams.push(formattedDate);
-          logger.debug('Processing date_of_joining:', date_of_joining, '-> formatted:', formattedDate);
-        } else {
-          // Explicitly set to null if empty
-          empUpdates.push('date_of_joining = ?');
-          empParams.push(null);
-          logger.debug('Setting date_of_joining to NULL (empty value)');
-        }
-      }
-      // Helper function to convert to uppercase
-      const toUpperCase = (value) => {
-        if (value && typeof value === 'string') {
-          return value.trim().toUpperCase();
-        }
-        return value;
-      };
-      
-      // Helper function to extract only digits
-      const extractDigits = (value) => {
-        if (value && typeof value === 'string') {
-          return value.replace(/\D/g, '');
-        }
-        return value;
-      };
-      
-      // Allow users to update their own finance information - encrypt before saving
-      if ('bank_name' in req.body) {
-        const encrypted = encryptBankDetails({ bank_name: toUpperCase(bank_name) || null });
-        empUpdates.push('bank_name = ?');
-        empParams.push(encrypted?.bank_name || null);
-      }
-      if ('bank_account_number' in req.body) {
-        const encrypted = encryptBankDetails({ bank_account_number: toUpperCase(bank_account_number) || null });
-        empUpdates.push('bank_account_number = ?');
-        empParams.push(encrypted?.bank_account_number || null);
-      }
-      if ('ifsc_code' in req.body) {
-        const encrypted = encryptBankDetails({ ifsc_code: toUpperCase(ifsc_code) || null });
-        empUpdates.push('ifsc_code = ?');
-        empParams.push(encrypted?.ifsc_code || null);
-      }
-      if ('pf_uan_number' in req.body) { empUpdates.push('pf_uan_number = ?'); empParams.push(toUpperCase(pf_uan_number) || null); }
-      if ('address1' in req.body) { empUpdates.push('address1 = ?'); empParams.push(toUpperCase(address1) || null); }
-      if ('address2' in req.body) { empUpdates.push('address2 = ?'); empParams.push(toUpperCase(address2) || null); }
-      if ('landmark' in req.body) { empUpdates.push('landmark = ?'); empParams.push(toUpperCase(landmark) || null); }
-      if ('state' in req.body) { empUpdates.push('state = ?'); empParams.push(toUpperCase(state) || null); }
-      if ('district' in req.body) { empUpdates.push('district = ?'); empParams.push(toUpperCase(district) || null); }
-      if ('pincode' in req.body) { 
-        const pincodeDigits = extractDigits(pincode);
-        empUpdates.push('pincode = ?'); 
-        empParams.push(pincodeDigits || null); 
-      }
-      if ('emergency_contact_name' in req.body) { empUpdates.push('emergency_contact_name = ?'); empParams.push(toUpperCase(emergency_contact_name) || null); }
-      logger.debug('Checking emergency_contact_relation - in req.body:', 'emergency_contact_relation' in req.body, 'value:', emergency_contact_relation, 'req.body keys:', Object.keys(req.body));
-      if ('emergency_contact_relation' in req.body) {
-        empUpdates.push('emergency_contact_relation = ?');
-        empParams.push(toUpperCase(emergency_contact_relation) || null);
-        logger.debug('Processing emergency_contact_relation:', emergency_contact_relation);
-      } else {
-        logger.error('ERROR: emergency_contact_relation NOT in req.body at isOwnProfile block!');
-      }
-      if ('emergency_contact_number' in req.body) { 
-        const contactDigits = extractDigits(emergency_contact_number);
-        empUpdates.push('emergency_contact_number = ?'); 
-        empParams.push(contactDigits || null); 
-      }
-      if ('profile_photo_url' in req.body) { empUpdates.push('profile_photo_url = ?'); empParams.push(profile_photo_url || null); }
-      if ('teams_id' in req.body) { empUpdates.push('teams_id = ?'); empParams.push(teams_id || null); }
-      if ('whatsapp' in req.body) { 
-        const whatsappDigits = extractDigits(whatsapp);
-        empUpdates.push('whatsapp = ?'); 
-        empParams.push(whatsappDigits || null); 
-      }
     }
+    
+    // Note: Users without edit permission should use /my-profile endpoint to update their own profile
     
     if (empUpdates.length > 0) {
       empParams.push(id);
@@ -2276,7 +2242,7 @@ router.post('/:id/documents', uploadDocument.single('file'), async (req, res) =>
     const currentUserRole = req.user?.role || '';
     const managerRoles = await getManagerRoles();
     const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
-    const allManagerRoles = [...managerRoles, 'Manager'];
+    const allManagerRoles = [...managerRoles, 'Manager', 'Admin', 'Team Lead', 'Team Leader'];
     const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
     
     // Check if employee exists and user has access
@@ -2463,7 +2429,7 @@ router.put('/:id/documents/:docId/unverify', async (req, res) => {
     const currentUserRole = req.user?.role || '';
     const managerRoles = await getManagerRoles();
     const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
-    const allManagerRoles = [...managerRoles, 'Manager', 'Admin'];
+    const allManagerRoles = [...managerRoles, 'Manager', 'Admin', 'Team Lead', 'Team Leader'];
     const canManage = allManagerRoles.includes(currentUserRole) || isUserSuperAdmin;
     
     if (!canManage) {
@@ -2545,8 +2511,33 @@ router.delete('/:id/documents/:docId', async (req, res) => {
     const isLevel1 = document.employee_level === 1;
     const isLevel2 = document.employee_level === 2;
     
+    // Get current user's level to check if level 1 editing level 2
+    const [currentUserData] = await db.query(`
+      SELECT 
+        r.level as role_level,
+        p.level as position_level
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
+      WHERE u.id = ?
+    `, [currentUserId]);
+    
+    let currentUserLevel = 2; // default
+    if (currentUserData.length > 0) {
+      const roleLevel = currentUserData[0].role_level;
+      const positionLevel = currentUserData[0].position_level;
+      currentUserLevel = roleLevel !== null && roleLevel !== undefined
+        ? roleLevel
+        : (positionLevel !== null && positionLevel !== undefined
+          ? positionLevel
+          : 2);
+    }
+    
+    // Level 1 employees can delete documents of Level 2 employees
+    const isLevel1EditingLevel2 = currentUserLevel === 1 && isLevel2;
+    
     // Check permissions
-    if (!canManage && !isOwnProfile) {
+    if (!canManage && !isOwnProfile && !isLevel1EditingLevel2) {
       return res.status(403).json({ error: 'You can only delete your own documents' });
     }
     

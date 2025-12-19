@@ -18,8 +18,20 @@ router.get('/', async (req, res) => {
     const userId = req.user?.id;
     const userRole = req.user?.role || '';
     
-    // Super Admin, Admin, and Team Leader can see all leaves
-    // Other users can only see their own leaves
+    // Get current user's employee record and level
+    const [currentEmployeeData] = await db.query(`
+      SELECT 
+        e.id as employee_id,
+        e.team_lead_id,
+        r.level as role_level,
+        p.level as position_level
+      FROM employees e
+      INNER JOIN users u ON e.user_id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
+      WHERE e.user_id = ?
+    `, [userId]);
+    
     let query = `
       SELECT 
         l.*,
@@ -44,15 +56,38 @@ router.get('/', async (req, res) => {
     `;
     const params = [];
     
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
-      // Get employee_id for current user
-      const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
-      if (employeeData.length === 0) {
+    // Super Admin can see all leaves
+    if (userRole !== 'Super Admin') {
+      if (currentEmployeeData.length === 0) {
         return res.json({ data: [], pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, totalPages: 0 } });
       }
-      const employeeId = employeeData[0].id;
-      query += ' AND l.employee_id = ?';
-      params.push(employeeId);
+      
+      const currentEmployeeId = currentEmployeeData[0].employee_id;
+      const roleLevel = currentEmployeeData[0].role_level;
+      const positionLevel = currentEmployeeData[0].position_level;
+      
+      // Determine current user's level: role_level > position_level > default 2
+      const currentUserLevel = roleLevel !== null && roleLevel !== undefined 
+        ? roleLevel 
+        : (positionLevel !== null && positionLevel !== undefined 
+          ? positionLevel 
+          : 2);
+      
+      if (currentUserLevel === 2) {
+        // Level 2 employees can only see their own leaves
+        query += ' AND l.employee_id = ?';
+        params.push(currentEmployeeId);
+      } else if (currentUserLevel === 1) {
+        // Level 1 users (Team Leads/Managers) can see:
+        // 1. Leaves of employees who report to them (e.team_lead_id = current employee_id)
+        // 2. Their own leaves (l.employee_id = current employee_id)
+        query += ' AND (e.team_lead_id = ? OR l.employee_id = ?)';
+        params.push(currentEmployeeId, currentEmployeeId);
+      } else {
+        // For other cases (shouldn't happen), only show own leaves
+        query += ' AND l.employee_id = ?';
+        params.push(currentEmployeeId);
+      }
     }
     
     query += ' ORDER BY l.created_at DESC LIMIT ? OFFSET ?';
@@ -69,14 +104,31 @@ router.get('/', async (req, res) => {
     `;
     const countParams = [];
     
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
-      const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
-      if (employeeData.length === 0) {
+    if (userRole !== 'Super Admin') {
+      if (currentEmployeeData.length === 0) {
         return res.json({ data: [], pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, totalPages: 0 } });
       }
-      const employeeId = employeeData[0].id;
-      countQuery += ' AND l.employee_id = ?';
-      countParams.push(employeeId);
+      
+      const currentEmployeeId = currentEmployeeData[0].employee_id;
+      const roleLevel = currentEmployeeData[0].role_level;
+      const positionLevel = currentEmployeeData[0].position_level;
+      
+      const currentUserLevel = roleLevel !== null && roleLevel !== undefined 
+        ? roleLevel 
+        : (positionLevel !== null && positionLevel !== undefined 
+          ? positionLevel 
+          : 2);
+      
+      if (currentUserLevel === 2) {
+        countQuery += ' AND l.employee_id = ?';
+        countParams.push(currentEmployeeId);
+      } else if (currentUserLevel === 1) {
+        countQuery += ' AND (e.team_lead_id = ? OR l.employee_id = ?)';
+        countParams.push(currentEmployeeId, currentEmployeeId);
+      } else {
+        countQuery += ' AND l.employee_id = ?';
+        countParams.push(currentEmployeeId);
+      }
     }
     
     const [countResult] = await db.query(countQuery, countParams);
@@ -132,9 +184,44 @@ router.get('/:id', async (req, res) => {
     const leave = leaves[0];
     
     // Check if user can access this leave
-    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
-      const [employeeData] = await db.query('SELECT id FROM employees WHERE user_id = ?', [userId]);
-      if (employeeData.length === 0 || employeeData[0].id !== leave.employee_id) {
+    if (userRole !== 'Super Admin') {
+      // Get current user's employee record and level
+      const [currentEmployeeData] = await db.query(`
+        SELECT 
+          e.id as employee_id,
+          e.team_lead_id,
+          r.level as role_level,
+          p.level as position_level
+        FROM employees e
+        INNER JOIN users u ON e.user_id = u.id
+        LEFT JOIN roles r ON u.role_id = r.id
+        LEFT JOIN positions p ON u.position_id = p.id
+        WHERE e.user_id = ?
+      `, [userId]);
+      
+      if (currentEmployeeData.length === 0) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      const currentEmployeeId = currentEmployeeData[0].employee_id;
+      const roleLevel = currentEmployeeData[0].role_level;
+      const positionLevel = currentEmployeeData[0].position_level;
+      
+      // Determine current user's level
+      const currentUserLevel = roleLevel !== null && roleLevel !== undefined 
+        ? roleLevel 
+        : (positionLevel !== null && positionLevel !== undefined 
+          ? positionLevel 
+          : 2);
+      
+      // Check access:
+      // 1. If user created the leave (l.employee_id = current employee_id) - allow
+      // 2. If user is Level 1 and is the team lead of the employee who created the leave (e.team_lead_id = current employee_id) - allow
+      // 3. Otherwise - deny
+      const isOwnLeave = leave.employee_id === currentEmployeeId;
+      const isTeamLeadOfEmployee = currentUserLevel === 1 && leave.team_lead_id === currentEmployeeId;
+      
+      if (!isOwnLeave && !isTeamLeadOfEmployee) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }

@@ -46,32 +46,7 @@ export default function MyDeviceView() {
     return `${currencySymbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }, [currencySymbol]);
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !asset) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-12">
-          <Laptop className="mx-auto h-12 w-12 mb-4 text-muted-foreground opacity-50" />
-          <h2 className="text-2xl font-bold mb-2">Device Not Found</h2>
-          <p className="text-muted-foreground mb-4">
-            {(error as any)?.message || "The device you're looking for doesn't exist or you don't have access to it."}
-          </p>
-          <Button onClick={handleNavigateBack}>Back</Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Memoized derived values
+  // Memoized derived values - must be before early returns
   const categoryName = useMemo(() => asset?.category_name?.toLowerCase() || "", [asset?.category_name]);
   const isLaptop = useMemo(() => categoryName.includes('laptop'), [categoryName]);
   const isMobile = useMemo(() => categoryName.includes('mobile'), [categoryName]);
@@ -98,6 +73,32 @@ export default function MyDeviceView() {
     navigate('/my-devices');
   }, [navigate]);
 
+  // Early returns after all hooks
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !asset) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="text-center py-12">
+          <Laptop className="mx-auto h-12 w-12 mb-4 text-muted-foreground opacity-50" />
+          <h2 className="text-2xl font-bold mb-2">Device Not Found</h2>
+          <p className="text-muted-foreground mb-4">
+            {(error as any)?.message || "The device you're looking for doesn't exist or you don't have access to it."}
+          </p>
+          <Button onClick={handleNavigateBack}>Back</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto p-6 space-y-6 ">
       {/* Header */}
@@ -118,24 +119,7 @@ export default function MyDeviceView() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge
-            variant={
-              asset.status === "available"
-                ? "success"
-                : asset.status === "assigned"
-                ? "info"
-                : asset.status === "repair"
-                ? "warning"
-                : "error"
-            }
-          >
-            <div className="flex items-center gap-2">
-              {getStatusIcon(asset.status)}
-              {asset.status}
-            </div>
-          </StatusBadge>
-        </div>
+        
       </div>
 
       {/* Basic Information */}
@@ -164,8 +148,8 @@ export default function MyDeviceView() {
                       : "error"
                   }
                 >
-                  <div className="flex items-center gap-2">
-                    {getStatusIcon(asset.status)}
+                  <div className="flex items-center gap-2 uppercase">
+                    {/* {getStatusIcon(asset.status)} */}
                     {asset.status}
                   </div>
                 </StatusBadge>

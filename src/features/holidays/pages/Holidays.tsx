@@ -7,6 +7,7 @@ import {
   Edit,
   Trash2,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -237,6 +238,27 @@ export default function Holidays() {
   const regularHolidays = holidays.filter((h: any) => !h.is_restricted);
   const restrictedHolidays = holidays.filter((h: any) => h.is_restricted);
 
+  // Check if holiday is completed (date has passed)
+  const isHolidayCompleted = (holidayDate: string): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const holiday = new Date(holidayDate);
+    holiday.setHours(0, 0, 0, 0);
+    return holiday < today;
+  };
+
+  // Calculate days ago for completed holidays or days until for upcoming holidays
+  const getDaysInfo = (holidayDate: string): { days: number; isPast: boolean } | null => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const holiday = new Date(holidayDate);
+    holiday.setHours(0, 0, 0, 0);
+    const diffTime = holiday.getTime() - today.getTime();
+    const diffDays = Math.floor(Math.abs(diffTime) / (1000 * 60 * 60 * 24));
+    const isPast = holiday < today;
+    return { days: diffDays, isPast };
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -299,9 +321,12 @@ export default function Holidays() {
 
       {/* Regular Holidays */}
       {regularHolidays.length > 0 && (
-        <Card>
+        <Card className="border-2 border-orange-500/20 shadow-lg bg-gradient-to-br from-orange-500/5 via-transparent to-transparent">
           <CardHeader>
-            <CardTitle>List of Holidays {yearFilter}</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-orange-600" />
+              List of Holidays {yearFilter}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -309,51 +334,94 @@ export default function Holidays() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Sl. No.</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Day</TableHead>
-                    <TableHead>Holiday</TableHead>
-                    {isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {regularHolidays.map((holiday: any, index: number) => (
-                    <TableRow key={holiday.id}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>
-                        {format(new Date(holiday.date), "dd-MMM-yyyy")}
-                      </TableCell>
-                      <TableCell>{holiday.day}</TableCell>
-                      <TableCell>{holiday.holiday_name}</TableCell>
-                      {isSuperAdmin && (
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
-                              onClick={() => handleEdit(holiday)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => handleDelete(holiday)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      )}
+              <div className="rounded-lg border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Sl. No.</TableHead>
+                      <TableHead className="font-semibold">Holiday</TableHead>
+                      <TableHead className="font-semibold">Date & Day</TableHead>
+                      <TableHead className="font-semibold">Days</TableHead>
+                      {isSuperAdmin && <TableHead className="text-right font-semibold">Actions</TableHead>}
+                      <TableHead className="text-right font-semibold">Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {regularHolidays.map((holiday: any, index: number) => {
+                      const isCompleted = isHolidayCompleted(holiday.date);
+                      const daysInfo = getDaysInfo(holiday.date);
+                      return (
+                        <TableRow 
+                          key={holiday.id}
+                          className={`hover:bg-muted/30 transition-colors ${isCompleted ? 'opacity-75' : ''}`}
+                        >
+                          <TableCell className="font-medium">{index + 1}</TableCell>
+                          <TableCell>
+                            <span className="font-medium">{holiday.holiday_name}</span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1.5">
+                                <Calendar className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">
+                                  {format(new Date(holiday.date), "dd MMM yyyy")}
+                                </span>
+                              </div>
+                              <Badge variant="outline" className="font-normal text-xs w-fit">
+                                {holiday.day}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {daysInfo ? (
+                                daysInfo.isPast 
+                                  ? `${daysInfo.days} days ago` 
+                                  : daysInfo.days === 0 
+                                    ? 'Today' 
+                                    : `in ${daysInfo.days} days`
+                              ) : '-'}
+                            </span>
+                          </TableCell>
+                          {isSuperAdmin && (
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
+                                  onClick={() => handleEdit(holiday)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() => handleDelete(holiday)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right">
+                            {isCompleted && (
+                              <Badge 
+                                variant="secondary" 
+                                className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200"
+                              >
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Completed
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -361,56 +429,107 @@ export default function Holidays() {
 
       {/* Restricted Holidays */}
       {restrictedHolidays.length > 0 && (
-        <Card>
+        <Card className="border-2 border-purple-500/20 shadow-lg bg-gradient-to-br from-purple-500/5 via-transparent to-transparent">
           <CardHeader>
-            <CardTitle>Restricted Holidays</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-purple-600" />
+              Restricted Holidays
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Sl. No.</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Day</TableHead>
-                  <TableHead>Holiday</TableHead>
-                  {isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {restrictedHolidays.map((holiday: any, index: number) => (
-                  <TableRow key={holiday.id}>
-                    <TableCell>{index + 1}</TableCell>
-                    <TableCell>
-                      {format(new Date(holiday.date), "dd-MMM-yyyy")}
-                    </TableCell>
-                    <TableCell>{holiday.day}</TableCell>
-                    <TableCell>{holiday.holiday_name}</TableCell>
-                    {isSuperAdmin && (
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
-                            onClick={() => handleEdit(holiday)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => handleDelete(holiday)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    )}
+            <div className="rounded-lg border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Sl. No.</TableHead>
+                    <TableHead className="font-semibold">Holiday</TableHead>
+                    <TableHead className="font-semibold">Date & Day</TableHead>
+                    <TableHead className="font-semibold">Days</TableHead>
+                    {isSuperAdmin && <TableHead className="text-right font-semibold">Actions</TableHead>}
+                    <TableHead className="text-right font-semibold">Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {restrictedHolidays.map((holiday: any, index: number) => {
+                    const isCompleted = isHolidayCompleted(holiday.date);
+                    const daysInfo = getDaysInfo(holiday.date);
+                    return (
+                      <TableRow 
+                        key={holiday.id}
+                        className={`hover:bg-muted/30 transition-colors ${isCompleted ? 'opacity-75' : ''}`}
+                      >
+                        <TableCell className="font-medium">{index + 1}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{holiday.holiday_name}</span>
+                            <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 text-xs">
+                              Restricted
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(holiday.date), "dd MMM yyyy")}
+                              </span>
+                            </div>
+                            <Badge variant="outline" className="font-normal text-xs w-fit">
+                              {holiday.day}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {daysInfo ? (
+                              daysInfo.isPast 
+                                ? `${daysInfo.days} days ago` 
+                                : daysInfo.days === 0 
+                                  ? 'Today' 
+                                  : `in ${daysInfo.days} days`
+                            ) : '-'}
+                          </span>
+                        </TableCell>
+                        {isSuperAdmin && (
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
+                                onClick={() => handleEdit(holiday)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => handleDelete(holiday)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
+                        <TableCell className="text-right">
+                          {isCompleted && (
+                            <Badge 
+                              variant="secondary" 
+                              className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200"
+                            >
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Completed
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}

@@ -134,7 +134,7 @@ export default function KanbanBoardDetail() {
   // Fetch users for assignment
   const { data: usersData } = useQuery({
     queryKey: ['users'],
-    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
+    queryFn: () => usersApi.getForDropdown({ limit: 100 }),
     staleTime: 1000 * 60 * 10, // 10 minutes
   });
 

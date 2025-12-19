@@ -20,8 +20,8 @@ export function PWAUpdatePrompt() {
     } else if (dismissedTime) {
       const dismissedTimestamp = parseInt(dismissedTime);
       const hoursSinceDismissed = (Date.now() - dismissedTimestamp) / (1000 * 60 * 60);
-      // Show again after 1 hour
-      if (hoursSinceDismissed < 1) {
+      // Show again after 24 hours (changed from 1 hour to reduce frequency)
+      if (hoursSinceDismissed < 24) {
         setDismissed(true);
       }
     }

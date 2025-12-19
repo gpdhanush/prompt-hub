@@ -162,9 +162,10 @@ export default function Users() {
   });
 
   // Fetch Team Lead users for Developer, Designer, and Tester role assignment - optimized query
+  // Use for-dropdown endpoint which doesn't require full permission
   const { data: teamLeadsData } = useQuery({
-    queryKey: ['team-leads'],
-    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
+    queryKey: ['team-leads-for-dropdown'],
+    queryFn: () => usersApi.getForDropdown({ limit: 100 }),
     enabled: userForm.role === 'developer' || userForm.role === 'designer' || userForm.role === 'tester',
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes

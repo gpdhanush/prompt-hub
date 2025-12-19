@@ -20,6 +20,14 @@ export const usersApi = {
     return response.data;
   },
 
+  getForDropdown: async (params?: { search?: string; limit?: number }) => {
+    const queryParams = params ? cleanParams(params) : {};
+    const response = await apiClient.get<{ data: any[] }>('/users/for-dropdown', {
+      params: queryParams,
+    });
+    return response.data;
+  },
+
   getAssignable: async () => {
     const response = await apiClient.get<{ data: any[] }>('/users/assignable');
     return response.data;

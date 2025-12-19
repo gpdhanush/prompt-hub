@@ -123,50 +123,62 @@ const LeaveRow = React.memo(({
         </StatusBadge>
       </TableCell>
       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onView(leave)}>
-              <Eye className="mr-2 h-4 w-4" />
-              View Details
-            </DropdownMenuItem>
-            {leave.status === "Pending" && canApproveReject && (
-              <>
-                {canAcceptLeaves && (
-                  <DropdownMenuItem onClick={() => onApprove(leave)}>
-                    <Check className="mr-2 h-4 w-4" />
-                    Approve
-                  </DropdownMenuItem>
-                )}
-                {canRejectLeaves && (
-                  <DropdownMenuItem onClick={() => onReject(leave)} className="text-destructive">
-                    <X className="mr-2 h-4 w-4" />
-                    Reject
-                  </DropdownMenuItem>
-                )}
-              </>
-            )}
-            {leave.status === 'Pending' && (
-              <DropdownMenuItem onClick={() => onEdit(leave)}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
+        <div className="flex items-center justify-end gap-2">
+          {leave.status === "Pending" && canApproveReject && (
+            <>
+              {canAcceptLeaves && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+                  onClick={() => onApprove(leave)}
+                  title="Approve"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                </Button>
+              )}
+              {canRejectLeaves && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => onReject(leave)}
+                  title="Reject"
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              )}
+            </>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onView(leave)}>
+                <Eye className="mr-2 h-4 w-4" />
+                View Details
               </DropdownMenuItem>
-            )}
-            {leave.status === 'Pending' && (
-              <DropdownMenuItem 
-                onClick={() => onDelete(leave)}
-                className="text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {leave.status === 'Pending' && (
+                <DropdownMenuItem onClick={() => onEdit(leave)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {leave.status === 'Pending' && (
+                <DropdownMenuItem 
+                  onClick={() => onDelete(leave)}
+                  className="text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </TableCell>
     </TableRow>
   );
@@ -199,6 +211,12 @@ export default function Leaves() {
   const canApproveLeaves = canAcceptLeaves || canRejectLeaves;
 
   const [leaveForm, setLeaveForm] = useState({
+    leave_type: "",
+    start_date: "",
+    end_date: "",
+    reason: "",
+  });
+  const [formErrors, setFormErrors] = useState({
     leave_type: "",
     start_date: "",
     end_date: "",
@@ -316,15 +334,58 @@ export default function Leaves() {
       end_date: "",
       reason: "",
     });
+    setFormErrors({
+      leave_type: "",
+      start_date: "",
+      end_date: "",
+      reason: "",
+    });
   }, []);
 
+  const validateForm = useCallback(() => {
+    const errors = {
+      leave_type: "",
+      start_date: "",
+      end_date: "",
+      reason: "",
+    };
+    let isValid = true;
+
+    if (!leaveForm.leave_type) {
+      errors.leave_type = "Leave type is required";
+      isValid = false;
+    }
+    if (!leaveForm.start_date) {
+      errors.start_date = "Start date is required";
+      isValid = false;
+    }
+    if (!leaveForm.end_date) {
+      errors.end_date = "End date is required";
+      isValid = false;
+    }
+    if (!leaveForm.reason || leaveForm.reason.trim() === "") {
+      errors.reason = "Reason is required";
+      isValid = false;
+    }
+    if (leaveForm.start_date && leaveForm.end_date) {
+      const startDate = new Date(leaveForm.start_date);
+      const endDate = new Date(leaveForm.end_date);
+      if (endDate < startDate) {
+        errors.end_date = "End date must be after start date";
+        isValid = false;
+      }
+    }
+
+    setFormErrors(errors);
+    return isValid;
+  }, [leaveForm]);
+
   const handleCreate = useCallback(() => {
-    if (!leaveForm.leave_type || !leaveForm.start_date || !leaveForm.end_date || !leaveForm.reason) {
-      toast({ title: "Error", description: "Please fill in all required fields.", variant: "destructive" });
+    if (!validateForm()) {
       return;
     }
     createMutation.mutate(leaveForm);
-  }, [leaveForm, createMutation]);
+  }, [leaveForm, createMutation, validateForm]);
 
   const handleEdit = useCallback((leave: any) => {
     setSelectedLeave(leave);
@@ -339,12 +400,11 @@ export default function Leaves() {
 
   const handleUpdate = useCallback(() => {
     if (!selectedLeave) return;
-    if (!leaveForm.leave_type || !leaveForm.start_date || !leaveForm.end_date || !leaveForm.reason) {
-      toast({ title: "Error", description: "Please fill in all required fields.", variant: "destructive" });
+    if (!validateForm()) {
       return;
     }
     updateMutation.mutate({ id: selectedLeave.id, data: leaveForm });
-  }, [selectedLeave, leaveForm, updateMutation]);
+  }, [selectedLeave, leaveForm, updateMutation, validateForm]);
 
   const handleDelete = useCallback((leave: any) => {
     setSelectedLeave(leave);
@@ -454,63 +514,103 @@ export default function Leaves() {
               <DialogTitle>Apply for Leave</DialogTitle>
               <DialogDescription>Submit a new leave request</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="leave-type">Leave Type *</Label>
-                <Select
-                  value={leaveForm.leave_type}
-                  onValueChange={(value) => setLeaveForm({ ...leaveForm, leave_type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select leave type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Annual">Annual</SelectItem>
-                    <SelectItem value="Sick">Sick</SelectItem>
-                    <SelectItem value="Personal">Personal</SelectItem>
-                    <SelectItem value="Emergency">Emergency</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleCreate(); }} noValidate>
+              <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="start-date">Start Date *</Label>
-                  <DatePicker
-                    id="start-date"
-                    value={leaveForm.start_date}
-                    onChange={(date) => setLeaveForm({ ...leaveForm, start_date: date })}
-                    placeholder="Select start date"
-                  />
+                  <Label htmlFor="leave-type" className={formErrors.leave_type ? "text-destructive" : ""}>
+                    Leave Type *
+                  </Label>
+                  <Select
+                    value={leaveForm.leave_type}
+                    onValueChange={(value) => {
+                      setLeaveForm({ ...leaveForm, leave_type: value });
+                      setFormErrors({ ...formErrors, leave_type: "" });
+                    }}
+                  >
+                    <SelectTrigger className={formErrors.leave_type ? "border-destructive" : ""}>
+                      <SelectValue placeholder="Select leave type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Annual">Annual</SelectItem>
+                      <SelectItem value="Sick">Sick</SelectItem>
+                      <SelectItem value="Personal">Personal</SelectItem>
+                      <SelectItem value="Emergency">Emergency</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {formErrors.leave_type && (
+                    <p className="text-sm text-destructive">{formErrors.leave_type}</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="start-date" className={formErrors.start_date ? "text-destructive" : ""}>
+                      Start Date *
+                    </Label>
+                    <DatePicker
+                      id="start-date"
+                      value={leaveForm.start_date}
+                      onChange={(date) => {
+                        setLeaveForm({ ...leaveForm, start_date: date });
+                        setFormErrors({ ...formErrors, start_date: "" });
+                      }}
+                      placeholder="Select start date"
+                      className={formErrors.start_date ? "border-destructive" : ""}
+                    />
+                    {formErrors.start_date && (
+                      <p className="text-sm text-destructive">{formErrors.start_date}</p>
+                    )}
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="end-date" className={formErrors.end_date ? "text-destructive" : ""}>
+                      End Date *
+                    </Label>
+                    <DatePicker
+                      id="end-date"
+                      value={leaveForm.end_date}
+                      onChange={(date) => {
+                        setLeaveForm({ ...leaveForm, end_date: date });
+                        setFormErrors({ ...formErrors, end_date: "" });
+                      }}
+                      placeholder="Select end date"
+                      className={formErrors.end_date ? "border-destructive" : ""}
+                    />
+                    {formErrors.end_date && (
+                      <p className="text-sm text-destructive">{formErrors.end_date}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="end-date">End Date *</Label>
-                  <DatePicker
-                    id="end-date"
-                    value={leaveForm.end_date}
-                    onChange={(date) => setLeaveForm({ ...leaveForm, end_date: date })}
-                    placeholder="Select end date"
+                  <Label htmlFor="reason" className={formErrors.reason ? "text-destructive" : ""}>
+                    Reason *
+                  </Label>
+                  <Textarea
+                    id="reason"
+                    placeholder="Enter reason for leave"
+                    value={leaveForm.reason}
+                    onChange={(e) => {
+                      setLeaveForm({ ...leaveForm, reason: e.target.value });
+                      setFormErrors({ ...formErrors, reason: "" });
+                    }}
+                    rows={4}
+                    className={formErrors.reason ? "border-destructive" : ""}
                   />
+                  {formErrors.reason && (
+                    <p className="text-sm text-destructive">{formErrors.reason}</p>
+                  )}
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="reason">Reason *</Label>
-                <Textarea
-                  id="reason"
-                  placeholder="Enter reason for leave"
-                  value={leaveForm.reason}
-                  onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                  rows={4}
-                />
-              </div>
+            </form>
               <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1" onClick={() => setShowCreateDialog(false)}>
+                <Button variant="outline" className="flex-1" onClick={() => {
+                  setShowCreateDialog(false);
+                  resetForm();
+                }}>
                   Cancel
                 </Button>
                 <Button className="flex-1" onClick={handleCreate} disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Submitting..." : "Submit Request"}
                 </Button>
               </div>
-            </div>
           </DialogContent>
         </Dialog>
       </div>
@@ -771,8 +871,8 @@ export default function Leaves() {
                   <FileText className="h-4 w-4" />
                   Basic Information
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {canApproveLeaves && (
+                {canApproveLeaves ? (
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                         <User className="h-3.5 w-3.5" />
@@ -780,24 +880,43 @@ export default function Leaves() {
                       </Label>
                       <p className="text-sm font-medium">{selectedLeave.employee_name || 'N/A'}</p>
                     </div>
-                  )}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <FileText className="h-3.5 w-3.5" />
-                      Leave Type
-                    </Label>
-                    <p className="text-sm font-medium">{selectedLeave.leave_type}</p>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5" />
+                        Leave Type
+                      </Label>
+                      <p className="text-sm font-medium">{selectedLeave.leave_type}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" />
+                        Duration
+                      </Label>
+                      <p className="text-sm font-medium">
+                        {selectedLeave.duration || 0} day{(selectedLeave.duration || 0) > 1 ? "s" : ""}
+                      </p>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5" />
-                      Duration
-                    </Label>
-                    <p className="text-sm font-medium">
-                      {selectedLeave.duration || 0} day{(selectedLeave.duration || 0) > 1 ? "s" : ""}
-                    </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5" />
+                        Leave Type
+                      </Label>
+                      <p className="text-sm font-medium">{selectedLeave.leave_type}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" />
+                        Duration
+                      </Label>
+                      <p className="text-sm font-medium">
+                        {selectedLeave.duration || 0} day{(selectedLeave.duration || 0) > 1 ? "s" : ""}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               <Separator />
@@ -894,6 +1013,38 @@ export default function Leaves() {
                           </div>
                         )}
                       </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Action Buttons for Level 1 Users */}
+              {canApproveLeaves && selectedLeave.status === 'Pending' && (
+                <>
+                  <Separator />
+                  <div className="flex gap-3 pt-2">
+                    {canAcceptLeaves && (
+                      <Button
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => handleApprove(selectedLeave)}
+                        disabled={approveRejectMutation.isPending}
+                      >
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        {approveRejectMutation.isPending ? "Approving..." : "Approve"}
+                      </Button>
+                    )}
+                    {canRejectLeaves && (
+                      <Button
+                        variant="destructive"
+                        className="flex-1"
+                        onClick={() => {
+                          setShowRejectDialog(true);
+                        }}
+                        disabled={approveRejectMutation.isPending}
+                      >
+                        <XCircle className="mr-2 h-4 w-4" />
+                        Reject
+                      </Button>
                     )}
                   </div>
                 </>

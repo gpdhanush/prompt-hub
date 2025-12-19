@@ -262,10 +262,6 @@ export default function Settings() {
     );
   }
 
-  function handleColorSelect(value: string): void {
-    throw new Error("Function not implemented.");
-  }
-
   function handleRegenerateBackupCodes(event: React.MouseEvent<HTMLButtonElement>): void {
     // You can add logic here to actually regenerate backup codes
     // For now we'll simply show a toast
@@ -331,7 +327,7 @@ export default function Settings() {
                         {themeColors.map((color) => (
                           <button
                             key={color.class}
-                            onClick={() => handleColorSelect(color.value)}
+                            onClick={() => handleColorChange(color.value)}
                             className={`relative h-14 w-full rounded-xl border-2 transition-all transform hover:scale-105 hover:shadow-lg ${
                               selectedColor === color.value
                                 ? "border-primary ring-4 ring-primary/30 ring-offset-2 shadow-lg scale-105"

@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, DollarSign, FileText, Image as ImageIcon, Download, Trash2, Check, X, User, Calendar, Building, AlertCircle, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { ArrowLeft, DollarSign, FileText, Image as ImageIcon, Download, Trash2, Check, X, User, Calendar, Building, AlertCircle, CheckCircle2, XCircle, Clock, Eye } from "lucide-react";
 import { settingsApi } from "@/lib/api";
 import { reimbursementsApi } from "@/features/reimbursements/api";
 import { getCurrentUser } from "@/lib/auth";
@@ -104,23 +104,7 @@ export default function ReimbursementView() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!reimbursement) {
-    return (
-      <div className="text-center py-12">
-        <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <p className="text-muted-foreground">Reimbursement not found</p>
-      </div>
-    );
-  }
-
+  // All hooks must be called before any early returns
   const formatCurrency = useCallback((amount: number) => {
     return `${currencySymbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }, [currencySymbol]);
@@ -158,6 +142,18 @@ export default function ReimbursementView() {
     rejectMutation.mutate(rejectionReason);
   }, [rejectionReason, rejectMutation]);
 
+  const handleNavigateBack = useCallback(() => {
+    navigate('/reimbursements');
+  }, [navigate]);
+
+  const handleNavigateEdit = useCallback(() => {
+    navigate(`/reimbursements/${id}/edit`);
+  }, [navigate, id]);
+
+  const handleRejectionReasonChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setRejectionReason(e.target.value);
+  }, []);
+
   const getStatusIcon = useCallback((status: string) => {
     switch (status) {
       case 'Pending':
@@ -176,19 +172,23 @@ export default function ReimbursementView() {
     }
   }, []);
 
-  // Memoized navigation handlers
-  const handleNavigateBack = useCallback(() => {
-    navigate('/reimbursements');
-  }, [navigate]);
+  // Early returns after all hooks
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
-  const handleNavigateEdit = useCallback(() => {
-    navigate(`/reimbursements/${id}/edit`);
-  }, [navigate, id]);
-
-  // Memoized handler for rejection reason change
-  const handleRejectionReasonChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setRejectionReason(e.target.value);
-  }, []);
+  if (!reimbursement) {
+    return (
+      <div className="text-center py-12">
+        <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <p className="text-muted-foreground">Reimbursement not found</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

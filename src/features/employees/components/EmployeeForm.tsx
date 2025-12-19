@@ -151,9 +151,10 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
   });
 
   // Fetch users, roles, positions
+  // Use for-dropdown endpoint which doesn't require full users.view permission
   const { data: usersData } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
+    queryKey: ['users-for-dropdown'],
+    queryFn: () => usersApi.getForDropdown({ limit: 100 }),
   });
 
   const { data: rolesData } = useQuery({
@@ -192,7 +193,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
   
   // Filter positions based on role mapping
   // rolePositions contains positions with is_mapped flag (1 or 0)
-  const availablePositions = formData.role && rolePositions.length > 0
+  let availablePositions = formData.role && rolePositions.length > 0
     ? rolePositions
         .filter((rp: any) => {
           // Filter to only show positions that are mapped (is_mapped === 1 or true)
@@ -213,6 +214,14 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     ? allPositions // Show all positions if no role selected
     : allPositions; // Fallback: show all positions
 
+  // In edit mode, ensure the current position is included even if not in role mappings
+  if (mode === 'edit' && employeeData?.data?.position && formData.position) {
+    const currentPosition = allPositions.find((p: any) => p.name === formData.position);
+    if (currentPosition && !availablePositions.find((p: any) => p.name === formData.position)) {
+      availablePositions = [currentPosition, ...availablePositions];
+    }
+  }
+
   // Get available reporting managers
   const getAvailableReportingManagers = () => {
     const filteredUsers = isSuperAdmin ? allUsers : allUsers.filter((u: any) => u.role !== 'Super Admin');
@@ -225,39 +234,51 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     const selectedRoleData = allRoles.find((role: any) => role.name === selectedRole);
     const reportingRoleName = selectedRoleData?.reporting_person_role_name;
     
+    let managers = [];
+    
     if (reportingRoleName) {
-      return filteredUsers.filter((user: any) => 
+      managers = filteredUsers.filter((user: any) => 
         user.role === reportingRoleName && user.id !== currentUserId
       );
-    }
-    
-    const isManagerRole = managerRoles.includes(selectedRole);
-    
-    if (isManagerRole) {
-      if (isSuperAdmin) {
-        return allUsers.filter((user: any) => 
-          user.role === superAdminRoleName && user.id !== currentUserId
-        );
-      } else {
-        return filteredUsers.filter((user: any) => 
-          (user.role === superAdminRoleName || managerRoles.includes(user.role)) && user.id !== currentUserId
-        );
-      }
     } else {
-      if (isSuperAdmin) {
-        return filteredUsers.filter((user: any) => 
-          managerRoles.includes(user.role) && user.id !== currentUserId
-        );
-      } else if (isTeamLeader) {
-        return filteredUsers.filter((user: any) => 
-          managerRoles.includes(user.role) && user.id !== currentUserId
-        );
+      const isManagerRole = managerRoles.includes(selectedRole);
+      
+      if (isManagerRole) {
+        if (isSuperAdmin) {
+          managers = allUsers.filter((user: any) => 
+            user.role === superAdminRoleName && user.id !== currentUserId
+          );
+        } else {
+          managers = filteredUsers.filter((user: any) => 
+            (user.role === superAdminRoleName || managerRoles.includes(user.role)) && user.id !== currentUserId
+          );
+        }
       } else {
-        return filteredUsers.filter((user: any) => 
-          (managerRoles.includes(user.role) || user.role === superAdminRoleName) && user.id !== currentUserId
-        );
+        if (isSuperAdmin) {
+          managers = filteredUsers.filter((user: any) => 
+            managerRoles.includes(user.role) && user.id !== currentUserId
+          );
+        } else if (isTeamLeader) {
+          managers = filteredUsers.filter((user: any) => 
+            managerRoles.includes(user.role) && user.id !== currentUserId
+          );
+        } else {
+          managers = filteredUsers.filter((user: any) => 
+            (managerRoles.includes(user.role) || user.role === superAdminRoleName) && user.id !== currentUserId
+          );
+        }
       }
     }
+    
+    // In edit mode, ensure the current team lead is included even if not in the filtered list
+    if (mode === 'edit' && employeeData?.data?.team_lead_user_id && formData.teamLeadId) {
+      const currentTeamLead = allUsers.find((u: any) => u.id.toString() === formData.teamLeadId);
+      if (currentTeamLead && !managers.find((m: any) => m.id === currentTeamLead.id)) {
+        managers = [currentTeamLead, ...managers];
+      }
+    }
+    
+    return managers;
   };
 
   const availableReportingManagers = getAvailableReportingManagers();
@@ -315,12 +336,12 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
     }
   }, [employeeData, mode]);
 
-  // Clear position when role changes
+  // Clear position when role changes (only in create mode, not edit mode)
   useEffect(() => {
-    if (formData.role) {
+    if (formData.role && mode === 'create') {
       setFormData(prev => ({ ...prev, position: "" }));
     }
-  }, [formData.role]);
+  }, [formData.role, mode]);
 
   // Generate employee code (create mode)
   useEffect(() => {
@@ -983,7 +1004,12 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
                 <Select
                   value={formData.role}
                   onValueChange={(value) => {
-                    setFormData(prev => ({ ...prev, role: value, position: "" }));
+                    // Only clear position in create mode, not edit mode
+                    if (mode === 'create') {
+                      setFormData(prev => ({ ...prev, role: value, position: "" }));
+                    } else {
+                      setFormData(prev => ({ ...prev, role: value }));
+                    }
                   }}
                 >
                   <SelectTrigger>

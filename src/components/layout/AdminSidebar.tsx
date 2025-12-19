@@ -54,8 +54,8 @@ const allMenuItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, section: null },
   // Administration (Super Admin only)
   { name: "Audit Logs", href: "/audit-logs", icon: FileText, section: "admin" },
-  // Activity Logs (All users)
-  { name: "Activity Logs", href: "/activity-logs", icon: FileText, section: "main" },
+  // Activity Logs (All users) - Hidden
+  // { name: "Activity Logs", href: "/activity-logs", icon: FileText, section: "main" },
   { name: "User Hierarchy", href: "/user-hierarchy", icon: Users, section: "admin" },
   { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
   { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
@@ -101,6 +101,10 @@ export function AdminSidebar() {
   
   // Super Admin always has access to everything
   const isSuperAdmin = userRole === 'Super Admin';
+  
+  // Check if user is Level 2 employee (Developer, Tester, Designer, etc.)
+  const level1Roles = ['Super Admin', 'Admin', 'Team Lead', 'Team Leader', 'Manager', 'HR Manager', 'Accounts Manager', 'Office Manager'];
+  const isLevel2Employee = !level1Roles.includes(userRole);
   
   // Check permissions for page access (Super Admin bypasses all checks)
   const canAccessUsers = isSuperAdmin || hasPermission('users.view');
@@ -248,8 +252,25 @@ export function AdminSidebar() {
 
       {/* Navigation - All items in one scrollable list */}
       <nav className="flex-1 space-y-1 overflow-y-auto p-3 pb-20">
-        {allMenuItems
-          .filter((item) => {
+        {(() => {
+          // Define order for Level 2 employees
+          const level2Order = [
+            '/dashboard',
+            '/projects',
+            '/tasks',
+            '/bugs',
+            '/kanban',
+            '/timesheet',
+            '/holidays',
+            '/leaves',
+            '/reimbursements',
+            '/employees/list',
+            '/my-devices',
+            '/support'
+          ];
+          
+          // Filter items first
+          let filteredItems = allMenuItems.filter((item) => {
             // Permission-based visibility checks
             if (item.href === '/users' && !canAccessUsers) return false;
             if (item.href === '/employees' && !canAccessEmployees) return false;
@@ -282,8 +303,28 @@ export function AdminSidebar() {
             // Support - All users except Admin and Super Admin
             if (item.href === '/support' && !canAccessSupport) return false;
             return true;
-          })
-          .map((item, index, filteredItems) => {
+          });
+          
+          // Sort items for Level 2 employees
+          if (isLevel2Employee) {
+            filteredItems = [...filteredItems].sort((a, b) => {
+              const indexA = level2Order.indexOf(a.href);
+              const indexB = level2Order.indexOf(b.href);
+              
+              // If both items are in the order list, sort by their position
+              if (indexA !== -1 && indexB !== -1) {
+                return indexA - indexB;
+              }
+              // If only A is in the list, A comes first
+              if (indexA !== -1) return -1;
+              // If only B is in the list, B comes first
+              if (indexB !== -1) return 1;
+              // If neither is in the list, maintain original order
+              return 0;
+            });
+          }
+          
+          return filteredItems.map((item, index, filteredItems) => {
             // Show section headers (skip for items with null section or empty label)
             const prevItem = index > 0 ? filteredItems[index - 1] : null;
             const sectionLabels: Record<string, string> = {
@@ -328,7 +369,8 @@ export function AdminSidebar() {
                 <NavItem item={item} />
               </div>
             );
-          })}
+          });
+        })()}
       </nav>
 
       {/* Logout Button - Fixed at bottom */}

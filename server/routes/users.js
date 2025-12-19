@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate, canManageUsers, requireSuperAdmin, canAccessUserManagement } from '../middleware/auth.js';
+import { authenticate, requireSuperAdmin, requirePermission } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyUserUpdated } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
@@ -42,11 +42,51 @@ router.get('/assignable', async (req, res) => {
   }
 });
 
-// Restrict access to Users page - only Admin, Super Admin, and Team Lead can view
-router.use(canAccessUserManagement);
+// Get users for dropdowns (basic info only) - accessible to all authenticated users for form dropdowns
+router.get('/for-dropdown', async (req, res) => {
+  try {
+    const { search = '', limit = 100 } = req.query;
+    const queryLimit = Math.min(parseInt(limit) || 100, 200); // Max 200
+    
+    let query = `
+      SELECT 
+        u.id,
+        u.name,
+        u.email,
+        u.mobile,
+        r.name as role,
+        p.name as position
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN positions p ON u.position_id = p.id
+      WHERE u.status = 'Active'
+    `;
+    const params = [];
+    
+    // If not Super Admin, exclude Super Admin users from results
+    const currentUserRole = req.user?.role || '';
+    if (currentUserRole !== 'Super Admin') {
+      query += ` AND r.name != 'Super Admin'`;
+    }
+    
+    if (search) {
+      query += ` AND (u.name LIKE ? OR u.email LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    
+    query += ` ORDER BY u.name ASC LIMIT ?`;
+    params.push(queryLimit);
+    
+    const [users] = await db.query(query, params);
+    res.json({ data: users });
+  } catch (error) {
+    logger.error('Error fetching users for dropdown:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// Get available positions for current user (filtered by hierarchy)
-router.get('/available-positions', async (req, res) => {
+// Get available positions for current user (filtered by hierarchy) - check for users.view permission
+router.get('/available-positions', requirePermission('users.view'), async (req, res) => {
   try {
     const creatorUserId = req.user?.id;
     if (!creatorUserId) {
@@ -61,8 +101,8 @@ router.get('/available-positions', async (req, res) => {
   }
 });
 
-// Get all users with pagination
-router.get('/', async (req, res) => {
+// Get all users with pagination - check for users.view permission
+router.get('/', requirePermission('users.view'), async (req, res) => {
   try {
     // Parse and validate query parameters
     const page = parseInt(req.query.page) || 1;
@@ -159,8 +199,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get user by ID
-router.get('/:id', async (req, res) => {
+// Get user by ID - check for users.view permission
+router.get('/:id', requirePermission('users.view'), async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -185,9 +225,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create user - requires Admin, Super Admin, Team Lead, or Manager
-// Team Lead and Manager can only create Developer, Designer, and Tester roles
-router.post('/', canManageUsers, async (req, res) => {
+// Create user - check for users.create permission
+router.post('/', requirePermission('users.create'), async (req, res) => {
   try {
     logger.debug('=== CREATE USER REQUEST ===');
     logger.debug('Full request body:', JSON.stringify(req.body, null, 2));
@@ -428,9 +467,8 @@ router.post('/', canManageUsers, async (req, res) => {
   }
 });
 
-// Update user - requires Admin, Super Admin, Team Lead, or Manager
-// Team Lead and Manager can only update Developer, Designer, and Tester roles
-router.put('/:id', canManageUsers, async (req, res) => {
+// Update user - check for users.edit permission
+router.put('/:id', requirePermission('users.edit'), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, password, role, position, mobile, status } = req.body;
@@ -628,8 +666,8 @@ router.put('/:id', canManageUsers, async (req, res) => {
   }
 });
 
-// Delete user - requires Admin, Super Admin, Team Lead, or Manager
-router.delete('/:id', canManageUsers, async (req, res) => {
+// Delete user - check for users.delete permission
+router.delete('/:id', requirePermission('users.delete'), async (req, res) => {
   try {
     const { id } = req.params;
     

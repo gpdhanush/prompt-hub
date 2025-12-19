@@ -59,7 +59,8 @@ const upload = multer({
 // Apply authentication to all routes
 router.use(authenticate);
 
-router.get('/', async (req, res) => {
+// Get all projects - check for projects.view permission
+router.get('/', requirePermission('projects.view'), async (req, res) => {
   try {
     const { page = 1, limit = 10, my_projects } = req.query;
     const offset = (page - 1) * limit;
@@ -236,7 +237,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+// Get project by ID - check for projects.view permission
+router.get('/:id', requirePermission('projects.view'), async (req, res) => {
   try {
     const [projects] = await db.query(`
       SELECT 
@@ -246,11 +248,13 @@ router.get('/:id', async (req, res) => {
         u2.name as updated_by_name,
         u2.email as updated_by_email,
         tl.name as team_lead_name,
-        tl.email as team_lead_email
+        tl.email as team_lead_email,
+        tl_emp.profile_photo_url as team_lead_photo_url
       FROM projects p
       LEFT JOIN users u1 ON p.created_by = u1.id
       LEFT JOIN users u2 ON p.updated_by = u2.id
       LEFT JOIN users tl ON p.team_lead_id = tl.id
+      LEFT JOIN employees tl_emp ON tl.id = tl_emp.user_id
       WHERE p.id = ?
     `, [req.params.id]);
     if (projects.length === 0) return res.status(404).json({ error: 'Project not found' });
@@ -522,8 +526,8 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
   }
 });
 
-// Update project - only Team Leader and Super Admin
-router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
+// Update project - check for projects.edit permission
+router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
@@ -767,8 +771,8 @@ router.put('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (
   }
 });
 
-// Delete project - only Team Leader and Super Admin
-router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
+// Delete project - check for projects.delete permission
+router.delete('/:id', requirePermission('projects.delete'), async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -822,8 +826,8 @@ router.post('/:id/files', authorize('Team Leader', 'Team Lead', 'Super Admin', '
   }
 });
 
-// Get project files
-router.get('/:id/files', async (req, res) => {
+// Get project files - check for projects.view permission
+router.get('/:id/files', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const [files] = await db.query(`
@@ -885,7 +889,8 @@ router.post('/:id/change-requests', async (req, res) => {
 });
 
 // Get change requests
-router.get('/:id/change-requests', async (req, res) => {
+// Get project change requests - check for projects.view permission
+router.get('/:id/change-requests', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const [requests] = await db.query(`
@@ -968,7 +973,8 @@ router.post('/:id/call-notes', async (req, res) => {
 });
 
 // Get client call notes
-router.get('/:id/call-notes', async (req, res) => {
+// Get project call notes - check for projects.view permission
+router.get('/:id/call-notes', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const [notes] = await db.query(`
@@ -1009,7 +1015,8 @@ router.post('/:id/credentials', authorize('Team Leader', 'Team Lead', 'Super Adm
 });
 
 // Get credentials
-router.get('/:id/credentials', async (req, res) => {
+// Get project credentials - check for projects.view permission
+router.get('/:id/credentials', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const [creds] = await db.query(`
@@ -1108,7 +1115,8 @@ router.post('/:id/daily-status', async (req, res) => {
 });
 
 // Get daily status entries
-router.get('/:id/daily-status', async (req, res) => {
+// Get project daily status - check for projects.view permission
+router.get('/:id/daily-status', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const { user_id, start_date, end_date } = req.query;
@@ -1144,7 +1152,8 @@ router.get('/:id/daily-status', async (req, res) => {
 });
 
 // Get project total worked time
-router.get('/:id/total-worked-time', async (req, res) => {
+// Get project total worked time - check for projects.view permission
+router.get('/:id/total-worked-time', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const [result] = await db.query(`
@@ -1215,7 +1224,8 @@ router.post('/:id/comments', async (req, res) => {
 
 // Get comments
 // Get project activities (commits, PRs, issues from GitHub/Bitbucket)
-router.get('/:id/activities', async (req, res) => {
+// Get project activities - check for projects.view permission
+router.get('/:id/activities', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const { activity_type, limit = 50 } = req.query;
@@ -1243,7 +1253,8 @@ router.get('/:id/activities', async (req, res) => {
   }
 });
 
-router.get('/:id/comments', async (req, res) => {
+// Get project comments - check for projects.view permission
+router.get('/:id/comments', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
     const { comment_type } = req.query;

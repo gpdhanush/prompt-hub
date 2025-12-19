@@ -21,6 +21,7 @@ import { bugsApi } from "@/features/bugs/api";
 import { reimbursementsApi } from "@/features/reimbursements/api";
 import { assetsApi } from "@/features/assets/api";
 import { getCurrentUser } from "@/lib/auth";
+import { getProfilePhotoUrl } from "@/lib/imageUtils";
 import { format } from "date-fns";
 import ReminderCalendar from "./ReminderCalendar";
 
@@ -229,16 +230,19 @@ const TeamDashboard = memo(function TeamDashboard({
                     className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
                     onClick={() => navigate(`/employees/${member.id}`)}
                   >
-                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
                       {member.profile_photo_url ? (
                         <img
-                          src={member.profile_photo_url}
+                          src={getProfilePhotoUrl(member.profile_photo_url)}
                           alt={member.name}
                           className="h-10 w-10 rounded-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                          }}
                         />
-                      ) : (
-                        <User className="h-5 w-5 text-muted-foreground" />
-                      )}
+                      ) : null}
+                      <User className={`h-5 w-5 text-muted-foreground ${member.profile_photo_url ? 'hidden' : ''}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">

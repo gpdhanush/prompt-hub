@@ -13,8 +13,11 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { projectsApi } from "@/features/projects/api";
 import { usersApi } from "@/features/users/api";
+import { employeesApi } from "@/features/employees/api";
 import { getCurrentUser } from "@/lib/auth";
-import { getImageUrl } from "@/lib/imageUtils";
+import { usePermissions } from "@/hooks/usePermissions";
+import { getImageUrl, getProfilePhotoUrl } from "@/lib/imageUtils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { logger } from "@/lib/logger";
 import { Textarea } from "@/components/ui/textarea";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
@@ -199,30 +202,40 @@ export default function ProjectDetail() {
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  // Get current user info for role-based permissions
+  // Get current user info
   const currentUser = getCurrentUser();
-  const userRole = currentUser?.role || '';
-
-  // Permissions
-  const canEditProject = ['Admin', 'Team Lead', 'Super Admin'].includes(userRole);
-  const canDeleteProject = ['Super Admin', 'Team Lead'].includes(userRole);
+  
+  // Use permission-based checks instead of role-based checks
+  const { hasPermission } = usePermissions();
+  const canEditProject = hasPermission('projects.edit');
+  const canDeleteProject = hasPermission('projects.delete');
 
   // Fetch project details
   const { data: projectData, isLoading, error } = useQuery({
     queryKey: ['project', id],
     queryFn: () => projectsApi.getById(Number(id)),
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 0, // Always refetch when query is invalidated
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
 
-  // Fetch users for member names
+  // Fetch users for member names - use for-dropdown endpoint which doesn't require full permission
   const { data: usersData } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
+    queryKey: ['users-for-dropdown'],
+    queryFn: () => usersApi.getForDropdown({ limit: 100 }),
     staleTime: 1000 * 60 * 10, // 10 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  // Fetch employees to get profile photos
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees-for-project'],
+    queryFn: () => employeesApi.getAll({ page: 1, limit: 1000, include_all: 'true' }),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -278,6 +291,7 @@ export default function ProjectDetail() {
 
   const project = projectData?.data;
   const allUsers = usersData?.data || [];
+  const allEmployees = employeesData?.data || [];
   const files = filesData?.data || [];
   const workedTime = workedTimeData?.data 
     ? {
@@ -336,13 +350,16 @@ export default function ProjectDetail() {
     }
   };
 
-  // Get member names and roles from user IDs
+  // Get member names and roles from user IDs, including profile photos
   const getMemberDetails = () => {
     if (!project?.member_ids || !Array.isArray(project.member_ids)) return [];
     return project.member_ids
       .map((memberId: string | number) => {
         const userId = typeof memberId === 'string' ? parseInt(memberId) : memberId;
         const user = allUsers.find((u: any) => u.id === userId || u.id.toString() === memberId.toString());
+        
+        // Find employee record to get profile photo
+        const employee = allEmployees.find((emp: any) => emp.user_id === userId);
         
         // Try both string and number keys for member_roles
         const role = project.member_roles?.[memberId] || 
@@ -357,11 +374,16 @@ export default function ProjectDetail() {
             id: userId,
             name: `User ${userId}`,
             email: '',
-            role: role
+            role: role,
+            profile_photo_url: employee?.profile_photo_url || null
           };
         }
         
-        return { ...user, role };
+        return { 
+          ...user, 
+          role,
+          profile_photo_url: employee?.profile_photo_url || null
+        };
       })
       .filter(Boolean);
   };
@@ -641,16 +663,17 @@ export default function ProjectDetail() {
             </Card>
           )}
 
-          {/* Repository Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Github className="h-5 w-5" />
-                Repository Activity
-                {activitiesData?.data && ` (${activitiesData.data.length})`}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          {/* Repository Activity - Only visible to Super Admin */}
+          {currentUser?.role === 'Super Admin' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Github className="h-5 w-5" />
+                  Repository Activity
+                  {activitiesData?.data && ` (${activitiesData.data.length})`}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
               {activitiesLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -858,6 +881,7 @@ export default function ProjectDetail() {
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* Comments */}
           {commentsData?.data && commentsData.data.length > 0 && (
@@ -1014,9 +1038,16 @@ export default function ProjectDetail() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <User className="h-5 w-5 text-primary" />
-                </div>
+                <Avatar className="h-10 w-10">
+                  <AvatarImage 
+                    src={getProfilePhotoUrl(project.team_lead_photo_url || null)} 
+                    alt={project.team_lead_name || 'Team Lead'}
+                    className="object-cover"
+                  />
+                  <AvatarFallback className="bg-primary/10 text-primary">
+                    {project.team_lead_name ? project.team_lead_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "TL"}
+                  </AvatarFallback>
+                </Avatar>
                 <div>
                   <div className="text-sm font-medium">{project.team_lead_name || 'Unassigned'}</div>
                   {project.team_lead_email && (
@@ -1041,9 +1072,16 @@ export default function ProjectDetail() {
                   {memberDetails.map((member: any, index: number) => (
                     <div key={member.id || index} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                        </div>
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage 
+                            src={getProfilePhotoUrl(member.profile_photo_url || null)} 
+                            alt={member.name}
+                            className="object-cover"
+                          />
+                          <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                            {member.name ? member.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "E"}
+                          </AvatarFallback>
+                        </Avatar>
                         <div>
                           <div className="font-medium">{member.name}</div>
                           {member.email && (

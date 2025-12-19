@@ -153,7 +153,7 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
   // Fetch users, roles, positions
   const { data: usersData } = useQuery({
     queryKey: ['users'],
-    queryFn: () => usersApi.getAll({ page: 1, limit: 100 }),
+    queryFn: () => usersApi.getForDropdown({ limit: 100 }),
   });
 
   const { data: rolesData } = useQuery({

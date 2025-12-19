@@ -36,6 +36,84 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
 import { getProfilePhotoUrl, getImageUrl } from "@/lib/imageUtils";
 import { AttachmentList } from "@/components/ui/attachment-list";
+import { Users } from "lucide-react";
+
+// Team Members Card Component
+function TeamMembersCard({ employeeId }: { employeeId: number }) {
+  const navigate = useNavigate();
+  
+  const { data: teamMembersData } = useQuery({
+    queryKey: ['team-members', employeeId],
+    queryFn: async () => {
+      const allEmployees = await employeesApi.getAll({ page: 1, limit: 1000, include_all: 'true' });
+      // Ensure we're comparing the right types - convert both to numbers
+      const teamMembers = allEmployees?.data?.filter(
+        (emp: any) => emp.team_lead_id && Number(emp.team_lead_id) === Number(employeeId)
+      ) || [];
+      
+      return { data: teamMembers };
+    },
+    enabled: !!employeeId,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  const teamMembers = teamMembersData?.data || [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="h-5 w-5" />
+          Team Members ({teamMembers.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {teamMembers.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No team members assigned</p>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {teamMembers.map((member: any) => {
+              // Get profile photo URL - ensure we're using the correct field name
+              // The API returns profile_photo_url, so use that directly
+              const photoUrl = member.profile_photo_url ? getProfilePhotoUrl(member.profile_photo_url) : undefined;
+              
+              return (
+                <div
+                  key={member.id}
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/employees/${member.id}/view`)}
+                >
+                  <Avatar className="h-10 w-10 flex-shrink-0">
+                    <AvatarImage 
+                      src={photoUrl} 
+                      alt={member.name}
+                      className="object-cover"
+                    />
+                    <AvatarFallback className="bg-muted text-muted-foreground">
+                      {member.name ? member.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "E"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{member.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {member.role || "Employee"} {member.position ? `• ${member.position}` : ""}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function EmployeeProfile() {
   const navigate = useNavigate();
@@ -158,9 +236,10 @@ export default function EmployeeProfile() {
             variant="default"
             size="icon"
             onClick={() => {
-              const fromEmployees = location.state?.from === '/employees' || 
-                                    document.referrer.includes('/employees') && !document.referrer.includes('/employees/list');
-              navigate(fromEmployees ? '/employees' : '/employees/list');
+              // const fromEmployees = location.state?.from === '/employees' || 
+              //                       document.referrer.includes('/employees') && !document.referrer.includes('/employees/list');
+              // navigate(fromEmployees ? '/employees' : '/employees/list');
+              navigate('/employees');
             }}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
@@ -168,13 +247,13 @@ export default function EmployeeProfile() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold">Employee Details</h1>
-            <p className="font-mono text-primary font-semibold text-xl text-center">
+            <p className="font-mono text-primary font-semibold text-xl text-left">
               {employee.emp_code || `EMP-${String(employee.id).padStart(3, '0')}`}
             </p>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate(`/employees/${employee.id}/edit`)} variant="outline">
+          <Button onClick={() => navigate(`/employees/${employee.id}/edit`)} variant="default" className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Edit className="mr-2 h-4 w-4" />
             Edit Employee
           </Button>
@@ -191,14 +270,12 @@ export default function EmployeeProfile() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-4">
-                {employee.profile_photo_url && (
-                  <Avatar className="h-16 w-16">
-                    <AvatarImage src={getProfilePhotoUrl(employee.profile_photo_url || null)} />
-                    <AvatarFallback className="text-lg">
-                      {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("") : "E"}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
+                <Avatar className="h-16 w-16">
+                  <AvatarImage src={getProfilePhotoUrl(employee.profile_photo_url || null)} />
+                  <AvatarFallback className="text-lg">
+                    {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("") : "E"}
+                  </AvatarFallback>
+                </Avatar>
                 <div>
                   <CardTitle>{employee.name || "N/A"}</CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -537,9 +614,16 @@ export default function EmployeeProfile() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <User className="h-5 w-5 text-primary" />
-                </div>
+                <Avatar className="h-10 w-10">
+                  <AvatarImage 
+                    src={getProfilePhotoUrl(employee.team_lead_photo_url || null)} 
+                    alt={employee.team_lead_name || 'Team Lead'}
+                    className="object-cover"
+                  />
+                  <AvatarFallback className="bg-primary/10 text-primary">
+                    {employee.team_lead_name ? employee.team_lead_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "TL"}
+                  </AvatarFallback>
+                </Avatar>
                 <div>
                   <div className="text-sm font-medium">{employee.team_lead_name || 'Unassigned'}</div>
                   {employee.team_lead_email && (
@@ -549,6 +633,9 @@ export default function EmployeeProfile() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Team Members */}
+          <TeamMembersCard employeeId={employee.id} />
 
           {/* Leave Balance */}
           <Card>

@@ -28,6 +28,7 @@ import { projectsApi } from "@/features/projects/api";
 import { leavesApi } from "@/features/leaves/api";
 import { holidaysApi } from "@/features/holidays/api";
 import { getCurrentUser } from "@/lib/auth";
+import { getProfilePhotoUrl } from "@/lib/imageUtils";
 import { format } from "date-fns";
 
 interface EmployeeDashboardProps {}
@@ -127,52 +128,61 @@ const EmployeeDashboard = memo(function EmployeeDashboard({}: EmployeeDashboardP
       if (!currentEmployeeData || !currentEmployeeId) return { data: [] };
       
       try {
-        const allEmployees = await employeesApi.getAll({ page: 1, limit: 1000 });
+        const allEmployees = await employeesApi.getAll({ page: 1, limit: 1000, include_all: 'true' });
         const employees = allEmployees?.data || [];
         
         let teamMembers: any[] = [];
         
         if (isLevel2Employee) {
-          // For level 2: show level 1 users (same team lead) and their direct reports
-          const level1Roles = ['Admin', 'Team Lead', 'Team Leader', 'Manager', 'HR Manager', 'Accounts Manager', 'Office Manager'];
+          // For level 2: show all employees with the same team lead (peers and level 1 employees)
           const teamLeadId = currentEmployeeData.team_lead_id || currentEmployeeData.team_lead_emp_id;
           
           if (teamLeadId) {
-            // Get level 1 employees (same team lead)
-            const level1Employees = employees.filter((emp: any) => {
+            // Get the team lead employee
+            const teamLeadEmployee = employees.find((emp: any) => emp.id === teamLeadId);
+            
+            // Get all employees with the same team lead (peers and level 1 employees)
+            const otherTeamMembers = employees.filter((emp: any) => {
               const empTeamLeadId = emp.team_lead_id || emp.team_lead_emp_id;
               return (
                 empTeamLeadId === teamLeadId &&
-                level1Roles.includes(emp.role || '') &&
-                emp.id !== currentEmployeeId
+                emp.id !== currentEmployeeId &&
+                emp.id !== teamLeadId &&
+                emp.id
               );
             });
             
-            // Get level 1 employee IDs
-            const level1Ids = new Set(level1Employees.map((e: any) => e.id));
-            
-            // Get employees reporting to level 1 employees
-            const level2Employees = employees.filter((emp: any) => {
-              const empTeamLeadId = emp.team_lead_id || emp.team_lead_emp_id;
-              return level1Ids.has(empTeamLeadId) && emp.id !== currentEmployeeId;
-            });
-            
-            // Combine level 1 and their reports
-            teamMembers = [...level1Employees, ...level2Employees];
+            // Put team lead first, then others
+            if (teamLeadEmployee) {
+              teamMembers = [teamLeadEmployee, ...otherTeamMembers];
+            } else {
+              teamMembers = otherTeamMembers;
+            }
           }
         } else {
           // For level 1: show colleagues (same team lead)
           const teamLeadId = currentEmployeeData.team_lead_id || currentEmployeeData.team_lead_emp_id;
           
           if (teamLeadId) {
-            teamMembers = employees.filter((emp: any) => {
+            // Get the team lead employee
+            const teamLeadEmployee = employees.find((emp: any) => emp.id === teamLeadId);
+            
+            const otherTeamMembers = employees.filter((emp: any) => {
               const empTeamLeadId = emp.team_lead_id || emp.team_lead_emp_id;
               return (
                 empTeamLeadId === teamLeadId &&
                 emp.id !== currentEmployeeId &&
+                emp.id !== teamLeadId &&
                 emp.id
               );
             });
+            
+            // Put team lead first, then others
+            if (teamLeadEmployee) {
+              teamMembers = [teamLeadEmployee, ...otherTeamMembers];
+            } else {
+              teamMembers = otherTeamMembers;
+            }
           }
         }
         
@@ -192,7 +202,7 @@ const EmployeeDashboard = memo(function EmployeeDashboard({}: EmployeeDashboardP
   // Fetch all employees for birthday calculation
   const { data: allEmployeesData } = useQuery({
     queryKey: ["all-employees-birthday"],
-    queryFn: () => employeesApi.getAll({ page: 1, limit: 1000 }),
+    queryFn: () => employeesApi.getAll({ page: 1, limit: 1000, include_all: 'true' }),
     staleTime: 1000 * 60 * 60, // 1 hour
     gcTime: 1000 * 60 * 120, // 2 hours
     refetchOnWindowFocus: false,
@@ -237,9 +247,9 @@ const EmployeeDashboard = memo(function EmployeeDashboard({}: EmployeeDashboardP
     });
   }, [allLeaves, currentEmployeeId, dismissedLeaveNotifications]);
 
-  // Get next team member birthday (including current month)
-  const nextBirthday = useMemo(() => {
-    if (!allEmployees.length || !teamMembers.length) return null;
+  // Get team member birthdays for next 30 days
+  const upcomingBirthdays = useMemo(() => {
+    if (!allEmployees.length || !teamMembers.length) return [];
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -247,15 +257,19 @@ const EmployeeDashboard = memo(function EmployeeDashboard({}: EmployeeDashboardP
     const currentMonth = today.getMonth();
     const currentDay = today.getDate();
 
-    // Get team member IDs for faster lookup
+    // Get team member IDs for faster lookup (include all team members)
     const teamMemberIds = new Set(teamMembers.map((tm: any) => tm.id));
 
-    // Filter team members from all employees
-    const myTeam = allEmployees.filter((emp: any) => 
-      teamMemberIds.has(emp.id) && emp.date_of_birth
-    );
+    // Filter team members from all employees - check both by ID and ensure date_of_birth exists
+    const myTeam = allEmployees.filter((emp: any) => {
+      const isTeamMember = teamMemberIds.has(emp.id);
+      const hasBirthday = emp.date_of_birth && emp.date_of_birth !== null && emp.date_of_birth !== '';
+      return isTeamMember && hasBirthday;
+    });
 
-    if (myTeam.length === 0) return null;
+    if (myTeam.length === 0) {
+      return [];
+    }
 
     const birthdaysWithDates = myTeam
       .map((emp: any) => {
@@ -280,20 +294,39 @@ const EmployeeDashboard = memo(function EmployeeDashboard({}: EmployeeDashboardP
             nextBirthdayDate = nextYearBirthday;
           }
 
-          // Also include birthdays in the current month that haven't passed yet
+          // Also include birthdays in the current month (all of them, not just upcoming)
           const isThisMonth = dobMonth === currentMonth;
           const isUpcomingThisMonth = isThisMonth && dobDay >= currentDay;
+          const isPastThisMonth = isThisMonth && dobDay < currentDay;
 
           const daysUntil = Math.ceil(
             (nextBirthdayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
           );
 
-          // Include if it's in the current month and upcoming, or if it's the next birthday
-          if (isUpcomingThisMonth || daysUntil >= 0) {
+          // Calculate days until birthday (for current month or future)
+          let daysUntilBirthday = daysUntil;
+          let birthdayDateToShow = nextBirthdayDate;
+          
+          if (isThisMonth) {
+            if (isUpcomingThisMonth) {
+              // Upcoming birthday this month
+              daysUntilBirthday = dobDay - currentDay;
+              birthdayDateToShow = thisYearBirthday;
+            } else {
+              // Past birthday this month, show next year's
+              daysUntilBirthday = Math.ceil(
+                (nextYearBirthday.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+              );
+              birthdayDateToShow = nextYearBirthday;
+            }
+          }
+          
+          // Include birthdays within the next 30 days (0 to 30 days)
+          if (daysUntilBirthday >= 0 && daysUntilBirthday <= 30) {
             return {
               employee: emp,
-              birthdayDate: isUpcomingThisMonth ? thisYearBirthday : nextBirthdayDate,
-              daysUntil: isUpcomingThisMonth ? (dobDay - currentDay) : daysUntil,
+              birthdayDate: birthdayDateToShow,
+              daysUntil: daysUntilBirthday,
             };
           }
 
@@ -305,13 +338,11 @@ const EmployeeDashboard = memo(function EmployeeDashboard({}: EmployeeDashboardP
       })
       .filter((item): item is NonNullable<typeof item> => item !== null)
       .sort((a, b) => {
-        // Sort by: current month first, then by days until
-        if (a.birthdayDate.getMonth() === currentMonth && b.birthdayDate.getMonth() !== currentMonth) return -1;
-        if (a.birthdayDate.getMonth() !== currentMonth && b.birthdayDate.getMonth() === currentMonth) return 1;
+        // Sort by days until (ascending - closest first)
         return a.daysUntil - b.daysUntil;
       });
 
-    return birthdaysWithDates.length > 0 ? birthdaysWithDates[0] : null;
+    return birthdaysWithDates;
   }, [allEmployees, teamMembers]);
 
   // Get next holiday
@@ -471,81 +502,56 @@ const EmployeeDashboard = memo(function EmployeeDashboard({}: EmployeeDashboardP
         </Card>
       </div>
 
-      {/* Attendance Section - Design Only */}
-      <Card className="border-2 border-orange-500/20 shadow-lg bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-transparent">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <div className="px-2 py-1 bg-orange-500 text-white text-xs font-semibold rounded">
-              Attendance
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-primary mb-1">
-                {format(new Date(), "hh:mm a, dd MMM yyyy")}
-              </div>
-              <div className="text-4xl font-bold text-primary mt-4 mb-2">5:45:32</div>
-              <div className="text-sm text-muted-foreground">Total Hours</div>
-            </div>
-            <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 text-center">
-              <div className="text-sm font-medium">Production : 3.45 hrs</div>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="p-1.5 rounded bg-orange-500/20">
-                <Clock className="h-4 w-4 text-orange-600" />
-              </div>
-              <span>Punch In at 10.00 AM</span>
-            </div>
-            <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white">
-              Punch Out
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* My Team Members & Birthday & Holiday - Side by Side */}
       <div className="grid gap-4 lg:grid-cols-3">
         {/* My Team Members */}
-        <Card className="glass-card">
+        <Card className="glass-card border-2 border-blue-500/20 shadow-lg bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent hover:shadow-xl transition-all">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              My Team Members
+              <Users className="h-5 w-5 text-blue-600" />
+              My Team Members ({teamMembers.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             {teamMembers.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <div className="p-3 rounded-xl bg-blue-500/10 w-fit mx-auto mb-3">
+                  <Users className="h-8 w-8 text-blue-600/50" />
+                </div>
                 <p className="text-sm">No team members found</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {teamMembers.map((member: any) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/employees/${member.id}/view`)}
-                  >
-                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                      {member.profile_photo_url ? (
-                        <img
-                          src={member.profile_photo_url}
-                          alt={member.name}
-                          className="h-10 w-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <User className="h-5 w-5 text-muted-foreground" />
-                      )}
+              <div className="space-y-0 max-h-[400px] overflow-y-auto">
+                {teamMembers.map((member: any, index: number) => (
+                  <div key={member.id}>
+                    <div
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/employees/${member.id}/view`)}
+                    >
+                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {member.profile_photo_url ? (
+                          <img
+                            src={getProfilePhotoUrl(member.profile_photo_url)}
+                            alt={member.name}
+                            className="h-10 w-10 rounded-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <User className={`h-5 w-5 text-muted-foreground ${member.profile_photo_url ? 'hidden' : ''}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{member.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {member.role || "Employee"} {member.position ? `• ${member.position}` : ""}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{member.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {member.role || "Employee"} {member.position ? `• ${member.position}` : ""}
-                      </p>
-                    </div>
+                    {index < teamMembers.length - 1 && (
+                      <div className="border-b border-border/30 mx-3" />
+                    )}
                   </div>
                 ))}
               </div>
@@ -553,86 +559,153 @@ const EmployeeDashboard = memo(function EmployeeDashboard({}: EmployeeDashboardP
           </CardContent>
         </Card>
 
-        {/* Team Birthday */}
-        {nextBirthday ? (
-          <Card className="bg-gradient-to-br from-gray-800 to-gray-900 text-white border-0 shadow-lg">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg text-white">Team Birthday</CardTitle>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-white hover:bg-white/10">
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </div>
+        {/* Team Birthdays - Next 30 Days */}
+        {upcomingBirthdays.length > 0 ? (
+          <Card className="glass-card border-2 border-pink-500/20 shadow-lg bg-gradient-to-br from-pink-500/10 via-pink-500/5 to-transparent hover:shadow-xl transition-all">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Gift className="h-5 w-5 text-pink-600" />
+                Team Birthdays ({upcomingBirthdays.length})
+              </CardTitle>
             </CardHeader>
-            <CardContent className="text-center">
-              <div className="mb-4">
-                {nextBirthday.employee.profile_photo_url ? (
-                  <img
-                    src={nextBirthday.employee.profile_photo_url}
-                    alt={nextBirthday.employee.name}
-                    className="h-20 w-20 rounded-full object-cover mx-auto border-2 border-white/20"
-                  />
-                ) : (
-                  <div className="h-20 w-20 rounded-full bg-white/20 flex items-center justify-center mx-auto">
-                    <User className="h-10 w-10 text-white" />
+            <CardContent>
+              <div className="space-y-0 max-h-[400px] overflow-y-auto">
+                {upcomingBirthdays.map((birthday: any, index: number) => (
+                  <div key={birthday.employee.id}>
+                    <div
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/employees/${birthday.employee.id}/view`)}
+                    >
+                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {birthday.employee.profile_photo_url ? (
+                          <img
+                            src={getProfilePhotoUrl(birthday.employee.profile_photo_url)}
+                            alt={birthday.employee.name}
+                            className="h-10 w-10 rounded-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <User className={`h-5 w-5 text-muted-foreground ${birthday.employee.profile_photo_url ? 'hidden' : ''}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{birthday.employee.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {format(birthday.birthdayDate, "dd MMM yyyy")}
+                          </p>
+                          {birthday.daysUntil !== undefined && (
+                            <Badge 
+                              variant={birthday.daysUntil === 0 ? "default" : "secondary"}
+                              className={`text-xs ${birthday.daysUntil === 0 ? 'bg-pink-600 text-white' : ''}`}
+                            >
+                              {birthday.daysUntil === 0 
+                                ? "Today" 
+                                : birthday.daysUntil === 1 
+                                ? "Tomorrow" 
+                                : `${birthday.daysUntil}d`}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {index < upcomingBirthdays.length - 1 && (
+                      <div className="border-b border-border/30 mx-3" />
+                    )}
                   </div>
-                )}
+                ))}
               </div>
-              <p className="text-lg font-bold text-white mb-1">
-                {nextBirthday.employee.name}
-              </p>
-              <p className="text-sm text-gray-300 mb-2">
-                {nextBirthday.employee.role || "Employee"}
-              </p>
-              <p className="text-xs text-gray-400 mb-4">
-                {format(nextBirthday.birthdayDate, "dd MMM yyyy")} ({nextBirthday.daysUntil} days)
-              </p>
-              <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white">
-                Send Wishes
-              </Button>
             </CardContent>
           </Card>
         ) : (
           // Show placeholder if no birthday found but team members exist
           teamMembers.length > 0 && (
-            <Card className="glass-card opacity-50">
+            <Card className="glass-card opacity-50 border-2 border-pink-500/10">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Gift className="h-5 w-5 text-muted-foreground" />
-                  Team Birthday
+                  Team Birthdays
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-center py-8 text-muted-foreground">
-                <Gift className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No upcoming birthdays</p>
+                <div className="p-3 rounded-xl bg-pink-500/10 w-fit mx-auto mb-3">
+                  <Gift className="h-8 w-8 text-pink-600/50" />
+                </div>
+                <p className="text-sm">No upcoming birthdays in next 30 days</p>
               </CardContent>
             </Card>
           )
         )}
 
         {/* Next Holiday */}
-        {nextHoliday && (
-          <Card className="bg-gradient-to-br from-yellow-400 to-yellow-500 text-black border-0 shadow-lg">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg text-black">Next Holiday</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center">
-                <p className="text-xl font-bold text-black mb-2">{nextHoliday.holiday_name}</p>
-                <p className="text-sm text-gray-800">
-                  {format(new Date(nextHoliday.date), "dd MMM yyyy")}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                className="w-full mt-4 bg-white hover:bg-gray-100 text-black border-black"
-                onClick={() => navigate("/holidays")}
-              >
-                View All
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+        {nextHoliday && (() => {
+          const holidayDate = new Date(nextHoliday.date);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          holidayDate.setHours(0, 0, 0, 0);
+          const daysUntil = Math.ceil((holidayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          
+          return (
+            <Card className="glass-card border-2 border-orange-500/20 shadow-lg bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-transparent hover:shadow-xl transition-all">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-orange-600" />
+                  Next Holiday
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-bold text-foreground mb-1 truncate">
+                        {nextHoliday.holiday_name}
+                      </h3>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        <span>{format(holidayDate, "dd MMM yyyy")}</span>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <div className="p-3 rounded-xl bg-orange-500/20">
+                        <Calendar className="h-6 w-6 text-orange-600" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {daysUntil >= 0 && (
+                    <div className="pt-3 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {daysUntil === 0 
+                            ? "Today!" 
+                            : daysUntil === 1 
+                            ? "Tomorrow" 
+                            : `${daysUntil} days away`}
+                        </span>
+                        <Badge 
+                          variant={daysUntil === 0 ? "default" : "secondary"}
+                          className={daysUntil === 0 ? "bg-orange-600 text-white" : ""}
+                        >
+                          {daysUntil === 0 ? "Today" : `${daysUntil}d`}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4 border-orange-500/30 hover:bg-orange-500/10 hover:border-orange-500/50"
+                    onClick={() => navigate("/holidays")}
+                  >
+                    View All Holidays
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
       </div>
     </>
   );

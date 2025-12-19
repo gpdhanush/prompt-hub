@@ -6,10 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { bugsApi } from "@/features/bugs/api";
+import { employeesApi } from "@/features/employees/api";
 import { getCurrentUser } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
 import { setupMessageListener } from "@/lib/firebase";
+import { getProfilePhotoUrl } from "@/lib/imageUtils";
 
 interface Comment {
   id: number;
@@ -48,7 +51,29 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
     refetchInterval: 1000 * 10, // Poll every 10 seconds for real-time updates
   });
 
+  // Fetch employees to get profile photos
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees-for-comments'],
+    queryFn: () => employeesApi.getAll({ page: 1, limit: 1000, include_all: 'true' }),
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
   const comments = commentsData?.data || [];
+  const allEmployees = employeesData?.data || [];
+
+  // Create a map of user_id to profile_photo_url
+  const userPhotoMap = useMemo(() => {
+    const map = new Map<number, string | null>();
+    allEmployees.forEach((emp: any) => {
+      if (emp.user_id) {
+        map.set(emp.user_id, emp.profile_photo_url || null);
+      }
+    });
+    return map;
+  }, [allEmployees]);
 
   // Listen for FCM notifications about bug comments and refetch
   useEffect(() => {
@@ -269,6 +294,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
     onToggleExpand,
     isCommentLong,
     renderTextWithLinks,
+    userPhotoMap,
     depth = 0 
   }: { 
     comment: any; 
@@ -284,6 +310,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
     onToggleExpand: (id: number) => void;
     isCommentLong: (text: string) => boolean;
     renderTextWithLinks: (text: string) => React.ReactNode;
+    userPhotoMap: Map<number, string | null>;
     depth?: number;
   }) => {
     const isReplying = replyingTo === comment.id;
@@ -291,6 +318,9 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
     const replyText = replyTexts[comment.id] || '';
     const isExpanded = expandedComments.has(comment.id);
     const isLong = isCommentLong(comment.comment_text);
+    const profilePhotoUrl = comment.user_id ? userPhotoMap.get(comment.user_id) : null;
+    const photoUrl = getProfilePhotoUrl(profilePhotoUrl || null);
+    const userInitials = comment.user_name ? comment.user_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
 
     return (
       <div className="space-y-2">
@@ -299,9 +329,16 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
             ? 'bg-muted border border-border' 
             : 'bg-muted/80 border border-border/50'
         }`}>
-          <div className={`${isRootComment ? 'h-8 w-8' : 'h-6 w-6'} rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 border border-primary/30`}>
-            <User className={`${isRootComment ? 'h-4 w-4' : 'h-3 w-3'} text-primary`} />
-          </div>
+          <Avatar className={`${isRootComment ? 'h-8 w-8' : 'h-6 w-6'} flex-shrink-0`}>
+            <AvatarImage 
+              src={photoUrl} 
+              alt={comment.user_name || 'User'}
+              className="object-cover"
+            />
+            <AvatarFallback className="bg-primary/20 text-primary border border-primary/30">
+              {userInitials}
+            </AvatarFallback>
+          </Avatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <p className={`${isRootComment ? 'text-sm' : 'text-xs'} font-medium`}>{comment.user_name || 'Unknown'}</p>
@@ -502,6 +539,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
                 onToggleExpand={onToggleExpand}
                 isCommentLong={isCommentLong}
                 renderTextWithLinks={renderTextWithLinks}
+                userPhotoMap={userPhotoMap}
                 depth={depth + 1}
               />
             ))}
@@ -654,6 +692,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
               onToggleExpand={toggleCommentExpand}
               isCommentLong={isCommentLong}
               renderTextWithLinks={renderTextWithLinks}
+              userPhotoMap={userPhotoMap}
             />
           ))}
         </div>
