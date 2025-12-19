@@ -4,6 +4,8 @@ import { logger } from '../utils/logger.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { validateAndSanitizeObject } from '../utils/inputValidation.js';
 import { emitToBoard } from '../utils/socketService.js';
+import { canTransitionTaskStatus } from '../utils/statusPermissions.js';
+import { logCreate, logUpdate, getClientIp, getUserAgent } from '../utils/auditLogger.js';
 
 const router = express.Router();
 
@@ -235,7 +237,7 @@ router.put('/boards/:id', requirePermission('tasks.edit'), async (req, res) => {
 router.post('/boards/:boardId/tasks', requirePermission('tasks.create'), async (req, res) => {
   try {
     const { boardId } = req.params;
-    const { title, description, column_id, priority, assigned_to, due_date } = req.body;
+    const { title, description, column_id, priority, assigned_to, due_date, project_id, estimated_time } = req.body;
     const userId = req.user.id;
 
     if (!title || title.trim() === '') {
@@ -274,9 +276,9 @@ router.post('/boards/:boardId/tasks', requirePermission('tasks.create'), async (
     // Create task
     const [result] = await db.query(
       `INSERT INTO kanban_tasks 
-       (board_id, column_id, task_code, title, description, status, priority, position, assigned_to, due_date, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [boardId, column_id, taskCode, title.trim(), description || null, column.status, mappedPriority, position, assigned_to || null, due_date || null, userId]
+       (board_id, column_id, task_code, title, description, status, priority, position, assigned_to, due_date, project_id, estimated_time, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [boardId, column_id, taskCode, title.trim(), description || null, column.status, mappedPriority, position, assigned_to || null, due_date || null, project_id || null, estimated_time || null, userId]
     );
 
     const taskId = result.insertId;
@@ -299,6 +301,9 @@ router.post('/boards/:boardId/tasks', requirePermission('tasks.create'), async (
        VALUES (?, 'manual', ?, ?, ?, ?)`,
       [taskId, column.status, column_id, position, userId]
     );
+
+    // Audit log
+    await logCreate(req, 'Kanban Tasks', taskId, task, 'Kanban Task');
 
     // Emit socket event
     emitToBoard(boardId, 'kanban:task_created', { task, boardId });
@@ -421,8 +426,9 @@ router.patch('/tasks/:id/move', requirePermission('tasks.edit'), async (req, res
 router.put('/tasks/:id', requirePermission('tasks.edit'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, priority, assigned_to, due_date } = req.body;
+    const { title, description, priority, assigned_to, due_date, status, estimated_time, actual_time } = req.body;
     const userId = req.user.id;
+    const userRole = req.user.role;
 
     // Get existing task
     const [tasks] = await db.query('SELECT * FROM kanban_tasks WHERE id = ?', [id]);
@@ -431,6 +437,15 @@ router.put('/tasks/:id', requirePermission('tasks.edit'), async (req, res) => {
     }
 
     const oldTask = tasks[0];
+
+    // Check status transition permissions if status is being changed
+    if (status && status !== oldTask.status) {
+      if (!canTransitionTaskStatus(oldTask.status, status, userRole)) {
+        return res.status(403).json({ 
+          error: `You do not have permission to change status from "${oldTask.status}" to "${status}"` 
+        });
+      }
+    }
 
     // Map priority values to match database ENUM
     const priorityMap = {
@@ -442,13 +457,91 @@ router.put('/tasks/:id', requirePermission('tasks.edit'), async (req, res) => {
     };
     const mappedPriority = priority ? (priorityMap[priority] || oldTask.priority) : oldTask.priority;
 
+    // Build update query dynamically
+    const updateFields = [];
+    const updateValues = [];
+
+    if (title !== undefined) {
+      updateFields.push('title = ?');
+      updateValues.push(title);
+    }
+    if (description !== undefined) {
+      updateFields.push('description = ?');
+      updateValues.push(description || null);
+    }
+    if (priority !== undefined) {
+      updateFields.push('priority = ?');
+      updateValues.push(mappedPriority);
+    }
+    if (assigned_to !== undefined) {
+      updateFields.push('assigned_to = ?');
+      updateValues.push(assigned_to || null);
+    }
+    if (due_date !== undefined) {
+      updateFields.push('due_date = ?');
+      updateValues.push(due_date || null);
+    }
+    if (status !== undefined) {
+      updateFields.push('status = ?');
+      updateValues.push(status);
+    }
+    if (estimated_time !== undefined) {
+      updateFields.push('estimated_time = ?');
+      updateValues.push(estimated_time || null);
+    }
+    if (actual_time !== undefined) {
+      // Only TL/Admin can manually adjust actual_time
+      if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
+        return res.status(403).json({ error: 'Only Team Lead or Admin can manually adjust actual time' });
+      }
+      updateFields.push('actual_time = ?');
+      updateValues.push(actual_time || null);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updateFields.push('updated_by = ?', 'updated_at = CURRENT_TIMESTAMP');
+    updateValues.push(userId, id);
+
     // Update task
     await db.query(
-      `UPDATE kanban_tasks 
-       SET title = ?, description = ?, priority = ?, assigned_to = ?, due_date = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-      [title, description || null, mappedPriority, assigned_to || null, due_date || null, userId, id]
+      `UPDATE kanban_tasks SET ${updateFields.join(', ')} WHERE id = ?`,
+      updateValues
     );
+
+    // If status changed, update column and log history
+    if (status && status !== oldTask.status) {
+      // Find column with matching status
+      const [newColumns] = await db.query(
+        'SELECT id FROM kanban_columns WHERE board_id = ? AND status = ? LIMIT 1',
+        [oldTask.board_id, status]
+      );
+      
+      if (newColumns.length > 0) {
+        const newColumnId = newColumns[0].id;
+        // Get max position in new column
+        const [positions] = await db.query(
+          'SELECT COALESCE(MAX(position), 0) as max_pos FROM kanban_tasks WHERE column_id = ?',
+          [newColumnId]
+        );
+        const newPosition = (positions[0]?.max_pos || 0) + 1;
+
+        await db.query(
+          'UPDATE kanban_tasks SET column_id = ?, position = ? WHERE id = ?',
+          [newColumnId, newPosition, id]
+        );
+
+        // Log history
+        await db.query(
+          `INSERT INTO kanban_task_history 
+           (task_id, source, old_status, new_status, old_column_id, new_column_id, old_position, new_position, changed_by)
+           VALUES (?, 'manual', ?, ?, ?, ?, ?, ?, ?)`,
+          [id, oldTask.status, status, oldTask.column_id, newColumnId, oldTask.position, newPosition, userId]
+        );
+      }
+    }
 
     // Get updated task
     const [updatedTasks] = await db.query(
@@ -459,14 +552,19 @@ router.put('/tasks/:id', requirePermission('tasks.edit'), async (req, res) => {
       [id]
     );
 
+    const updatedTask = updatedTasks[0];
+
+    // Audit log
+    await logUpdate(req, 'Kanban Tasks', id, oldTask, updatedTask, 'Kanban Task');
+
     // Emit socket event
     emitToBoard(oldTask.board_id, 'kanban:task_updated', {
       taskId: id,
-      task: updatedTasks[0],
+      task: updatedTask,
       boardId: oldTask.board_id,
     });
 
-    res.json({ data: updatedTasks[0] });
+    res.json({ data: updatedTask });
   } catch (error) {
     logger.error('Error updating task:', error);
     res.status(500).json({ error: error.message });
@@ -568,6 +666,374 @@ router.post('/boards/:id/integration', requirePermission('tasks.edit'), async (r
     res.json({ data: { boardId: id, github_repo, auto_status_enabled } });
   } catch (error) {
     logger.error('Error saving integration:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Update column (list) - Admin/TL only
+ */
+router.put('/columns/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, position } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check if user is Admin or Team Lead
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
+      return res.status(403).json({ error: 'Only Admin or Team Lead can edit columns' });
+    }
+
+    // Get column
+    const [columns] = await db.query('SELECT * FROM kanban_columns WHERE id = ?', [id]);
+    if (columns.length === 0) {
+      return res.status(404).json({ error: 'Column not found' });
+    }
+
+    const column = columns[0];
+    const boardId = column.board_id;
+
+    // Check board access
+    if (userRole !== 'Super Admin' && userRole !== 'Admin') {
+      const [members] = await db.query(
+        'SELECT * FROM kanban_board_members WHERE board_id = ? AND user_id = ? AND role IN ("admin", "member")',
+        [boardId, userId]
+      );
+      if (members.length === 0) {
+        return res.status(403).json({ error: 'Access denied to this board' });
+      }
+    }
+
+    // Update column
+    const updateFields = [];
+    const updateValues = [];
+
+    if (name !== undefined) {
+      if (!name || name.trim() === '') {
+        return res.status(400).json({ error: 'Column name is required' });
+      }
+      updateFields.push('name = ?');
+      updateValues.push(name.trim());
+    }
+
+    if (position !== undefined) {
+      updateFields.push('position = ?');
+      updateValues.push(position);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updateValues.push(id);
+    await db.query(
+      `UPDATE kanban_columns SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      updateValues
+    );
+
+    // Get updated column
+    const [updatedColumns] = await db.query('SELECT * FROM kanban_columns WHERE id = ?', [id]);
+    const updatedColumn = updatedColumns[0];
+
+    // Audit log
+    await logUpdate(req, 'Kanban Columns', id, column, updatedColumn, 'Kanban Column');
+
+    // Emit socket event
+    emitToBoard(boardId, 'kanban:list_updated', {
+      boardId,
+      columnId: id,
+      column: updatedColumn,
+      action: 'update',
+    });
+
+    res.json({ data: updatedColumn });
+  } catch (error) {
+    logger.error('Error updating column:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Delete column (list) - Admin/TL only
+ */
+router.delete('/columns/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check if user is Admin or Team Lead
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
+      return res.status(403).json({ error: 'Only Admin or Team Lead can delete columns' });
+    }
+
+    // Get column
+    const [columns] = await db.query('SELECT * FROM kanban_columns WHERE id = ?', [id]);
+    if (columns.length === 0) {
+      return res.status(404).json({ error: 'Column not found' });
+    }
+
+    const column = columns[0];
+    const boardId = column.board_id;
+
+    // Check board access
+    if (userRole !== 'Super Admin' && userRole !== 'Admin') {
+      const [members] = await db.query(
+        'SELECT * FROM kanban_board_members WHERE board_id = ? AND user_id = ? AND role IN ("admin", "member")',
+        [boardId, userId]
+      );
+      if (members.length === 0) {
+        return res.status(403).json({ error: 'Access denied to this board' });
+      }
+    }
+
+    // Check if column has tasks
+    const [tasks] = await db.query('SELECT COUNT(*) as count FROM kanban_tasks WHERE column_id = ?', [id]);
+    if (tasks[0].count > 0) {
+      return res.status(400).json({ error: 'Cannot delete column with tasks. Please move or delete tasks first.' });
+    }
+
+    // Audit log before deletion
+    await logUpdate(req, 'Kanban Columns', id, column, { deleted: true }, 'Kanban Column');
+
+    // Delete column
+    await db.query('DELETE FROM kanban_columns WHERE id = ?', [id]);
+
+    // Emit socket event
+    emitToBoard(boardId, 'kanban:list_updated', {
+      boardId,
+      columnId: id,
+      action: 'delete',
+    });
+
+    res.json({ data: { id } });
+  } catch (error) {
+    logger.error('Error deleting column:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Reorder columns - Admin/TL only
+ */
+router.patch('/boards/:boardId/columns/reorder', authenticate, async (req, res) => {
+  try {
+    const { boardId } = req.params;
+    const { columnIds } = req.body; // Array of column IDs in new order
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check if user is Admin or Team Lead
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
+      return res.status(403).json({ error: 'Only Admin or Team Lead can reorder columns' });
+    }
+
+    // Check board access
+    if (userRole !== 'Super Admin' && userRole !== 'Admin') {
+      const [members] = await db.query(
+        'SELECT * FROM kanban_board_members WHERE board_id = ? AND user_id = ? AND role IN ("admin", "member")',
+        [boardId, userId]
+      );
+      if (members.length === 0) {
+        return res.status(403).json({ error: 'Access denied to this board' });
+      }
+    }
+
+    if (!Array.isArray(columnIds) || columnIds.length === 0) {
+      return res.status(400).json({ error: 'columnIds must be a non-empty array' });
+    }
+
+    // Update positions
+    for (let i = 0; i < columnIds.length; i++) {
+      await db.query(
+        'UPDATE kanban_columns SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND board_id = ?',
+        [i, columnIds[i], boardId]
+      );
+    }
+
+    // Get updated columns
+    const [updatedColumns] = await db.query(
+      'SELECT * FROM kanban_columns WHERE board_id = ? ORDER BY position ASC',
+      [boardId]
+    );
+
+    // Audit log
+    await logUpdate(req, 'Kanban Columns', boardId, { reordered: true }, { columns: updatedColumns }, 'Kanban Board');
+
+    // Emit socket event
+    emitToBoard(boardId, 'kanban:list_updated', {
+      boardId,
+      columns: updatedColumns,
+      action: 'reorder',
+    });
+
+    res.json({ data: updatedColumns });
+  } catch (error) {
+    logger.error('Error reordering columns:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Start time tracking for a task
+ */
+router.post('/tasks/:id/time/start', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Get task
+    const [tasks] = await db.query('SELECT * FROM kanban_tasks WHERE id = ?', [id]);
+    if (tasks.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Check if user already has an active timer for this task
+    const [activeLogs] = await db.query(
+      'SELECT * FROM kanban_time_logs WHERE task_id = ? AND user_id = ? AND is_active = TRUE',
+      [id, userId]
+    );
+
+    if (activeLogs.length > 0) {
+      return res.status(400).json({ error: 'You already have an active timer for this task' });
+    }
+
+    // Create new time log entry
+    const [result] = await db.query(
+      `INSERT INTO kanban_time_logs (task_id, user_id, started_at, is_active)
+       VALUES (?, ?, NOW(), TRUE)`,
+      [id, userId]
+    );
+
+    // Audit log
+    await logCreate(req, 'Kanban Time Tracking', result.insertId, { task_id: id, action: 'start' }, 'Time Log');
+
+    res.json({ data: { id: result.insertId, started_at: new Date() } });
+  } catch (error) {
+    logger.error('Error starting time tracking:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Stop time tracking for a task
+ */
+router.post('/tasks/:id/time/stop', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Get active time log
+    const [activeLogs] = await db.query(
+      'SELECT * FROM kanban_time_logs WHERE task_id = ? AND user_id = ? AND is_active = TRUE',
+      [id, userId]
+    );
+
+    if (activeLogs.length === 0) {
+      return res.status(400).json({ error: 'No active timer found for this task' });
+    }
+
+    const timeLog = activeLogs[0];
+    const startedAt = new Date(timeLog.started_at);
+    const endedAt = new Date();
+    const durationMinutes = Math.round((endedAt - startedAt) / 1000 / 60);
+
+    // Update time log
+    await db.query(
+      `UPDATE kanban_time_logs 
+       SET ended_at = NOW(), duration_minutes = ?, is_active = FALSE
+       WHERE id = ?`,
+      [durationMinutes, timeLog.id]
+    );
+
+    // Update task's actual_time
+    const [tasks] = await db.query('SELECT actual_time FROM kanban_tasks WHERE id = ?', [id]);
+    const currentActualTime = tasks[0]?.actual_time || 0;
+    const newActualTime = currentActualTime + (durationMinutes / 60);
+
+    await db.query(
+      'UPDATE kanban_tasks SET actual_time = ? WHERE id = ?',
+      [newActualTime, id]
+    );
+
+    // Audit log
+    await logUpdate(req, 'Kanban Time Tracking', timeLog.id, timeLog, { ...timeLog, ended_at: endedAt, duration_minutes: durationMinutes, is_active: false }, 'Time Log');
+
+    res.json({ 
+      data: { 
+        id: timeLog.id, 
+        duration_minutes: durationMinutes,
+        actual_time: newActualTime
+      } 
+    });
+  } catch (error) {
+    logger.error('Error stopping time tracking:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get time tracking logs for a task
+ */
+router.get('/tasks/:id/time', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [logs] = await db.query(
+      `SELECT 
+         ktl.*,
+         u.name as user_name,
+         u.email as user_email
+       FROM kanban_time_logs ktl
+       LEFT JOIN users u ON ktl.user_id = u.id
+       WHERE ktl.task_id = ?
+       ORDER BY ktl.started_at DESC`,
+      [id]
+    );
+
+    res.json({ data: logs });
+  } catch (error) {
+    logger.error('Error fetching time logs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Manually adjust actual time (TL/Admin only)
+ */
+router.patch('/tasks/:id/time', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { actual_time } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check permissions
+    if (userRole !== 'Super Admin' && userRole !== 'Admin' && userRole !== 'Team Leader' && userRole !== 'Team Lead') {
+      return res.status(403).json({ error: 'Only Team Lead or Admin can manually adjust actual time' });
+    }
+
+    // Get task
+    const [tasks] = await db.query('SELECT actual_time FROM kanban_tasks WHERE id = ?', [id]);
+    if (tasks.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const oldActualTime = tasks[0].actual_time;
+
+    // Update actual time
+    await db.query(
+      'UPDATE kanban_tasks SET actual_time = ? WHERE id = ?',
+      [actual_time || 0, id]
+    );
+
+    // Audit log
+    await logUpdate(req, 'Kanban Tasks', id, { actual_time: oldActualTime }, { actual_time }, 'Kanban Task');
+
+    res.json({ data: { actual_time: actual_time || 0 } });
+  } catch (error) {
+    logger.error('Error updating actual time:', error);
     res.status(500).json({ error: error.message });
   }
 });

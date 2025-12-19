@@ -487,6 +487,7 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
     title = validation.data.title || title;
     description = validation.data.description || description;
     const updated_by = req.user.id;
+    const userRole = req.user.role;
     
     // Get before data for audit log
     const [existingTasks] = await db.query('SELECT * FROM tasks WHERE id = ?', [id]);
@@ -494,6 +495,26 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
     const beforeData = existingTasks[0];
+    
+    // Check status transition permissions if status is being changed
+    if (status && status !== beforeData.status) {
+      // Map old statuses to new format for validation
+      const statusMap = {
+        'Open': 'New',
+        'Ready for Testing': 'Testing',
+        'Failed': 'Reopen',
+        'Closed': 'Completed',
+        'TBD': 'New',
+      };
+      const oldStatus = statusMap[beforeData.status] || beforeData.status;
+      const newStatus = statusMap[status] || status;
+      
+      if (!canTransitionTaskStatus(oldStatus, newStatus, userRole)) {
+        return res.status(403).json({ 
+          error: `You do not have permission to change status from "${beforeData.status}" to "${status}"` 
+        });
+      }
+    }
     
     // Check if role-specific columns exist
     let updateQuery = `

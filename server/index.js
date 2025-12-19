@@ -38,6 +38,7 @@ import remindersRoutes from './routes/reminders.js';
 import webhooksRoutes from './routes/webhooks.js';
 import documentRequestsRoutes from './routes/documentRequests.js';
 import kanbanRoutes from './routes/kanban.js';
+import holidaysRoutes from './routes/holidays.js';
 import { performHealthCheck } from './utils/dbHealthCheck.js';
 import { initializeFirebase } from './utils/fcmService.js';
 import { reportFatalError, createErrorContext } from './utils/errorReporting.js';
@@ -293,6 +294,7 @@ app.use('/api/assets', assetsRoutes);
 app.use('/api/reminders', remindersRoutes);
 app.use('/api/document-requests', documentRequestsRoutes);
 app.use('/api/kanban', kanbanRoutes);
+app.use('/api/holidays', holidaysRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

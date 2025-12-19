@@ -43,8 +43,14 @@ function extractStatusKeywords(message) {
     'ready for testing',
     'ready for review',
     'ready for qa',
+    'code review',
+    'code-review',
+    'review',
+    'reviewed',
     'in progress',
     'in-progress',
+    '#in-progress',
+    '#inprogress',
     'start',
     'started',
     'progress',
@@ -60,8 +66,8 @@ function extractStatusKeywords(message) {
     'finish',
     'test',
     'testing',
-    'review',
-    'reviewed',
+    'reopen',
+    'reopened',
     'deploy',
     'deployed',
   ];
@@ -85,28 +91,26 @@ function mapKeywordsToStatus(keywords) {
 
   const lowerKeywords = keywords.map(k => k.toLowerCase());
 
-  // Priority order (most specific first)
-  if (lowerKeywords.some(k => k.includes('ready for testing') || k.includes('ready for qa'))) {
+  // Priority order (most specific first) - matches new status flow
+  // New → In Progress → Code Review → Testing → Reopen → Completed
+  
+  if (lowerKeywords.some(k => k.includes('completed') || k.includes('complete') || k.includes('done') || k.includes('finished') || k.includes('finish'))) {
+    return 'Completed';
+  }
+
+  if (lowerKeywords.some(k => k.includes('reopen') || k.includes('reopened'))) {
+    return 'Reopen';
+  }
+
+  if (lowerKeywords.some(k => k.includes('ready for testing') || k.includes('ready for qa') || k.includes('test') || k.includes('testing'))) {
     return 'Testing';
   }
 
-  if (lowerKeywords.some(k => k.includes('ready for review'))) {
-    return 'Review';
+  if (lowerKeywords.some(k => k.includes('code review') || k.includes('code-review') || k.includes('ready for review') || k.includes('review') || k.includes('reviewed'))) {
+    return 'Code Review';
   }
 
-  if (lowerKeywords.some(k => k.includes('done') || k.includes('completed') || k.includes('complete') || k.includes('finished') || k.includes('finish'))) {
-    return 'Done';
-  }
-
-  if (lowerKeywords.some(k => k.includes('test') || k.includes('testing'))) {
-    return 'Testing';
-  }
-
-  if (lowerKeywords.some(k => k.includes('review') || k.includes('reviewed'))) {
-    return 'Review';
-  }
-
-  if (lowerKeywords.some(k => k.includes('start') || k.includes('started') || k.includes('progress') || k.includes('in progress') || k.includes('fix') || k.includes('working on'))) {
+  if (lowerKeywords.some(k => k.includes('start') || k.includes('started') || k.includes('progress') || k.includes('in progress') || k.includes('in-progress') || k.includes('#in-progress') || k.includes('#inprogress') || k.includes('fix') || k.includes('working on'))) {
     return 'In Progress';
   }
 

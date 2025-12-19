@@ -5,6 +5,7 @@ import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyBugAssigned, notifyBugStatusUpdated, notifyBugComment } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
+import { canTransitionBugStatus } from '../utils/statusPermissions.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -529,12 +530,30 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
     logger.debug('User Role:', userRole);
     logger.debug('Request body:', req.body);
     
-    // All users can now update bugs including assigned_to
-    // Developer, Designer, and Tester can update status and assigned_to
-    // Admin, Team Lead, Super Admin can update all fields
+    // Check status transition permissions if status is being changed
+    if (status && status !== beforeData.status) {
+      // Map old statuses to new format for validation
+      const statusMap = {
+        'In Progress': 'Assigned',
+        'Fixing': 'Fixed',
+        'Retesting': 'Retest',
+        'Passed': 'Closed',
+        'Resolved': 'Fixed',
+        'Completed': 'Closed',
+        'Done': 'Closed',
+      };
+      const oldStatus = statusMap[beforeData.status] || beforeData.status;
+      const newStatus = statusMap[status] || status;
+      
+      if (!canTransitionBugStatus(oldStatus, newStatus, userRole)) {
+        return res.status(403).json({ 
+          error: `You do not have permission to change status from "${beforeData.status}" to "${status}"` 
+        });
+      }
+    }
     
     // Valid status values matching database ENUM
-    const validStatuses = ['Open', 'In Progress', 'In Review', 'Reopened', 'Blocked', 'Fixed', 'Closed', 'Fixing', 'Retesting', 'Passed', 'Rejected', 'Duplicate', 'Not a Bug'];
+    const validStatuses = ['Open', 'Assigned', 'Fixed', 'Retest', 'Closed', 'Reopened', 'In Progress', 'In Review', 'Blocked', 'Fixing', 'Retesting', 'Passed', 'Rejected', 'Duplicate', 'Not a Bug'];
     
     // Normalize status - map common variations to valid values
     let normalizedStatus = status;
@@ -545,6 +564,9 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
         'Resolved': 'Fixed',
         'Resolve': 'Fixed',
         'Complete': 'Closed',
+        'In Progress': 'Assigned',
+        'Fixing': 'Fixed',
+        'Retesting': 'Retest',
       };
       
       if (statusMap[status]) {

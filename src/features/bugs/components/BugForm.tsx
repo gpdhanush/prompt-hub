@@ -22,6 +22,7 @@ import { projectsApi } from "@/features/projects/api";
 import { employeesApi } from "@/features/employees/api";
 import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
+import { BugStatusDropdown } from "./BugStatusDropdown";
 
 interface BugFormData {
   title: string;
@@ -426,22 +427,10 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
             </div>
             <div className="grid gap-2">
               <Label htmlFor="status">Bug Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => handleInputChange("status", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Open">Open</SelectItem>
-                  <SelectItem value="In Progress">In Progress</SelectItem>
-                  <SelectItem value="Fixed">Fixed</SelectItem>
-                  <SelectItem value="Closed">Closed</SelectItem>
-                  <SelectItem value="Blocked">Blocked</SelectItem>
-                  <SelectItem value="Reopened">Reopened</SelectItem>
-                </SelectContent>
-              </Select>
+              <BugStatusDropdown
+                currentStatus={formData.status || "Open"}
+                onStatusChange={(value) => handleInputChange("status", value)}
+              />
             </div>
           </div>
           <div className="grid gap-2">

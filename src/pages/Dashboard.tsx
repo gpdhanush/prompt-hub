@@ -14,6 +14,7 @@ import Leaderboard from "@/components/dashboard/Leaderboard";
 // Lazy load heavy dashboard components
 const TeamDashboard = lazy(() => import("@/components/dashboard/TeamDashboard"));
 const AdminDashboard = lazy(() => import("@/components/dashboard/AdminDashboard"));
+const EmployeeDashboard = lazy(() => import("@/components/dashboard/EmployeeDashboard"));
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -26,6 +27,8 @@ export default function Dashboard() {
   const isTL = userRole === "Team Lead" || userRole === "Team Leader";
   const isAdmin = userRole === "Admin";
   const isTLOrAdmin = isTL || isAdmin;
+  // Level 2 employees: Developer, Tester, Designer, Employee, etc. (not Super Admin, Admin, Team Lead)
+  const isLevel2Employee = !isSuperAdmin && !isAdmin && !isTL;
 
   // Redirect Admin users to IT Asset Dashboard
   useEffect(() => {
@@ -116,8 +119,8 @@ export default function Dashboard() {
         <Clock selectedDate={selectedDate} />
       </div>
 
-      {/* Common Dashboard - Always visible */}
-      <CommonDashboard isLoading={isLoadingStats} />
+      {/* Common Dashboard - Visible for Super Admin, Admin, and Team Leads only */}
+      {!isLevel2Employee && <CommonDashboard isLoading={isLoadingStats} />}
 
       {/* Super Admin Specific Sections - Lazy loaded */}
       {isSuperAdmin && (
@@ -146,6 +149,19 @@ export default function Dashboard() {
             formatCurrency={formatCurrency}
             formatTimeAgo={formatTimeAgo}
           />
+        </Suspense>
+      )}
+
+      {/* Level 2 Employee Dashboard - Lazy loaded */}
+      {isLevel2Employee && (
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          }
+        >
+          <EmployeeDashboard />
         </Suspense>
       )}
 

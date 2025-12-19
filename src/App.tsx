@@ -39,6 +39,7 @@ const Kanban = lazy(() => import("./features/kanban/pages/Kanban"));
 const KanbanBoardDetail = lazy(() => import("./features/kanban/pages/KanbanBoardDetail"));
 const Bugs = lazy(() => import("./features/bugs/pages/Bugs"));
 const Leaves = lazy(() => import("./features/leaves/pages/Leaves"));
+const Holidays = lazy(() => import("./features/holidays/pages/Holidays"));
 const Reimbursements = lazy(() => import("./features/reimbursements/pages/Reimbursements"));
 const ReimbursementCreate = lazy(() => import("./features/reimbursements/pages/ReimbursementCreate"));
 const ReimbursementEdit = lazy(() => import("./features/reimbursements/pages/ReimbursementEdit"));
@@ -83,6 +84,7 @@ const InventoryAdjustment = lazy(() => import("./features/assets/pages/Inventory
 const InventoryHistory = lazy(() => import("./features/assets/pages/InventoryHistory"));
 const InventoryReports = lazy(() => import("./features/assets/pages/InventoryReports"));
 const InventoryCreate = lazy(() => import("./features/assets/pages/InventoryCreate"));
+const ActivityLogs = lazy(() => import("./features/activity-logs/pages/ActivityLogs"));
 const InventoryEdit = lazy(() => import("./features/assets/pages/InventoryEdit"));
 const AssetReports = lazy(() => import("./features/assets/pages/AssetReports"));
 const AssetApprovals = lazy(() => import("./features/assets/pages/AssetApprovals"));
@@ -352,6 +354,7 @@ const AppContent = () => {
                 } 
               />
               <Route path="/leaves" element={<LazyRoute><Leaves /></LazyRoute>} />
+              <Route path="/holidays" element={<LazyRoute><Holidays /></LazyRoute>} />
               <Route 
                 path="/reimbursements" 
                 element={
@@ -403,6 +406,7 @@ const AppContent = () => {
                 } 
               />
               <Route path="/timesheet" element={<LazyRoute><Timesheet /></LazyRoute>} />
+              <Route path="/activity-logs" element={<LazyRoute><ActivityLogs /></LazyRoute>} />
               <Route 
                 path="/user-hierarchy" 
                 element={

@@ -54,6 +54,8 @@ const allMenuItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, section: null },
   // Administration (Super Admin only)
   { name: "Audit Logs", href: "/audit-logs", icon: FileText, section: "admin" },
+  // Activity Logs (All users)
+  { name: "Activity Logs", href: "/activity-logs", icon: FileText, section: "main" },
   { name: "User Hierarchy", href: "/user-hierarchy", icon: Users, section: "admin" },
   { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
   { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
@@ -65,6 +67,7 @@ const allMenuItems = [
   { name: "Kanban", href: "/kanban", icon: LayoutGrid, section: "main" },
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
+  { name: "Holidays", href: "/holidays", icon: Calendar, section: "main" },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
   { name: "Timesheet", href: "/timesheet", icon: Clock, section: "main" },
   { name: "My Devices", href: "/my-devices", icon: Laptop, section: "main" },
@@ -158,7 +161,7 @@ export function AdminSidebar() {
       return location.pathname === href;
     }
     // Routes that should match exactly (no sub-pages)
-    const exactMatchRoutes = ['/audit-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/timesheet', '/my-devices', '/user-hierarchy', '/employees/list', '/support', '/kanban'];
+    const exactMatchRoutes = ['/audit-logs', '/activity-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/timesheet', '/my-devices', '/user-hierarchy', '/employees/list', '/support', '/kanban'];
     if (exactMatchRoutes.includes(href)) {
       return location.pathname === href;
     }

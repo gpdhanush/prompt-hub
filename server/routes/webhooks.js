@@ -2,7 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { db } from '../config/database.js';
 import { logger } from '../utils/logger.js';
-import { parseCommits, validateGitHubSignature } from '../utils/commitParser.js';
+import { parseCommits, parseCommitMessage, validateGitHubSignature } from '../utils/commitParser.js';
 import { emitToBoard } from '../utils/socketService.js';
 
 const router = express.Router();
@@ -290,6 +290,103 @@ async function handlePushEvent(payload, project) {
 
         processedCount++;
         logger.debug(`Stored commit ${commitSha.substring(0, 7)} for project ${project.project_code}`);
+
+        // Parse commit message for Kanban task updates
+        try {
+          const parsed = parseCommitMessage(commitMessage);
+          if (parsed.taskId) {
+            // Find Kanban task by task_code
+            const [tasks] = await db.query(
+              'SELECT * FROM kanban_tasks WHERE task_code = ?',
+              [parsed.taskId]
+            );
+
+            if (tasks.length > 0) {
+              const task = tasks[0];
+              
+              // Update task with commit info
+              await db.query(
+                `UPDATE kanban_tasks 
+                 SET last_commit_hash = ?, last_commit_message = ?, auto_updated = TRUE, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [commitSha, commitMessage.substring(0, 500), task.id]
+              );
+
+              // If status was parsed and task has a board, try to update status
+              if (parsed.status && task.board_id) {
+                // Find column with matching status
+                const [columns] = await db.query(
+                  'SELECT id FROM kanban_columns WHERE board_id = ? AND status = ? LIMIT 1',
+                  [task.board_id, parsed.status]
+                );
+
+                if (columns.length > 0) {
+                  const newColumnId = columns[0].id;
+                  // Get max position in new column
+                  const [positions] = await db.query(
+                    'SELECT COALESCE(MAX(position), 0) as max_pos FROM kanban_tasks WHERE column_id = ?',
+                    [newColumnId]
+                  );
+                  const newPosition = (positions[0]?.max_pos || 0) + 1;
+
+                  await db.query(
+                    'UPDATE kanban_tasks SET column_id = ?, status = ?, position = ? WHERE id = ?',
+                    [newColumnId, parsed.status, newPosition, task.id]
+                  );
+
+                  // Log history
+                  await db.query(
+                    `INSERT INTO kanban_task_history 
+                     (task_id, source, old_status, new_status, old_column_id, new_column_id, old_position, new_position, commit_hash, commit_message)
+                     VALUES (?, 'github', ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [task.id, task.status, parsed.status, task.column_id, newColumnId, task.position, newPosition, commitSha, commitMessage.substring(0, 500)]
+                  );
+
+                  // Get updated task
+                  const [updatedTasks] = await db.query(
+                    `SELECT kt.*, u.name as assigned_to_name, u.email as assigned_to_email
+                     FROM kanban_tasks kt
+                     LEFT JOIN users u ON kt.assigned_to = u.id
+                     WHERE kt.id = ?`,
+                    [task.id]
+                  );
+
+                  // Emit socket event
+                  emitToBoard(task.board_id, 'kanban:task_updated', {
+                    taskId: task.id,
+                    task: updatedTasks[0],
+                    boardId: task.board_id,
+                    source: 'github',
+                    taskCode: parsed.taskId,
+                    newStatus: parsed.status,
+                  });
+
+                  logger.info(`Auto-updated Kanban task ${parsed.taskId} to status "${parsed.status}" via commit ${commitSha.substring(0, 7)}`);
+                }
+              } else if (task.board_id) {
+                // Even if no status change, emit update for commit info
+                const [updatedTasks] = await db.query(
+                  `SELECT kt.*, u.name as assigned_to_name, u.email as assigned_to_email
+                   FROM kanban_tasks kt
+                   LEFT JOIN users u ON kt.assigned_to = u.id
+                   WHERE kt.id = ?`,
+                  [task.id]
+                );
+
+                emitToBoard(task.board_id, 'kanban:task_updated', {
+                  taskId: task.id,
+                  task: updatedTasks[0],
+                  boardId: task.board_id,
+                  source: 'github',
+                  taskCode: parsed.taskId,
+                });
+              }
+            }
+          }
+        } catch (taskUpdateError) {
+          logger.error(`Error updating Kanban task from commit:`, taskUpdateError);
+          // Don't fail the commit processing if task update fails
+        }
       } catch (commitError) {
         logger.error(`Error processing individual commit:`, commitError);
         errorCount++;

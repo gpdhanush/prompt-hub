@@ -22,6 +22,7 @@ import { projectsApi } from "@/features/projects/api";
 import { employeesApi } from "@/features/employees/api";
 import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
+import { TaskStatusDropdown } from "@/features/kanban/components/TaskStatusDropdown";
 
 interface TaskFormData {
   project_id: string;
@@ -362,26 +363,10 @@ export function TaskForm({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="status" className="text-red-500">Status *</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => handleInputChange("status", value)}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Open">Open</SelectItem>
-                  <SelectItem value="In Progress">In Progress</SelectItem>
-                  <SelectItem value="Ready for Testing">Ready for Testing</SelectItem>
-                  <SelectItem value="Testing">Testing</SelectItem>
-                  <SelectItem value="Failed">Failed</SelectItem>
-                  <SelectItem value="Closed">Closed</SelectItem>
-                  <SelectItem value="Not a Bug">Not a Bug</SelectItem>
-                  <SelectItem value="Production Bug">Production Bug</SelectItem>
-                  <SelectItem value="TBD">TBD</SelectItem>
-                </SelectContent>
-              </Select>
+              <TaskStatusDropdown
+                currentStatus={formData.status || "New"}
+                onStatusChange={(value) => handleInputChange("status", value)}
+              />
             </div>
           </div>
         </CardContent>

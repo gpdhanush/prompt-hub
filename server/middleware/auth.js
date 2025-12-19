@@ -44,8 +44,6 @@ export const authenticate = async (req, res, next) => {
       });
     }
     
-    logger.debug('Authenticating user ID:', userId);
-    
     const [users] = await db.query(`
       SELECT u.*, r.name as role
       FROM users u
@@ -75,7 +73,10 @@ export const authenticate = async (req, res, next) => {
     }
     
     req.user = users[0];
-    logger.debug('Authenticated user:', req.user.name, 'Role:', req.user.role);
+    // Only log authentication in development mode to reduce log noise
+    if (process.env.NODE_ENV === 'development') {
+      logger.debug('Authenticated user:', req.user.name, 'Role:', req.user.role);
+    }
     return next();
   } catch (error) {
     logger.error('Authentication error:', error);

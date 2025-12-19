@@ -9,7 +9,105 @@ const router = express.Router();
 // Apply authentication to all routes
 router.use(authenticate);
 
-// Get audit logs with advanced filtering
+// Get activity logs for current user (all authenticated users)
+router.get('/activity', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { 
+      page = 1, 
+      limit = 50,
+      search,
+      action,
+      module,
+      startDate,
+      endDate
+    } = req.query;
+    
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    let whereConditions = ['al.user_id = ?'];
+    let queryParams = [userId];
+    
+    // Build WHERE clause dynamically
+    if (search && search !== 'undefined' && search.trim() !== '') {
+      whereConditions.push(`(al.module LIKE ? OR al.action LIKE ?)`);
+      const searchParam = `%${search}%`;
+      queryParams.push(searchParam, searchParam);
+    }
+    
+    if (action && action !== 'undefined' && action.trim() !== '') {
+      whereConditions.push('al.action = ?');
+      queryParams.push(action);
+    }
+    
+    if (module && module !== 'undefined' && module.trim() !== '') {
+      whereConditions.push('al.module = ?');
+      queryParams.push(module);
+    }
+    
+    if (startDate && startDate !== 'undefined' && startDate.trim() !== '') {
+      whereConditions.push('DATE(al.created_at) >= ?');
+      queryParams.push(startDate);
+    }
+    
+    if (endDate && endDate !== 'undefined' && endDate.trim() !== '') {
+      whereConditions.push('DATE(al.created_at) <= ?');
+      queryParams.push(endDate);
+    }
+    
+    const whereClause = whereConditions.length > 0
+      ? 'WHERE ' + whereConditions.join(' AND ')
+      : '';
+    
+    // Get audit logs
+    const [logs] = await db.query(`
+      SELECT 
+        al.id,
+        al.user_id,
+        al.action,
+        al.module,
+        al.item_id,
+        al.item_type,
+        al.before_data,
+        al.after_data,
+        al.ip_address,
+        al.user_agent,
+        al.created_at
+      FROM audit_logs al
+      ${whereClause}
+      ORDER BY al.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...queryParams, parseInt(limit), offset]);
+    
+    // Get total count
+    const [countResult] = await db.query(`
+      SELECT COUNT(*) as total
+      FROM audit_logs al
+      ${whereClause}
+    `, queryParams);
+    
+    // Parse JSON fields
+    const formattedLogs = logs.map(log => ({
+      ...log,
+      before_data: log.before_data ? JSON.parse(log.before_data) : null,
+      after_data: log.after_data ? JSON.parse(log.after_data) : null
+    }));
+    
+    res.json({ 
+      data: formattedLogs, 
+      pagination: { 
+        page: parseInt(page), 
+        limit: parseInt(limit), 
+        total: countResult[0].total, 
+        totalPages: Math.ceil(countResult[0].total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching activity logs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get audit logs with advanced filtering (Admin only)
 router.get('/', authorize('Super Admin', 'Admin'), async (req, res) => {
   try {
     const { 

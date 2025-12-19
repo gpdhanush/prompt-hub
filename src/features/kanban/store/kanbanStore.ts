@@ -78,6 +78,8 @@ interface KanbanState {
   
   // Column actions
   updateColumn: (boardId: number, columnId: number, updates: Partial<KanbanColumn>) => void;
+  removeColumn: (boardId: number, columnId: number) => void;
+  reorderColumns: (boardId: number, columns: KanbanColumn[]) => void;
   
   // Bulk update
   bulkUpdate: (boardId: number, updates: {
@@ -281,6 +283,44 @@ export const useKanbanStore = create<KanbanState>()(
         const columns = board.columns.map((col) =>
           col.id === columnId ? { ...col, ...updates } : col
         );
+
+        return {
+          boards: {
+            ...state.boards,
+            [boardId]: {
+              ...board,
+              columns,
+            },
+          },
+        };
+      });
+    },
+
+    // Remove column
+    removeColumn: (boardId: number, columnId: number) => {
+      set((state) => {
+        const board = state.boards[boardId];
+        if (!board) return state;
+
+        const columns = board.columns.filter((col) => col.id !== columnId);
+
+        return {
+          boards: {
+            ...state.boards,
+            [boardId]: {
+              ...board,
+              columns,
+            },
+          },
+        };
+      });
+    },
+
+    // Reorder columns
+    reorderColumns: (boardId: number, columns: KanbanColumn[]) => {
+      set((state) => {
+        const board = state.boards[boardId];
+        if (!board) return state;
 
         return {
           boards: {
