@@ -10,17 +10,68 @@
 		"bearer": [
 			{
 				"key": "token",
-				"value": "{{auth_token}}",
+				"value": "{{access_token}}",
 				"type": "string"
 			}
 		]
 	},
+	"event": [
+		{
+			"listen": "test",
+			"script": {
+				"exec": [
+					"// Auto-extract tokens from login response",
+					"if (pm.response.code === 200) {",
+					"    const jsonData = pm.response.json();",
+					"    if (jsonData.accessToken) {",
+					"        pm.collectionVariables.set('access_token', jsonData.accessToken);",
+					"    }",
+					"    if (jsonData.token) {",
+					"        pm.collectionVariables.set('access_token', jsonData.token);",
+					"    }",
+					"    if (jsonData.refreshToken) {",
+					"        pm.collectionVariables.set('refresh_token', jsonData.refreshToken);",
+					"    }",
+					"    if (jsonData.user && jsonData.user.id) {",
+					"        pm.collectionVariables.set('user_id', jsonData.user.id);",
+					"    }",
+					"}"
+				],
+				"type": "text/javascript"
+			}
+		}
+	],
 	"item": [
 		{
 			"name": "Authentication",
 			"item": [
 				{
 					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const jsonData = pm.response.json();",
+									"    if (jsonData.accessToken) {",
+									"        pm.collectionVariables.set('access_token', jsonData.accessToken);",
+									"    }",
+									"    if (jsonData.token) {",
+									"        pm.collectionVariables.set('access_token', jsonData.token);",
+									"    }",
+									"    if (jsonData.refreshToken) {",
+									"        pm.collectionVariables.set('refresh_token', jsonData.refreshToken);",
+									"    }",
+									"    if (jsonData.user && jsonData.user.id) {",
+									"        pm.collectionVariables.set('user_id', jsonData.user.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"auth": {
 							"type": "noauth"
@@ -34,7 +85,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"superadmin@example.com\",\n  \"password\": \"admin123\"\n}"
+							"raw": "{\n  \"email\": \"{{login_email}}\",\n  \"password\": \"{{login_password}}\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/auth/login",
@@ -48,7 +99,16 @@
 					"name": "Logout",
 					"request": {
 						"method": "POST",
-						"header": [],
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+						},
 						"url": {
 							"raw": "{{base_url}}/api/auth/logout",
 							"host": ["{{base_url}}"],
@@ -58,10 +118,32 @@
 					"response": []
 				},
 				{
-					"name": "Refresh Token",
+					"name": "Logout All Devices",
 					"request": {
 						"method": "POST",
 						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/logout-all",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "logout-all"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+						},
 						"url": {
 							"raw": "{{base_url}}/api/auth/refresh",
 							"host": ["{{base_url}}"],
@@ -82,6 +164,116 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Update Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Name\",\n  \"mobile\": \"+1234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/me/profile",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "me", "profile"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Permissions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/auth/me/permissions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "me", "permissions"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Forgot Password",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{login_email}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/forgot-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "forgot-password"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Verify OTP",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{login_email}}\",\n  \"otp\": \"{{otp_code}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/verify-otp",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "verify-otp"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{login_email}}\",\n  \"otp\": \"{{otp_code}}\",\n  \"new_password\": \"{{new_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/reset-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "reset-password"]
+						}
+					},
+					"response": []
 				}
 			]
 		},
@@ -94,16 +286,42 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/users?page=1&limit=10&search=&role_id=&status=",
+							"raw": "{{base_url}}/api/users?page={{page}}&limit={{limit}}&search={{search}}&role_id={{role_id}}&status={{status}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "users"],
 							"query": [
-								{"key": "page", "value": "1"},
-								{"key": "limit", "value": "10"},
-								{"key": "search", "value": ""},
-								{"key": "role_id", "value": ""},
-								{"key": "status", "value": ""}
+								{"key": "page", "value": "{{page}}", "description": "Page number"},
+								{"key": "limit", "value": "{{limit}}", "description": "Items per page"},
+								{"key": "search", "value": "{{search}}", "description": "Search term"},
+								{"key": "role_id", "value": "{{role_id}}", "description": "Filter by role ID"},
+								{"key": "status", "value": "{{status}}", "description": "Filter by status"}
 							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Assignable Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/users/assignable",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", "assignable"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Available Positions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/users/available-positions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", "available-positions"]
 						}
 					},
 					"response": []
@@ -118,7 +336,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "users", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{user_id}}"}
 							]
 						}
 					},
@@ -133,7 +351,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"mobile\": \"+1234567890\",\n  \"password\": \"password123\",\n  \"role_id\": 4,\n  \"position_id\": 2,\n  \"status\": \"Active\"\n}"
+							"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"mobile\": \"+1234567890\",\n  \"password\": \"password123\",\n  \"role_id\": {{role_id}},\n  \"position_id\": {{position_id}},\n  \"status\": \"Active\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/users",
@@ -152,14 +370,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"John Doe Updated\",\n  \"status\": \"Active\",\n  \"role_id\": 3\n}"
+							"raw": "{\n  \"name\": \"John Doe Updated\",\n  \"status\": \"Active\",\n  \"role_id\": {{role_id}}\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/users/:id",
 							"host": ["{{base_url}}"],
 							"path": ["api", "users", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{user_id}}"}
 							]
 						}
 					},
@@ -175,7 +393,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "users", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{user_id}}"}
 							]
 						}
 					},
@@ -192,14 +410,14 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/employees?page=1&limit=10&department=&status=",
+							"raw": "{{base_url}}/api/employees?page={{page}}&limit={{limit}}&department={{department}}&status={{status}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "employees"],
 							"query": [
-								{"key": "page", "value": "1"},
-								{"key": "limit", "value": "10"},
-								{"key": "department", "value": ""},
-								{"key": "status", "value": ""}
+								{"key": "page", "value": "{{page}}"},
+								{"key": "limit", "value": "{{limit}}"},
+								{"key": "department", "value": "{{department}}"},
+								{"key": "status", "value": "{{status}}"}
 							]
 						}
 					},
@@ -215,7 +433,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "employees", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{employee_id}}"}
 							]
 						}
 					},
@@ -230,7 +448,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"user_id\": 4,\n  \"emp_code\": \"EMP005\",\n  \"department\": \"Engineering\",\n  \"team_lead_id\": 1,\n  \"hire_date\": \"2024-01-15\",\n  \"status\": \"Present\"\n}"
+							"raw": "{\n  \"user_id\": {{user_id}},\n  \"emp_code\": \"EMP005\",\n  \"department\": \"Engineering\",\n  \"team_lead_id\": {{team_lead_id}},\n  \"hire_date\": \"2024-01-15\",\n  \"status\": \"Present\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/employees",
@@ -256,7 +474,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "employees", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{employee_id}}"}
 							]
 						}
 					},
@@ -273,14 +491,15 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/projects?page=1&limit=10&status=&search=",
+							"raw": "{{base_url}}/api/projects?page={{page}}&limit={{limit}}&status={{status}}&search={{search}}&my_projects={{my_projects}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "projects"],
 							"query": [
-								{"key": "page", "value": "1"},
-								{"key": "limit", "value": "10"},
-								{"key": "status", "value": ""},
-								{"key": "search", "value": ""}
+								{"key": "page", "value": "{{page}}"},
+								{"key": "limit", "value": "{{limit}}"},
+								{"key": "status", "value": "{{status}}"},
+								{"key": "search", "value": "{{search}}"},
+								{"key": "my_projects", "value": "{{my_projects}}"}
 							]
 						}
 					},
@@ -296,7 +515,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "projects", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{project_id}}"}
 							]
 						}
 					},
@@ -311,7 +530,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"project_code\": \"PROJ004\",\n  \"name\": \"New Project\",\n  \"description\": \"Project description\",\n  \"project_admin_id\": 2,\n  \"team_lead_id\": 3,\n  \"start_date\": \"2024-01-01\",\n  \"end_date\": \"2024-12-31\",\n  \"status\": \"Planning\",\n  \"progress\": 0\n}"
+							"raw": "{\n  \"project_code\": \"PROJ004\",\n  \"name\": \"New Project\",\n  \"description\": \"Project description\",\n  \"project_admin_id\": {{user_id}},\n  \"team_lead_id\": {{team_lead_id}},\n  \"start_date\": \"2024-01-01\",\n  \"end_date\": \"2024-12-31\",\n  \"status\": \"Planning\",\n  \"progress\": 0\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/projects",
@@ -337,7 +556,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "projects", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{project_id}}"}
 							]
 						}
 					},
@@ -353,7 +572,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "projects", ":id", "tasks"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{project_id}}"}
 							]
 						}
 					},
@@ -368,14 +587,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"user_id\": 4,\n  \"role_in_project\": \"employee\"\n}"
+							"raw": "{\n  \"user_id\": {{user_id}},\n  \"role_in_project\": \"employee\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/projects/:id/users",
 							"host": ["{{base_url}}"],
 							"path": ["api", "projects", ":id", "users"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{project_id}}"}
 							]
 						}
 					},
@@ -392,16 +611,17 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/tasks?page=1&limit=10&project_id=&status=&stage=&assigned_to=",
+							"raw": "{{base_url}}/api/tasks?page={{page}}&limit={{limit}}&project_id={{project_id}}&status={{status}}&stage={{stage}}&assigned_to={{assigned_to}}&my_tasks={{my_tasks}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "tasks"],
 							"query": [
-								{"key": "page", "value": "1"},
-								{"key": "limit", "value": "10"},
-								{"key": "project_id", "value": ""},
-								{"key": "status", "value": ""},
-								{"key": "stage", "value": ""},
-								{"key": "assigned_to", "value": ""}
+								{"key": "page", "value": "{{page}}"},
+								{"key": "limit", "value": "{{limit}}"},
+								{"key": "project_id", "value": "{{project_id}}"},
+								{"key": "status", "value": "{{status}}"},
+								{"key": "stage", "value": "{{stage}}"},
+								{"key": "assigned_to", "value": "{{assigned_to}}"},
+								{"key": "my_tasks", "value": "{{my_tasks}}"}
 							]
 						}
 					},
@@ -417,7 +637,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tasks", ":taskId"],
 							"variable": [
-								{"key": "taskId", "value": "08342"}
+								{"key": "taskId", "value": "{{task_id}}"}
 							]
 						}
 					},
@@ -432,14 +652,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"project_id\": 1,\n  \"title\": \"New Task\",\n  \"description\": \"Task description\",\n  \"assigned_to\": 4,\n  \"priority\": \"High\",\n  \"stage\": \"Analysis\",\n  \"deadline\": \"2024-12-31\"\n}"
+							"raw": "{\n  \"project_id\": {{project_id}},\n  \"title\": \"New Task\",\n  \"description\": \"Task description\",\n  \"assigned_to\": {{assigned_to}},\n  \"priority\": \"High\",\n  \"stage\": \"Analysis\",\n  \"deadline\": \"2024-12-31\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/projects/:id/tasks",
 							"host": ["{{base_url}}"],
 							"path": ["api", "projects", ":id", "tasks"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{project_id}}"}
 							]
 						}
 					},
@@ -461,7 +681,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tasks", ":taskId"],
 							"variable": [
-								{"key": "taskId", "value": "08342"}
+								{"key": "taskId", "value": "{{task_id}}"}
 							]
 						}
 					},
@@ -483,7 +703,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tasks", ":taskId", "open"],
 							"variable": [
-								{"key": "taskId", "value": "08342"}
+								{"key": "taskId", "value": "{{task_id}}"}
 							]
 						}
 					},
@@ -499,7 +719,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tasks", ":taskId", "comments"],
 							"variable": [
-								{"key": "taskId", "value": "08342"}
+								{"key": "taskId", "value": "{{task_id}}"}
 							]
 						}
 					},
@@ -521,7 +741,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tasks", ":taskId", "comments"],
 							"variable": [
-								{"key": "taskId", "value": "08342"}
+								{"key": "taskId", "value": "{{task_id}}"}
 							]
 						}
 					},
@@ -547,7 +767,61 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "tasks", ":taskId", "attachments"],
 							"variable": [
-								{"key": "taskId", "value": "08342"}
+								{"key": "taskId", "value": "{{task_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Task History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId/history",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId", "history"],
+							"variable": [
+								{"key": "taskId", "value": "{{task_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Task Timesheets",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId/timesheets",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId", "timesheets"],
+							"variable": [
+								{"key": "taskId", "value": "{{task_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add Task Timesheet",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"date\": \"2024-01-15\",\n  \"hours\": 8,\n  \"description\": \"Worked on task\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tasks/:taskId/timesheets",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks", ":taskId", "timesheets"],
+							"variable": [
+								{"key": "taskId", "value": "{{task_id}}"}
 							]
 						}
 					},
@@ -564,15 +838,15 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/bugs?page=1&limit=10&status=&severity=&task_id=",
+							"raw": "{{base_url}}/api/bugs?page={{page}}&limit={{limit}}&status={{status}}&severity={{severity}}&task_id={{task_id}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "bugs"],
 							"query": [
-								{"key": "page", "value": "1"},
-								{"key": "limit", "value": "10"},
-								{"key": "status", "value": ""},
-								{"key": "severity", "value": ""},
-								{"key": "task_id", "value": ""}
+								{"key": "page", "value": "{{page}}"},
+								{"key": "limit", "value": "{{limit}}"},
+								{"key": "status", "value": "{{status}}"},
+								{"key": "severity", "value": "{{severity}}"},
+								{"key": "task_id", "value": "{{task_id}}"}
 							]
 						}
 					},
@@ -588,7 +862,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "bugs", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{bug_id}}"}
 							]
 						}
 					},
@@ -603,7 +877,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"task_id\": 1,\n  \"description\": \"Bug description\",\n  \"severity\": \"Major\",\n  \"steps_to_reproduce\": \"Step 1, Step 2\",\n  \"expected_behavior\": \"Expected\",\n  \"actual_behavior\": \"Actual\"\n}"
+							"raw": "{\n  \"task_id\": {{task_id}},\n  \"description\": \"Bug description\",\n  \"severity\": \"Major\",\n  \"steps_to_reproduce\": \"Step 1, Step 2\",\n  \"expected_behavior\": \"Expected\",\n  \"actual_behavior\": \"Actual\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/bugs",
@@ -622,14 +896,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"status\": \"Fixing\",\n  \"assigned_to\": 4\n}"
+							"raw": "{\n  \"status\": \"Fixing\",\n  \"assigned_to\": {{assigned_to}}\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/bugs/:id",
 							"host": ["{{base_url}}"],
 							"path": ["api", "bugs", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{bug_id}}"}
 							]
 						}
 					},
@@ -646,13 +920,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/attendance?employee_id=&start_date=&end_date=",
+							"raw": "{{base_url}}/api/attendance?employee_id={{employee_id}}&start_date={{start_date}}&end_date={{end_date}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "attendance"],
 							"query": [
-								{"key": "employee_id", "value": ""},
-								{"key": "start_date", "value": ""},
-								{"key": "end_date", "value": ""}
+								{"key": "employee_id", "value": "{{employee_id}}"},
+								{"key": "start_date", "value": "{{start_date}}"},
+								{"key": "end_date", "value": "{{end_date}}"}
 							]
 						}
 					},
@@ -701,14 +975,14 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/leaves?employee_id=&status=&start_date=&end_date=",
+							"raw": "{{base_url}}/api/leaves?employee_id={{employee_id}}&status={{status}}&start_date={{start_date}}&end_date={{end_date}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "leaves"],
 							"query": [
-								{"key": "employee_id", "value": ""},
-								{"key": "status", "value": ""},
-								{"key": "start_date", "value": ""},
-								{"key": "end_date", "value": ""}
+								{"key": "employee_id", "value": "{{employee_id}}"},
+								{"key": "status", "value": "{{status}}"},
+								{"key": "start_date", "value": "{{start_date}}"},
+								{"key": "end_date", "value": "{{end_date}}"}
 							]
 						}
 					},
@@ -749,7 +1023,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "leaves", ":id", "approve"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{leave_id}}"}
 							]
 						}
 					},
@@ -771,7 +1045,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "leaves", ":id", "reject"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{leave_id}}"}
 							]
 						}
 					},
@@ -788,13 +1062,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/reimbursements?employee_id=&status=&category=",
+							"raw": "{{base_url}}/api/reimbursements?employee_id={{employee_id}}&status={{status}}&category={{category}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "reimbursements"],
 							"query": [
-								{"key": "employee_id", "value": ""},
-								{"key": "status", "value": ""},
-								{"key": "category", "value": ""}
+								{"key": "employee_id", "value": "{{employee_id}}"},
+								{"key": "status", "value": "{{status}}"},
+								{"key": "category", "value": "{{category}}"}
 							]
 						}
 					},
@@ -835,7 +1109,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "reimbursements", ":id", "approve"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{reimbursement_id}}"}
 							]
 						}
 					},
@@ -857,7 +1131,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "reimbursements", ":id", "reject"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{reimbursement_id}}"}
 							]
 						}
 					},
@@ -874,15 +1148,15 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/prompts?page=1&limit=10&category=&search=&is_approved=",
+							"raw": "{{base_url}}/api/prompts?page={{page}}&limit={{limit}}&category={{category}}&search={{search}}&is_approved={{is_approved}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "prompts"],
 							"query": [
-								{"key": "page", "value": "1"},
-								{"key": "limit", "value": "10"},
-								{"key": "category", "value": ""},
-								{"key": "search", "value": ""},
-								{"key": "is_approved", "value": ""}
+								{"key": "page", "value": "{{page}}"},
+								{"key": "limit", "value": "{{limit}}"},
+								{"key": "category", "value": "{{category}}"},
+								{"key": "search", "value": "{{search}}"},
+								{"key": "is_approved", "value": "{{is_approved}}"}
 							]
 						}
 					},
@@ -898,7 +1172,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "prompts", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{prompt_id}}"}
 							]
 						}
 					},
@@ -939,7 +1213,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "prompts", ":id"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{prompt_id}}"}
 							]
 						}
 					},
@@ -961,7 +1235,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "prompts", ":id", "preview"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{prompt_id}}"}
 							]
 						}
 					},
@@ -983,7 +1257,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "prompts", ":id", "export"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{prompt_id}}"}
 							]
 						}
 					},
@@ -1005,8 +1279,544 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "prompts", ":id", "approve"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{prompt_id}}"}
 							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Assets",
+			"item": [
+				{
+					"name": "Get All Assets",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/assets?page={{page}}&limit={{limit}}&status={{status}}&category_id={{category_id}}&search={{search}}&assigned_only={{assigned_only}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "assets"],
+							"query": [
+								{"key": "page", "value": "{{page}}"},
+								{"key": "limit", "value": "{{limit}}"},
+								{"key": "status", "value": "{{status}}"},
+								{"key": "category_id", "value": "{{category_id}}"},
+								{"key": "search", "value": "{{search}}"},
+								{"key": "assigned_only", "value": "{{assigned_only}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Asset by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/assets/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "assets", ":id"],
+							"variable": [
+								{"key": "id", "value": "{{asset_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Asset Categories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/assets/categories",
+							"host": ["{{base_url}}"],
+							"path": ["api", "assets", "categories"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Asset",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Laptop Dell XPS\",\n  \"category_id\": {{category_id}},\n  \"serial_number\": \"SN123456\",\n  \"status\": \"Available\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/assets",
+							"host": ["{{base_url}}"],
+							"path": ["api", "assets"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Asset",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"Assigned\",\n  \"notes\": \"Updated notes\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/assets/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "assets", ":id"],
+							"variable": [
+								{"key": "id", "value": "{{asset_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Assignments",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/assets/assignments/list?page={{page}}&limit={{limit}}&status={{status}}&employee_id={{employee_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "assets", "assignments", "list"],
+							"query": [
+								{"key": "page", "value": "{{page}}"},
+								{"key": "limit", "value": "{{limit}}"},
+								{"key": "status", "value": "{{status}}"},
+								{"key": "employee_id", "value": "{{employee_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Assign Asset",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"asset_id\": {{asset_id}},\n  \"employee_id\": {{employee_id}},\n  \"assigned_date\": \"2024-01-15\",\n  \"notes\": \"Assigned for work\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/assets/assign",
+							"host": ["{{base_url}}"],
+							"path": ["api", "assets", "assign"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Asset Dashboard Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/assets/dashboard/stats",
+							"host": ["{{base_url}}"],
+							"path": ["api", "assets", "dashboard", "stats"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Roles",
+			"item": [
+				{
+					"name": "Get All Roles",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/roles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "roles"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Role by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/roles/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "roles", ":id"],
+							"variable": [
+								{"key": "id", "value": "{{role_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Role",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"New Role\",\n  \"description\": \"Role description\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/roles",
+							"host": ["{{base_url}}"],
+							"path": ["api", "roles"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Role",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Role\",\n  \"description\": \"Updated description\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/roles/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "roles", ":id"],
+							"variable": [
+								{"key": "id", "value": "{{role_id}}"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Positions",
+			"item": [
+				{
+					"name": "Get All Positions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/positions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "positions"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Position by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/positions/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "positions", ":id"],
+							"variable": [
+								{"key": "id", "value": "{{position_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Position",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Senior Developer\",\n  \"description\": \"Senior developer position\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/positions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "positions"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Position",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Position\",\n  \"description\": \"Updated description\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/positions/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "positions", ":id"],
+							"variable": [
+								{"key": "id", "value": "{{position_id}}"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Permissions",
+			"item": [
+				{
+					"name": "Get All Permissions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/permissions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "permissions"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Permissions by Role",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/permissions/role/:roleId",
+							"host": ["{{base_url}}"],
+							"path": ["api", "permissions", "role", ":roleId"],
+							"variable": [
+								{"key": "roleId", "value": "{{role_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Role Permissions",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"permissions\": [1, 2, 3, 4]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/permissions/role/:roleId",
+							"host": ["{{base_url}}"],
+							"path": ["api", "permissions", "role", ":roleId"],
+							"variable": [
+								{"key": "roleId", "value": "{{role_id}}"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Kanban",
+			"item": [
+				{
+					"name": "Get Kanban Board",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/kanban?project_id={{project_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "kanban"],
+							"query": [
+								{"key": "project_id", "value": "{{project_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Move Task",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"stage\": \"Development\",\n  \"order\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/kanban/:taskId/move",
+							"host": ["{{base_url}}"],
+							"path": ["api", "kanban", ":taskId", "move"],
+							"variable": [
+								{"key": "taskId", "value": "{{task_id}}"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Holidays",
+			"item": [
+				{
+					"name": "Get All Holidays",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/holidays?year={{year}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "holidays"],
+							"query": [
+								{"key": "year", "value": "{{year}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Holiday",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"New Year\",\n  \"date\": \"2024-01-01\",\n  \"type\": \"Public Holiday\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/holidays",
+							"host": ["{{base_url}}"],
+							"path": ["api", "holidays"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Holiday",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Holiday Name\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/holidays/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "holidays", ":id"],
+							"variable": [
+								{"key": "id", "value": "{{holiday_id}}"}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Holiday",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/holidays/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "holidays", ":id"],
+							"variable": [
+								{"key": "id", "value": "{{holiday_id}}"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "MFA",
+			"item": [
+				{
+					"name": "Setup MFA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/mfa/setup",
+							"host": ["{{base_url}}"],
+							"path": ["api", "mfa", "setup"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Verify MFA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{mfa_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/mfa/verify",
+							"host": ["{{base_url}}"],
+							"path": ["api", "mfa", "verify"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Disable MFA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{mfa_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/mfa/disable",
+							"host": ["{{base_url}}"],
+							"path": ["api", "mfa", "disable"]
 						}
 					},
 					"response": []
@@ -1022,39 +1832,17 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/audit-logs?page=1&limit=10&user_id=&module=&action=&start_date=&end_date=",
+							"raw": "{{base_url}}/api/audit-logs?page={{page}}&limit={{limit}}&user_id={{user_id}}&module={{module}}&action={{action}}&start_date={{start_date}}&end_date={{end_date}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "audit-logs"],
 							"query": [
-								{"key": "page", "value": "1"},
-								{"key": "limit", "value": "10"},
-								{"key": "user_id", "value": ""},
-								{"key": "module", "value": ""},
-								{"key": "action", "value": ""},
-								{"key": "start_date", "value": ""},
-								{"key": "end_date", "value": ""}
-							]
-						}
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "Leaderboard",
-			"item": [
-				{
-					"name": "Get Leaderboard",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/leaderboard?period=month&metric=tasks",
-							"host": ["{{base_url}}"],
-							"path": ["api", "leaderboard"],
-							"query": [
-								{"key": "period", "value": "month", "description": "month, week, year"},
-								{"key": "metric", "value": "tasks", "description": "tasks, bugs, productivity"}
+								{"key": "page", "value": "{{page}}"},
+								{"key": "limit", "value": "{{limit}}"},
+								{"key": "user_id", "value": "{{user_id}}"},
+								{"key": "module", "value": "{{module}}"},
+								{"key": "action", "value": "{{action}}"},
+								{"key": "start_date", "value": "{{start_date}}"},
+								{"key": "end_date", "value": "{{end_date}}"}
 							]
 						}
 					},
@@ -1071,11 +1859,11 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/notifications?is_read=",
+							"raw": "{{base_url}}/api/notifications?is_read={{is_read}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "notifications"],
 							"query": [
-								{"key": "is_read", "value": ""}
+								{"key": "is_read", "value": "{{is_read}}"}
 							]
 						}
 					},
@@ -1091,8 +1879,21 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "notifications", ":id", "read"],
 							"variable": [
-								{"key": "id", "value": "1"}
+								{"key": "id", "value": "{{notification_id}}"}
 							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Mark All as Read",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/notifications/read-all",
+							"host": ["{{base_url}}"],
+							"path": ["api", "notifications", "read-all"]
 						}
 					},
 					"response": []
@@ -1135,19 +1936,365 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "Search",
+			"item": [
+				{
+					"name": "Global Search",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/search?q={{search_query}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "search"],
+							"query": [
+								{"key": "q", "value": "{{search_query}}"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Reports",
+			"item": [
+				{
+					"name": "Get Reports",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/reports?type={{report_type}}&start_date={{start_date}}&end_date={{end_date}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "reports"],
+							"query": [
+								{"key": "type", "value": "{{report_type}}"},
+								{"key": "start_date", "value": "{{start_date}}"},
+								{"key": "end_date", "value": "{{end_date}}"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "FCM",
+			"item": [
+				{
+					"name": "Register Device",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{fcm_token}}\",\n  \"device_type\": \"web\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/fcm/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "fcm", "register"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Unregister Device",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{fcm_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/fcm/unregister",
+							"host": ["{{base_url}}"],
+							"path": ["api", "fcm", "unregister"]
+						}
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"variable": [
 		{
 			"key": "base_url",
-			"value": "http://localhost:3000",
-			"type": "string"
+			"value": "http://localhost:3001",
+			"type": "string",
+			"description": "Base URL for the API server"
 		},
 		{
-			"key": "auth_token",
+			"key": "access_token",
 			"value": "",
-			"type": "string"
+			"type": "string",
+			"description": "JWT Access Token (auto-extracted from login)"
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "string",
+			"description": "JWT Refresh Token (auto-extracted from login)"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string",
+			"description": "Current user ID (auto-extracted from login)"
+		},
+		{
+			"key": "login_email",
+			"value": "superadmin@example.com",
+			"type": "string",
+			"description": "Email for login"
+		},
+		{
+			"key": "login_password",
+			"value": "admin123",
+			"type": "string",
+			"description": "Password for login"
+		},
+		{
+			"key": "project_id",
+			"value": "1",
+			"type": "string",
+			"description": "Project ID"
+		},
+		{
+			"key": "task_id",
+			"value": "",
+			"type": "string",
+			"description": "Task ID"
+		},
+		{
+			"key": "employee_id",
+			"value": "",
+			"type": "string",
+			"description": "Employee ID"
+		},
+		{
+			"key": "role_id",
+			"value": "",
+			"type": "string",
+			"description": "Role ID"
+		},
+		{
+			"key": "position_id",
+			"value": "",
+			"type": "string",
+			"description": "Position ID"
+		},
+		{
+			"key": "bug_id",
+			"value": "",
+			"type": "string",
+			"description": "Bug ID"
+		},
+		{
+			"key": "leave_id",
+			"value": "",
+			"type": "string",
+			"description": "Leave ID"
+		},
+		{
+			"key": "reimbursement_id",
+			"value": "",
+			"type": "string",
+			"description": "Reimbursement ID"
+		},
+		{
+			"key": "prompt_id",
+			"value": "",
+			"type": "string",
+			"description": "Prompt ID"
+		},
+		{
+			"key": "asset_id",
+			"value": "",
+			"type": "string",
+			"description": "Asset ID"
+		},
+		{
+			"key": "category_id",
+			"value": "",
+			"type": "string",
+			"description": "Category ID"
+		},
+		{
+			"key": "holiday_id",
+			"value": "",
+			"type": "string",
+			"description": "Holiday ID"
+		},
+		{
+			"key": "notification_id",
+			"value": "",
+			"type": "string",
+			"description": "Notification ID"
+		},
+		{
+			"key": "team_lead_id",
+			"value": "",
+			"type": "string",
+			"description": "Team Lead User ID"
+		},
+		{
+			"key": "assigned_to",
+			"value": "",
+			"type": "string",
+			"description": "User ID to assign task/bug to"
+		},
+		{
+			"key": "page",
+			"value": "1",
+			"type": "string",
+			"description": "Page number for pagination"
+		},
+		{
+			"key": "limit",
+			"value": "10",
+			"type": "string",
+			"description": "Items per page"
+		},
+		{
+			"key": "search",
+			"value": "",
+			"type": "string",
+			"description": "Search query"
+		},
+		{
+			"key": "status",
+			"value": "",
+			"type": "string",
+			"description": "Status filter"
+		},
+		{
+			"key": "stage",
+			"value": "",
+			"type": "string",
+			"description": "Task stage filter"
+		},
+		{
+			"key": "severity",
+			"value": "",
+			"type": "string",
+			"description": "Bug severity filter"
+		},
+		{
+			"key": "department",
+			"value": "",
+			"type": "string",
+			"description": "Department filter"
+		},
+		{
+			"key": "category",
+			"value": "",
+			"type": "string",
+			"description": "Category filter"
+		},
+		{
+			"key": "start_date",
+			"value": "",
+			"type": "string",
+			"description": "Start date (YYYY-MM-DD)"
+		},
+		{
+			"key": "end_date",
+			"value": "",
+			"type": "string",
+			"description": "End date (YYYY-MM-DD)"
+		},
+		{
+			"key": "year",
+			"value": "",
+			"type": "string",
+			"description": "Year filter"
+		},
+		{
+			"key": "module",
+			"value": "",
+			"type": "string",
+			"description": "Module filter for audit logs"
+		},
+		{
+			"key": "action",
+			"value": "",
+			"type": "string",
+			"description": "Action filter for audit logs"
+		},
+		{
+			"key": "is_read",
+			"value": "",
+			"type": "string",
+			"description": "Notification read status filter"
+		},
+		{
+			"key": "is_approved",
+			"value": "",
+			"type": "string",
+			"description": "Approval status filter"
+		},
+		{
+			"key": "my_projects",
+			"value": "",
+			"type": "string",
+			"description": "Filter for user's projects only"
+		},
+		{
+			"key": "my_tasks",
+			"value": "",
+			"type": "string",
+			"description": "Filter for user's tasks only"
+		},
+		{
+			"key": "assigned_only",
+			"value": "",
+			"type": "string",
+			"description": "Filter for assigned assets only"
+		},
+		{
+			"key": "search_query",
+			"value": "",
+			"type": "string",
+			"description": "Global search query"
+		},
+		{
+			"key": "report_type",
+			"value": "",
+			"type": "string",
+			"description": "Report type"
+		},
+		{
+			"key": "otp_code",
+			"value": "",
+			"type": "string",
+			"description": "OTP code for password reset"
+		},
+		{
+			"key": "new_password",
+			"value": "",
+			"type": "string",
+			"description": "New password for reset"
+		},
+		{
+			"key": "mfa_token",
+			"value": "",
+			"type": "string",
+			"description": "MFA token"
+		},
+		{
+			"key": "fcm_token",
+			"value": "",
+			"type": "string",
+			"description": "FCM device token"
 		}
 	]
 }
-
