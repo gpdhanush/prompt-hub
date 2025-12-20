@@ -3,11 +3,32 @@ import { notifyCalendarReminder } from './notificationService.js';
 import { logger } from './logger.js';
 
 /**
+ * Check if database connection is available
+ */
+async function isDatabaseAvailable() {
+  try {
+    const connection = await db.getConnection();
+    await connection.ping();
+    connection.release();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
  * Check for reminders that need to be sent (10 minutes before)
  * This should be called periodically (e.g., every minute via cron job)
  */
 export async function checkAndSendReminders() {
   try {
+    // Check if database is available before attempting query
+    const dbAvailable = await isDatabaseAvailable();
+    if (!dbAvailable) {
+      logger.warn('Database not available, skipping reminder check');
+      return 0;
+    }
+
     // Get current time and 10 minutes from now
     const now = new Date();
     const tenMinutesFromNow = new Date(now.getTime() + 10 * 60 * 1000);
@@ -77,8 +98,14 @@ export async function checkAndSendReminders() {
 
     return reminders.length;
   } catch (error) {
+    // Handle specific database connection errors gracefully
+    if (error.code === 'EADDRNOTAVAIL' || error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      logger.warn('Database connection error, skipping reminder check:', error.code);
+      return 0;
+    }
     logger.error('Error checking reminders:', error);
-    throw error;
+    // Don't throw - let the scheduler continue running
+    return 0;
   }
 }
 
@@ -92,7 +119,11 @@ export function initializeReminderScheduler() {
     try {
       await checkAndSendReminders();
     } catch (error) {
-      logger.error('Error in reminder scheduler:', error);
+      // Only log non-connection errors as errors
+      // Connection errors are already handled in checkAndSendReminders
+      if (error.code !== 'EADDRNOTAVAIL' && error.code !== 'ECONNREFUSED' && error.code !== 'ETIMEDOUT') {
+        logger.error('Error in reminder scheduler:', error);
+      }
     }
   }, 60 * 1000); // Every minute
 
