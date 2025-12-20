@@ -12,45 +12,123 @@ USE `prasowla_ntpl_admin`;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================
--- CLEANUP ORPHANED DATA
+-- CLEANUP ORPHANED DATA (if tables exist)
 -- ============================================
 -- Remove orphaned kanban_board_members that reference non-existent boards
 -- This fixes the foreign key constraint error
+-- Only runs if tables already exist (for existing databases)
 
--- Delete orphaned kanban_board_members
-DELETE kbm FROM `kanban_board_members` kbm
-LEFT JOIN `kanban_boards` kb ON kbm.board_id = kb.id
-WHERE kb.id IS NULL;
+-- Check if kanban_board_members table exists and clean up orphaned data
+SET @table_exists = (
+  SELECT COUNT(*) 
+  FROM information_schema.tables 
+  WHERE table_schema = DATABASE() 
+  AND table_name = 'kanban_board_members'
+);
 
--- Delete orphaned kanban_columns
-DELETE kc FROM `kanban_columns` kc
-LEFT JOIN `kanban_boards` kb ON kc.board_id = kb.id
-WHERE kb.id IS NULL;
+SET @sql = IF(@table_exists > 0,
+  'DELETE kbm FROM `kanban_board_members` kbm LEFT JOIN `kanban_boards` kb ON kbm.board_id = kb.id WHERE kb.id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- Delete orphaned kanban_tasks
-DELETE kt FROM `kanban_tasks` kt
-LEFT JOIN `kanban_boards` kb ON kt.board_id = kb.id
-WHERE kb.id IS NULL;
+-- Check if kanban_columns table exists and clean up orphaned data
+SET @table_exists = (
+  SELECT COUNT(*) 
+  FROM information_schema.tables 
+  WHERE table_schema = DATABASE() 
+  AND table_name = 'kanban_columns'
+);
 
--- Delete orphaned kanban_tasks (by column)
-DELETE kt FROM `kanban_tasks` kt
-LEFT JOIN `kanban_columns` kc ON kt.column_id = kc.id
-WHERE kc.id IS NULL;
+SET @sql = IF(@table_exists > 0,
+  'DELETE kc FROM `kanban_columns` kc LEFT JOIN `kanban_boards` kb ON kc.board_id = kb.id WHERE kb.id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- Delete orphaned kanban_integrations
-DELETE ki FROM `kanban_integrations` ki
-LEFT JOIN `kanban_boards` kb ON ki.board_id = kb.id
-WHERE kb.id IS NULL;
+-- Check if kanban_tasks table exists and clean up orphaned data
+SET @table_exists = (
+  SELECT COUNT(*) 
+  FROM information_schema.tables 
+  WHERE table_schema = DATABASE() 
+  AND table_name = 'kanban_tasks'
+);
 
--- Delete orphaned kanban_task_history
-DELETE kth FROM `kanban_task_history` kth
-LEFT JOIN `kanban_tasks` kt ON kth.task_id = kt.id
-WHERE kt.id IS NULL;
+SET @sql = IF(@table_exists > 0,
+  'DELETE kt FROM `kanban_tasks` kt LEFT JOIN `kanban_boards` kb ON kt.board_id = kb.id WHERE kb.id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- Delete orphaned kanban_time_logs
-DELETE ktl FROM `kanban_time_logs` ktl
-LEFT JOIN `kanban_tasks` kt ON ktl.task_id = kt.id
-WHERE kt.id IS NULL;
+-- Delete orphaned kanban_tasks (by column) if table exists
+SET @table_exists = (
+  SELECT COUNT(*) 
+  FROM information_schema.tables 
+  WHERE table_schema = DATABASE() 
+  AND table_name = 'kanban_tasks'
+);
+
+SET @sql = IF(@table_exists > 0,
+  'DELETE kt FROM `kanban_tasks` kt LEFT JOIN `kanban_columns` kc ON kt.column_id = kc.id WHERE kc.id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Check if kanban_integrations table exists and clean up orphaned data
+SET @table_exists = (
+  SELECT COUNT(*) 
+  FROM information_schema.tables 
+  WHERE table_schema = DATABASE() 
+  AND table_name = 'kanban_integrations'
+);
+
+SET @sql = IF(@table_exists > 0,
+  'DELETE ki FROM `kanban_integrations` ki LEFT JOIN `kanban_boards` kb ON ki.board_id = kb.id WHERE kb.id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Check if kanban_task_history table exists and clean up orphaned data
+SET @table_exists = (
+  SELECT COUNT(*) 
+  FROM information_schema.tables 
+  WHERE table_schema = DATABASE() 
+  AND table_name = 'kanban_task_history'
+);
+
+SET @sql = IF(@table_exists > 0,
+  'DELETE kth FROM `kanban_task_history` kth LEFT JOIN `kanban_tasks` kt ON kth.task_id = kt.id WHERE kt.id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Check if kanban_time_logs table exists and clean up orphaned data
+SET @table_exists = (
+  SELECT COUNT(*) 
+  FROM information_schema.tables 
+  WHERE table_schema = DATABASE() 
+  AND table_name = 'kanban_time_logs'
+);
+
+SET @sql = IF(@table_exists > 0,
+  'DELETE ktl FROM `kanban_time_logs` ktl LEFT JOIN `kanban_tasks` kt ON ktl.task_id = kt.id WHERE kt.id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- ============================================
 -- KANBAN BOARDS TABLE

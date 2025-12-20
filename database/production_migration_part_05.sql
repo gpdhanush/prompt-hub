@@ -20,7 +20,7 @@ SET @next_id = (SELECT COALESCE(MAX(id), 0) + 1 FROM projects WHERE id > 0);
 -- Update the project with id=0 to use the next available ID
 UPDATE projects SET id = @next_id WHERE id = 0;
 
--- Update all foreign key references in related tables
+-- Update all foreign key references in related tables (only if tables exist)
 UPDATE project_users SET project_id = @next_id WHERE project_id = 0;
 UPDATE project_milestones SET project_id = @next_id WHERE project_id = 0;
 UPDATE project_files SET project_id = @next_id WHERE project_id = 0;
@@ -32,7 +32,22 @@ UPDATE project_comments SET project_id = @next_id WHERE project_id = 0;
 UPDATE project_activities SET project_id = @next_id WHERE project_id = 0;
 UPDATE tasks SET project_id = @next_id WHERE project_id = 0;
 UPDATE bugs SET project_id = @next_id WHERE project_id = 0;
-UPDATE kanban_boards SET project_id = @next_id WHERE project_id = 0;
+
+-- Update kanban_boards only if table exists
+SET @table_exists = (
+  SELECT COUNT(*) 
+  FROM information_schema.tables 
+  WHERE table_schema = DATABASE() 
+  AND table_name = 'kanban_boards'
+);
+
+SET @sql = IF(@table_exists > 0,
+  CONCAT('UPDATE kanban_boards SET project_id = ', @next_id, ' WHERE project_id = 0'),
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- Reset AUTO_INCREMENT
 SET @max_id = (SELECT COALESCE(MAX(id), 0) FROM projects);

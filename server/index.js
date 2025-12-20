@@ -175,6 +175,14 @@ const publicPath = path.join(__dirname, 'public');
 if (!fs.existsSync(publicPath)) {
   fs.mkdirSync(publicPath, { recursive: true });
 }
+app.get('/', (req, res) => {
+  res.json({
+    name: 'PMS API',
+    status: 'running',
+    docs: '/api-docs',
+    health: '/health'
+  });
+});
 // Serve static files with proper MIME types for cPanel
 app.use('/swagger-ui-assets', express.static(publicPath, {
   setHeaders: (res, filePath) => {
