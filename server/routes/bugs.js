@@ -515,6 +515,14 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
 router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const bugId = await resolveIdFromUuid('bugs', id);
+    if (!bugId) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+    
     const userRole = req.user?.role || '';
     
     // Validate and sanitize text inputs
@@ -550,14 +558,15 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
     tags = validation.data.tags || tags;
     
     // Get before data for audit log
-    const [existingBugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [id]);
+    const [existingBugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [bugId]);
     if (existingBugs.length === 0) {
       return res.status(404).json({ error: 'Bug not found' });
     }
     const beforeData = existingBugs[0];
     
     logger.debug('=== UPDATE BUG REQUEST ===');
-    logger.debug('Bug ID:', id);
+    logger.debug('Bug ID (param):', id);
+    logger.debug('Bug ID (resolved):', bugId);
     logger.debug('User Role:', userRole);
     logger.debug('Request body:', req.body);
     
@@ -738,7 +747,7 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
     updateFields.push('updated_by = ?');
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
     updateValues.push(updated_by);
-    updateValues.push(id);
+    updateValues.push(bugId);
     
     if (updateFields.length > 2) { // More than just updated_by and updated_at
       const query = `UPDATE bugs SET ${updateFields.join(', ')} WHERE id = ?`;
@@ -746,11 +755,11 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
       logger.debug('Bug updated successfully');
     }
     
-    const [updated] = await db.query('SELECT * FROM bugs WHERE id = ?', [id]);
+    const [updated] = await db.query('SELECT * FROM bugs WHERE id = ?', [bugId]);
     logger.debug('Updated bug:', updated[0]);
     
     // Create audit log for bug update
-    await logUpdate(req, 'Bugs', id, beforeData, updated[0], 'Bug');
+    await logUpdate(req, 'Bugs', bugId, beforeData, updated[0], 'Bug');
     
     // Notify assigned user if bug status is updated
     if (status && normalizedStatus && normalizedStatus !== beforeData.status) {
@@ -758,7 +767,7 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
       if (assignedUserId) {
         await notifyBugStatusUpdated(
           assignedUserId,
-          parseInt(id),
+          bugId,
           title || updated[0].title || 'Bug',
           beforeData.status,
           normalizedStatus,
@@ -771,7 +780,7 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
     if (assigned_to !== undefined && assignedToValue && assignedToValue !== beforeData.assigned_to && assignedToValue !== updated_by) {
       await notifyBugAssigned(
         assignedToValue,
-        parseInt(id),
+        bugId,
         title || updated[0].title || 'Bug',
         updated_by
       );

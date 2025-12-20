@@ -19,7 +19,7 @@ export const bugsApi = {
     return response.data;
   },
 
-  getById: async (id: number) => {
+  getById: async (id: number | string) => {
     const response = await apiClient.get<{ data: any }>(`/bugs/${id}`);
     return response.data;
   },
@@ -33,27 +33,27 @@ export const bugsApi = {
     return response.data;
   },
 
-  update: async (id: number, data: any) => {
+  update: async (id: number | string, data: any) => {
     const response = await apiClient.put<{ data: any }>(`/bugs/${id}`, data);
     return response.data;
   },
 
-  delete: async (id: number) => {
+  delete: async (id: number | string) => {
     const response = await apiClient.delete<{ message: string }>(`/bugs/${id}`);
     return response.data;
   },
 
-  getComments: async (id: number) => {
+  getComments: async (id: number | string) => {
     const response = await apiClient.get<{ data: any[] }>(`/bugs/${id}/comments`);
     return response.data;
   },
 
-  createComment: async (id: number, data: { comment_text: string; parent_id?: number }) => {
+  createComment: async (id: number | string, data: { comment_text: string; parent_id?: number }) => {
     const response = await apiClient.post<{ data: any }>(`/bugs/${id}/comments`, data);
     return response.data;
   },
 
-  uploadAttachments: async (id: number, files: File[]) => {
+  uploadAttachments: async (id: number | string, files: File[]) => {
     const formData = new FormData();
     files.forEach(file => formData.append('attachments', file));
     // Use apiClient for FormData uploads - axios handles Content-Type automatically
@@ -64,7 +64,7 @@ export const bugsApi = {
     return response.data;
   },
 
-  deleteAttachment: async (id: number, attachmentId: number) => {
+  deleteAttachment: async (id: number | string, attachmentId: number) => {
     const response = await apiClient.delete<{ message: string }>(`/bugs/${id}/attachments/${attachmentId}`);
     return response.data;
   },

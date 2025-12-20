@@ -78,7 +78,7 @@ export default function BugEdit() {
   // Fetch bug data - optimized query
   const { data: bugData, isLoading, error } = useQuery({
     queryKey: ['bug', id],
-    queryFn: () => bugsApi.getById(Number(id)),
+    queryFn: () => bugsApi.getById(id!),
     enabled: !!id,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
@@ -124,7 +124,7 @@ export default function BugEdit() {
   }, [bug]);
 
   const deleteAttachmentMutation = useMutation({
-    mutationFn: (attachmentId: number) => bugsApi.deleteAttachment(Number(id), attachmentId),
+    mutationFn: (attachmentId: number) => bugsApi.deleteAttachment(id!, attachmentId),
     onSuccess: (_, attachmentId) => {
       setExistingAttachments(prev => prev.filter(att => att.id !== attachmentId));
       queryClient.invalidateQueries({ queryKey: ['bug', id] });
@@ -143,12 +143,12 @@ export default function BugEdit() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: any) => bugsApi.update(Number(id), data),
+    mutationFn: (data: any) => bugsApi.update(id!, data),
     onSuccess: async () => {
       // Upload attachments if any
       if (attachments.length > 0) {
         try {
-          await bugsApi.uploadAttachments(Number(id), attachments);
+          await bugsApi.uploadAttachments(id!, attachments);
         } catch (error: any) {
           toast({
             title: "Warning",

@@ -38,7 +38,6 @@ export default function AssetTickets() {
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Get current user to check if they're admin
@@ -47,7 +46,7 @@ export default function AssetTickets() {
   const isAdmin = userRole === 'Admin' || userRole === 'Super Admin';
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['assets', 'tickets', page, limit, statusFilter, isAdmin, searchQuery],
+    queryKey: ['assets', 'tickets', page, limit, statusFilter, isAdmin],
     queryFn: () => assetsApi.getTickets({
       page,
       limit,
@@ -64,16 +63,14 @@ export default function AssetTickets() {
   const tickets = data?.data || [];
   const total = data?.total || 0;
 
-  // Client-side filtering for search and priority
+  // Client-side filtering for search
   const filteredTickets = tickets.filter((ticket: any) => {
     const matchesSearch = !searchQuery || 
       ticket.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ticket.ticket_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ticket.employee_name?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesPriority = !priorityFilter || ticket.priority === priorityFilter;
-    
-    return matchesSearch && matchesPriority;
+    return matchesSearch;
   });
 
   const getStatusIcon = (status: string) => {
@@ -190,24 +187,6 @@ export default function AssetTickets() {
                 <SelectItem value="closed">Closed</SelectItem>
               </SelectContent>
             </Select>
-            <Select 
-              value={priorityFilter || "all"} 
-              onValueChange={(value) => {
-                setPriorityFilter(value === "all" ? "" : value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="All Priorities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -240,7 +219,7 @@ export default function AssetTickets() {
               <Ticket className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
               <h3 className="text-lg font-semibold mb-2">No tickets found</h3>
               <p className="text-muted-foreground">
-                {searchQuery || statusFilter || priorityFilter
+                {searchQuery || statusFilter
                   ? 'Try adjusting your filters'
                   : 'No tickets available'}
               </p>
@@ -253,10 +232,7 @@ export default function AssetTickets() {
                     <TableHead className="w-[120px]">Ticket #</TableHead>
                     <TableHead>Subject</TableHead>
                     {isAdmin && <TableHead>Employee</TableHead>}
-                    <TableHead>Type</TableHead>
-                    <TableHead>Priority</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
                     <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -295,29 +271,11 @@ export default function AssetTickets() {
                         </TableCell>
                       )}
                       <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {ticket.ticket_type.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge variant={getPriorityVariant(ticket.priority)}>
-                          {ticket.priority}
-                        </StatusBadge>
-                      </TableCell>
-                      <TableCell>
                         <div className="flex items-center gap-2">
                           {getStatusIcon(ticket.status)}
                           <StatusBadge variant={getStatusVariant(ticket.status)}>
                             {ticket.status.replace('_', ' ')}
                           </StatusBadge>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          {ticket.created_at
-                            ? format(new Date(ticket.created_at), "MMM dd, yyyy")
-                            : "-"}
                         </div>
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

@@ -62,15 +62,15 @@ const allMenuItems = [
   // Main Management
   { name: "Users", href: "/users", icon: Users, section: "main" },
   { name: "Employees", href: "/employees", icon: UserCog, section: "main" },
-  { name: "Employee Directory", href: "/employees/list", icon: UserSearch, section: "main" },
+  { name: "Contact Directory", href: "/employees/list", icon: UserSearch, section: "main" },
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
   { name: "Tasks", href: "/tasks", icon: CheckSquare, section: "main" },
-  { name: "Kanban", href: "/kanban", icon: LayoutGrid, section: "main" },
+  // { name: "Kanban", href: "/kanban", icon: LayoutGrid, section: "main" },
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Holidays", href: "/holidays", icon: Calendar, section: "main" },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
-  { name: "Timesheet", href: "/timesheet", icon: Clock, section: "main" },
+  // { name: "Timesheet", href: "/timesheet", icon: Clock, section: "main" },
   { name: "My Devices", href: "/my-devices", icon: Laptop, section: "main" },
   { name: "Reports", href: "/reports", icon: BarChart3, section: "main" },
   
@@ -166,7 +166,7 @@ export function AdminSidebar() {
       return location.pathname === href;
     }
     // Routes that should match exactly (no sub-pages)
-    const exactMatchRoutes = ['/audit-logs', '/activity-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/timesheet', '/my-devices', '/user-hierarchy', '/employees/list', '/support', '/kanban'];
+    const exactMatchRoutes = ['/audit-logs', '/activity-logs', '/roles-positions', '/roles-permissions', '/reports', '/leaves', '/reimbursements', '/my-devices', '/user-hierarchy', '/employees/list', '/support'];
     if (exactMatchRoutes.includes(href)) {
       return location.pathname === href;
     }
@@ -260,8 +260,6 @@ export function AdminSidebar() {
             '/projects',
             '/tasks',
             '/bugs',
-            '/kanban',
-            '/timesheet',
             '/holidays',
             '/leaves',
             '/reimbursements',
@@ -277,7 +275,7 @@ export function AdminSidebar() {
             if (item.href === '/employees' && !canAccessEmployees) return false;
             if (item.href === '/projects' && !canAccessProjects) return false;
             if (item.href === '/tasks' && !canAccessTasks) return false;
-            if (item.href === '/kanban' && !canAccessKanban) return false;
+            // if (item.href === '/kanban' && !canAccessKanban) return false; // Kanban menu hidden
             if (item.href === '/bugs' && !canAccessBugs) return false;
             if (item.href === '/leaves' && !canAccessLeaves) return false;
             if (item.href === '/reimbursements' && !canAccessReimbursements) return false;

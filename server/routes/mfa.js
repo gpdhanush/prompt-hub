@@ -26,7 +26,6 @@ let speakeasy, QRCode;
 })();
 
 import { authenticate, authorize } from '../middleware/auth.js';
-import { mfaVerificationLimiter, mfaUserRateLimiter, recordMfaSuccess } from '../middleware/rateLimit.js';
 import { createAuditLog } from '../utils/auditLogger.js';
 
 const router = express.Router();
@@ -237,7 +236,7 @@ router.post('/verify-setup', authenticate, async (req, res) => {
  * Verify MFA code during login
  * POST /api/mfa/verify
  */
-router.post('/verify', mfaVerificationLimiter, mfaUserRateLimiter, async (req, res) => {
+router.post('/verify', async (req, res) => {
   try {
     const { userId, code, backupCode, sessionToken } = req.body;
     
@@ -309,10 +308,6 @@ router.post('/verify', mfaVerificationLimiter, mfaUserRateLimiter, async (req, r
     if (!isValid) {
       return res.status(400).json({ error: 'Invalid verification code' });
     }
-    
-    // Record successful verification
-    const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
-    await recordMfaSuccess(userId, ipAddress);
     
     // Revoke all previous refresh tokens for single-device login
     const { revokeAllUserTokens } = await import('../utils/refreshTokenService.js');
