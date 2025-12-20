@@ -108,12 +108,20 @@ export default function Tasks() {
 
   // Handlers with useCallback
   const handleView = useCallback((task: Task) => {
-    navigate(`/tasks/${task.id}`);
-  }, [navigate]);
+    // Use client route if user is CLIENT
+    const basePath = userRole === 'CLIENT' || userRole === 'Client' ? '/client/tasks' : '/tasks';
+    // Use UUID if available, otherwise use numeric ID
+    const taskIdentifier = task.uuid || task.id;
+    navigate(`${basePath}/${taskIdentifier}`);
+  }, [navigate, userRole]);
 
   const handleEdit = useCallback((task: Task) => {
-    navigate(`/tasks/${task.id}/edit`);
-  }, [navigate]);
+    // CLIENT users can't edit, but keep route for other users
+    const basePath = userRole === 'CLIENT' || userRole === 'Client' ? '/client/tasks' : '/tasks';
+    // Use UUID if available, otherwise use numeric ID
+    const taskIdentifier = task.uuid || task.id;
+    navigate(`${basePath}/${taskIdentifier}/edit`);
+  }, [navigate, userRole]);
 
   const handleDelete = useCallback((task: Task) => {
     setSelectedTask(task);
@@ -151,7 +159,8 @@ export default function Tasks() {
     if (taskIdParam && tasks.length > 0) {
       const task = tasks.find((t: Task) => t.id.toString() === taskIdParam || t.task_code === taskIdParam);
       if (task) {
-        navigate(`/tasks/${task.id}`);
+        const basePath = userRole === 'CLIENT' || userRole === 'Client' ? '/client/tasks' : '/tasks';
+        navigate(`${basePath}/${task.id}`);
         // Remove task parameter from URL
         setSearchParams((params) => {
           params.delete('task');
@@ -159,7 +168,7 @@ export default function Tasks() {
         });
       }
     }
-  }, [taskIdParam, tasks, setSearchParams, navigate]);
+  }, [taskIdParam, tasks, setSearchParams, navigate, userRole]);
 
   return (
     <div className="space-y-6">

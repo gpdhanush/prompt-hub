@@ -7,12 +7,12 @@
 Execute the inventory management migration script:
 
 ```bash
-mysql -u root -p admin_dashboard < database/migrations/add_inventory_management.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/add_inventory_management.sql
 ```
 
 Or using MySQL command line:
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 SOURCE database/migrations/add_inventory_management.sql;
 ```
 
@@ -34,7 +34,7 @@ You should see:
 Check that views were created:
 
 ```sql
-SHOW FULL TABLES WHERE Table_type = 'VIEW' AND Tables_in_admin_dashboard LIKE 'v_%inventory%';
+SHOW FULL TABLES WHERE Table_type = 'VIEW' AND Tables_in_prasowla_ntpl_admin LIKE 'v_%inventory%';
 ```
 
 You should see:
@@ -80,7 +80,7 @@ If you're getting "route not found" errors:
 If tables are not found:
 
 1. **Check Database Name**
-   - Ensure you're using the correct database: `admin_dashboard`
+   - Ensure you're using the correct database: `prasowla_ntpl_admin`
    - Verify with: `SHOW DATABASES;`
 
 2. **Check Dependencies**

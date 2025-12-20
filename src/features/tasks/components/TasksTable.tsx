@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { StatusBadge, taskStageMap, taskPriorityMap } from "@/components/ui/status-badge";
+import { StatusBadge, taskStageMap } from "@/components/ui/status-badge";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import PaginationControls from "@/shared/components/PaginationControls";
 import type { Task } from "../utils/utils";
-import { formatDate, getPriorityLabel } from "../utils/utils";
+import { formatDate } from "../utils/utils";
 import { TASK_PAGE_LIMITS } from "../utils/constants";
 
 interface TasksTableProps {
@@ -143,7 +143,7 @@ export const TasksTable = memo(function TasksTable({
               <TableRow>
                 <TableHead className="w-[120px]">Task ID</TableHead>
                 <TableHead>Title</TableHead>
-                <TableHead>Priority</TableHead>
+                <TableHead>Project</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead>Deadline</TableHead>
                 <TableHead className="text-right w-[100px]">Actions</TableHead>
@@ -163,9 +163,9 @@ export const TasksTable = memo(function TasksTable({
                     <span className="font-medium">{task.title}</span>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]}>
-                      {getPriorityLabel(task.priority)}
-                    </StatusBadge>
+                    <span className="text-sm">
+                      {task.project_name || 'No Project'}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <StatusBadge variant={taskStageMap[task.stage || 'Analysis']}>

@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { notificationsApi } from "@/features/notifications/api";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { getCurrentUser } from "@/lib/auth";
 
 const notificationTypes: Record<string, { icon: any; color: string; label: string }> = {
   task_assigned: { icon: CheckSquare, color: "text-blue-500", label: "Task Assignment" },
@@ -259,7 +260,13 @@ export default function Notifications() {
     } else if (notification.type === 'bug_assigned' && notification.payload?.bugId) {
       navigate(`/bugs/${notification.payload.bugId}`);
     } else if (notification.type === 'project_assigned' && notification.payload?.projectId) {
-      navigate(`/projects/${notification.payload.projectId}`);
+      // Use UUID if available, otherwise use numeric ID
+      const projectIdentifier = notification.payload.projectUuid || notification.payload.projectId;
+      const currentUser = getCurrentUser();
+      const userRole = currentUser?.role || '';
+      const isClient = userRole === 'CLIENT' || userRole === 'Client';
+      const basePath = isClient ? '/client/projects' : '/projects';
+      navigate(`${basePath}/${projectIdentifier}`);
     } else if (notification.type === 'leave_status_updated' || notification.type === 'tl_leave_approved') {
       navigate('/leaves');
     } else if (notification.type === 'reimbursement_status_updated') {

@@ -363,62 +363,74 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   const allEmployees = employeesData?.data || [];
   const teamLeads = allUsers.filter((user: any) => user.role === 'Team Lead');
   
-  // Filter assignable users based on selected team lead - show only employees that report to this team lead
+  // Filter assignable users based on selected team lead - show employees that report to this team lead + CLIENT users
   const assignableUsers = useMemo(() => {
-    if (!formData.team_lead_id) {
-      return [];
-    }
+    const employeeUsers: any[] = [];
     
-    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.team_lead_id);
-    if (!selectedTeamLeadUser) {
-      return [];
-    }
-    
-    const teamLeadEmployee = allEmployees.find((emp: any) => 
-      emp.user_id === selectedTeamLeadUser.id
-    );
-    
-    if (!teamLeadEmployee) {
-      return [];
-    }
-    
-    // Get all employees that report to this team lead (recursively get all subordinates)
-    const getSubordinateEmployees = (teamLeadEmpId: number, visited: Set<number> = new Set()): any[] => {
-      if (visited.has(teamLeadEmpId)) {
-        return []; // Prevent infinite loops
+    // If team lead is selected, show employees that report to this team lead
+    if (formData.team_lead_id) {
+      const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.team_lead_id);
+      if (selectedTeamLeadUser) {
+        const teamLeadEmployee = allEmployees.find((emp: any) => 
+          emp.user_id === selectedTeamLeadUser.id
+        );
+        
+        if (teamLeadEmployee) {
+          // Get all employees that report to this team lead (recursively get all subordinates)
+          const getSubordinateEmployees = (teamLeadEmpId: number, visited: Set<number> = new Set()): any[] => {
+            if (visited.has(teamLeadEmpId)) {
+              return []; // Prevent infinite loops
+            }
+            visited.add(teamLeadEmpId);
+            
+            // Convert both to numbers for comparison to handle string/number mismatches
+            const directReports = allEmployees.filter((emp: any) => {
+              if (!emp.team_lead_id) return false;
+              // Handle both string and number comparisons
+              const empTeamLeadId = typeof emp.team_lead_id === 'string' ? parseInt(emp.team_lead_id, 10) : emp.team_lead_id;
+              const leadEmpId = typeof teamLeadEmpId === 'string' ? parseInt(teamLeadEmpId, 10) : teamLeadEmpId;
+              return empTeamLeadId === leadEmpId;
+            });
+            
+            // Recursively get subordinates of subordinates
+            const allSubordinates = [...directReports];
+            directReports.forEach((emp: any) => {
+              const subordinates = getSubordinateEmployees(emp.id, visited);
+              allSubordinates.push(...subordinates);
+            });
+            
+            return allSubordinates;
+          };
+          
+          const teamEmployees = getSubordinateEmployees(teamLeadEmployee.id);
+          const teamEmployeeUserIds = teamEmployees
+            .map((emp: any) => emp.user_id)
+            .filter((id: any) => id !== null && id !== undefined);
+          
+          // Get users that are employees of this team lead, excluding team leads
+          const teamUsers = allUsers.filter((user: any) => 
+            teamEmployeeUserIds.includes(user.id) && 
+            user.role !== 'Team Lead' && 
+            user.role !== 'Team Leader'
+          );
+          
+          employeeUsers.push(...teamUsers);
+        }
       }
-      visited.add(teamLeadEmpId);
-      
-      // Convert both to numbers for comparison to handle string/number mismatches
-      const directReports = allEmployees.filter((emp: any) => {
-        if (!emp.team_lead_id) return false;
-        // Handle both string and number comparisons
-        const empTeamLeadId = typeof emp.team_lead_id === 'string' ? parseInt(emp.team_lead_id, 10) : emp.team_lead_id;
-        const leadEmpId = typeof teamLeadEmpId === 'string' ? parseInt(teamLeadEmpId, 10) : teamLeadEmpId;
-        return empTeamLeadId === leadEmpId;
-      });
-      
-      // Recursively get subordinates of subordinates
-      const allSubordinates = [...directReports];
-      directReports.forEach((emp: any) => {
-        const subordinates = getSubordinateEmployees(emp.id, visited);
-        allSubordinates.push(...subordinates);
-      });
-      
-      return allSubordinates;
-    };
+    }
     
-    const teamEmployees = getSubordinateEmployees(teamLeadEmployee.id);
-    const teamEmployeeUserIds = teamEmployees
-      .map((emp: any) => emp.user_id)
-      .filter((id: any) => id !== null && id !== undefined);
+    // Always include CLIENT users (they can be assigned to any project regardless of team lead)
+    const clientUsers = allUsers
+      .filter((u: any) => u.role === 'CLIENT' || u.role === 'Client')
+      .map((user: any) => ({ ...user, is_client: true }));
     
-    // Return only users that are employees of this team lead, excluding team leads
-    return allUsers.filter((user: any) => 
-      teamEmployeeUserIds.includes(user.id) && 
-      user.role !== 'Team Lead' && 
-      user.role !== 'Team Leader'
+    // Combine employee users and client users, removing duplicates
+    const allAssignableUsers = [...employeeUsers, ...clientUsers];
+    const uniqueUsers = allAssignableUsers.filter((user, index, self) => 
+      index === self.findIndex((u) => u.id === user.id)
     );
+    
+    return uniqueUsers;
   }, [formData.team_lead_id, allUsers, allEmployees]);
 
   // Load project data into form for edit mode
@@ -1127,7 +1139,10 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Assigned Employees (Optional)</Label>
+              <Label>Assigned Members (Optional)</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select employees and clients to assign to this project. Clients will have read-only access.
+              </p>
               <div className="border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
                 {assignableUsers.length === 0 ? (
                   <div className="text-center py-4 text-sm">
@@ -1137,7 +1152,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                           No employees are currently assigned to this team lead.
                         </p>
                         <p className="text-xs text-muted-foreground italic">
-                          You can proceed without assigning employees now. Employees can be added later.
+                          You can proceed without assigning members now. Members can be added later.
                         </p>
                         <p className="text-xs text-muted-foreground mt-2">
                           Note: Make sure employees have their "Reports To" field set to this team lead in their employee profile.
@@ -1145,7 +1160,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                       </div>
                     ) : (
                       <p className="text-muted-foreground">
-                        Please select a team lead to see available employees.
+                        Select a team lead to see available employees, or CLIENT users will appear automatically.
                       </p>
                     )}
                   </div>
@@ -1157,14 +1172,17 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                       'Developer': 'Developer',
                       'Tester': 'QA',
                       'Designer': 'Designer',
+                      'CLIENT': 'Client',
+                      'Client': 'Client',
                     };
                     const displayRole = roleMap[user.role] || user.role;
+                    const isClient = user.is_client || user.role === 'CLIENT' || user.role === 'Client';
                     return (
                       <div 
                         key={user.id} 
                         className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
                           isSelected ? 'bg-primary/10 border border-primary' : 'hover:bg-muted border border-transparent'
-                        }`}
+                        } ${isClient ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
                         onClick={() => toggleMember(user.id.toString(), user.role)}
                       >
                         <div className="flex items-center space-x-2">
@@ -1180,7 +1198,12 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                           <div>
                             <span className="text-sm font-medium">{user.name}</span>
                             <span className="text-xs text-muted-foreground ml-2">({user.email})</span>
-                            <span className="text-xs text-muted-foreground ml-2">• {displayRole}</span>
+                            <span className={`text-xs ml-2 ${isClient ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-muted-foreground'}`}>
+                              • {displayRole}
+                            </span>
+                            {isClient && (
+                              <span className="text-xs text-blue-600 dark:text-blue-400 ml-1">(Read-only)</span>
+                            )}
                           </div>
                         </div>
                       </div>

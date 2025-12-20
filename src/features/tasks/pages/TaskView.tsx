@@ -25,7 +25,7 @@ export default function TaskView() {
 
   const { data: taskData, isLoading, error } = useQuery({
     queryKey: ['task', id],
-    queryFn: () => tasksApi.getById(Number(id)),
+    queryFn: () => tasksApi.getById(id!),
     enabled: !!id,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes

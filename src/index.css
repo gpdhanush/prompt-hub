@@ -138,24 +138,97 @@
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   }
 
-  /* Custom scrollbar */
+  /* Modern Custom Scrollbar - Always Visible */
+  /* Webkit browsers (Chrome, Safari, Edge) */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
+    -webkit-appearance: none;
   }
 
   ::-webkit-scrollbar-track {
-    background: hsl(var(--muted));
-    border-radius: 4px;
+    background: hsl(var(--muted) / 0.5);
+    border-radius: 10px;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.3);
-    border-radius: 4px;
+    background: hsl(var(--primary) / 0.5);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background 0.2s ease;
+    min-height: 20px; /* Ensure thumb is always visible */
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.5);
+    background: hsl(var(--primary) / 0.6);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--primary) / 0.8);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: hsl(var(--muted) / 0.5);
+  }
+
+  /* Prevent body/html scrolling - only main content should scroll */
+  html {
+    height: 100%;
+    overflow: hidden; /* Prevent html scrollbar */
+    scrollbar-width: thin; /* Firefox - Always visible */
+    scrollbar-color: hsl(var(--primary) / 0.4) hsl(var(--muted) / 0.5);
+  }
+
+  body {
+    height: 100%;
+    overflow: hidden; /* Prevent body scrollbar */
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Firefox - Always visible for scrollable elements */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.5) hsl(var(--muted) / 0.5);
+  }
+
+  /* Dark mode scrollbar adjustments */
+  .dark ::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.3);
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.5);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.7);
+  }
+
+  .dark * {
+    scrollbar-color: hsl(var(--primary) / 0.5) hsl(var(--muted) / 0.3);
+  }
+
+  .dark html {
+    scrollbar-color: hsl(var(--primary) / 0.5) hsl(var(--muted) / 0.3);
+  }
+
+  /* Prevent double scrollbars - ensure only main content scrolls */
+  #root {
+    height: 100vh;
+    overflow: hidden; /* Prevent root from creating scrollbar */
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Ensure scrollable containers always show scrollbar space and prevent empty content */
+  .overflow-y-auto,
+  .overflow-auto {
+    scrollbar-gutter: stable; /* Reserve space for scrollbar - always visible */
+    min-height: 0; /* Prevent flex children from overflowing */
   }
 }
 

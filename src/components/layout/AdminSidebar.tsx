@@ -60,6 +60,7 @@ const allMenuItems = [
   { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
   { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
   // Main Management
+  { name: "Users", href: "/users", icon: Users, section: "main" },
   { name: "Employees", href: "/employees", icon: UserCog, section: "main" },
   { name: "Employee Directory", href: "/employees/list", icon: UserSearch, section: "main" },
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },

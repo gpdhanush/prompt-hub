@@ -39,7 +39,7 @@ export default function TaskEdit() {
   // Fetch task data
   const { data: taskData, isLoading, error } = useQuery({
     queryKey: ['task', id],
-    queryFn: () => tasksApi.getById(Number(id)),
+    queryFn: () => tasksApi.getById(id!),
     enabled: !!id,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
@@ -74,7 +74,7 @@ export default function TaskEdit() {
   }, [task]);
 
   const updateMutation = useMutation({
-    mutationFn: (data: any) => tasksApi.update(Number(id), data),
+    mutationFn: (data: any) => tasksApi.update(id!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['task', id] });
@@ -94,7 +94,7 @@ export default function TaskEdit() {
   });
 
   const uploadFilesMutation = useMutation({
-    mutationFn: (files: File[]) => tasksApi.uploadAttachments(Number(id), files),
+    mutationFn: (files: File[]) => tasksApi.uploadAttachments(id!, files),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', id] });
       toast({
@@ -113,7 +113,7 @@ export default function TaskEdit() {
   });
 
   const deleteAttachmentMutation = useMutation({
-    mutationFn: (attachmentId: number) => tasksApi.deleteAttachment(Number(id), attachmentId),
+    mutationFn: (attachmentId: number) => tasksApi.deleteAttachment(id!, attachmentId),
     onSuccess: (_, attachmentId) => {
       setExistingAttachments(prev => prev.filter(att => att.id !== attachmentId));
       queryClient.invalidateQueries({ queryKey: ['task', id] });

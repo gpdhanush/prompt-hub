@@ -1,0 +1,426 @@
+-- ============================================
+-- PRODUCTION DATABASE MIGRATIONS - PART 03
+-- ============================================
+-- IT Asset Management Tables
+-- Database: prasowla_ntpl_admin
+-- ============================================
+
+USE `prasowla_ntpl_admin`;
+
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- ============================================
+-- IT ASSET MANAGEMENT TABLES
+-- ============================================
+
+-- Asset Categories (Master Table)
+CREATE TABLE IF NOT EXISTS `asset_categories` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(100) NOT NULL UNIQUE,
+  `description` TEXT,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_category_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Assets (Main Inventory Table)
+CREATE TABLE IF NOT EXISTS `assets` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `asset_code` VARCHAR(50) NOT NULL UNIQUE,
+  `asset_category_id` INT UNSIGNED NOT NULL,
+  `brand` VARCHAR(100),
+  `model` VARCHAR(100),
+  `serial_number` VARCHAR(255),
+  `purchase_date` DATE,
+  `purchase_price` DECIMAL(10, 2),
+  `warranty_expiry` DATE,
+  `vendor_name` VARCHAR(255),
+  `vendor_contact` VARCHAR(255),
+  `status` ENUM('available', 'assigned', 'repair', 'damaged', 'retired', 'lost') DEFAULT 'available',
+  `location` VARCHAR(255),
+  `notes` TEXT,
+  `barcode` VARCHAR(100),
+  `qr_code` VARCHAR(255),
+  `created_by` INT UNSIGNED,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_category_id`) REFERENCES `asset_categories`(`id`) ON DELETE RESTRICT,
+  FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_asset_code` (`asset_code`),
+  INDEX `idx_asset_status` (`status`),
+  INDEX `idx_asset_category` (`asset_category_id`),
+  INDEX `idx_serial_number` (`serial_number`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Laptop Details
+CREATE TABLE IF NOT EXISTS `asset_laptop_details` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `asset_id` INT UNSIGNED NOT NULL UNIQUE,
+  `os_type` ENUM('mac', 'windows', 'linux') NOT NULL,
+  `mac_address` VARCHAR(17),
+  `processor` VARCHAR(255),
+  `ram_gb` INT UNSIGNED,
+  `storage_gb` INT UNSIGNED,
+  `storage_type` ENUM('SSD', 'HDD', 'NVMe') DEFAULT 'SSD',
+  `screen_size` VARCHAR(20),
+  `graphics_card` VARCHAR(255),
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON DELETE CASCADE,
+  INDEX `idx_laptop_asset` (`asset_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Mobile Details
+CREATE TABLE IF NOT EXISTS `asset_mobile_details` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `asset_id` INT UNSIGNED NOT NULL UNIQUE,
+  `device_type` ENUM('android', 'iphone') NOT NULL,
+  `imei_1` VARCHAR(15),
+  `imei_2` VARCHAR(15),
+  `storage_gb` INT UNSIGNED,
+  `screen_size` VARCHAR(20),
+  `battery_capacity` VARCHAR(50),
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON DELETE CASCADE,
+  INDEX `idx_mobile_asset` (`asset_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Accessory Details
+CREATE TABLE IF NOT EXISTS `asset_accessory_details` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `asset_id` INT UNSIGNED NOT NULL UNIQUE,
+  `specification` TEXT,
+  `compatibility` VARCHAR(255),
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON DELETE CASCADE,
+  INDEX `idx_accessory_asset` (`asset_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Assignments
+CREATE TABLE IF NOT EXISTS `asset_assignments` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `asset_id` INT UNSIGNED NOT NULL,
+  `employee_id` INT UNSIGNED NOT NULL,
+  `assigned_date` DATE NOT NULL,
+  `returned_date` DATE NULL,
+  `condition_on_assign` ENUM('excellent', 'good', 'fair', 'poor') DEFAULT 'good',
+  `condition_on_return` ENUM('excellent', 'good', 'fair', 'poor') NULL,
+  `status` ENUM('active', 'returned', 'lost', 'damaged') DEFAULT 'active',
+  `assigned_by` INT UNSIGNED,
+  `returned_to` INT UNSIGNED,
+  `notes` TEXT,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON DELETE RESTRICT,
+  FOREIGN KEY (`employee_id`) REFERENCES `employees`(`id`) ON DELETE RESTRICT,
+  FOREIGN KEY (`assigned_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`returned_to`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_assignment_asset` (`asset_id`),
+  INDEX `idx_assignment_employee` (`employee_id`),
+  INDEX `idx_assignment_status` (`status`),
+  INDEX `idx_assigned_date` (`assigned_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Tickets (Requests/Issues)
+CREATE TABLE IF NOT EXISTS `asset_tickets` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `ticket_number` VARCHAR(50) NOT NULL UNIQUE,
+  `employee_id` INT UNSIGNED NOT NULL,
+  `asset_id` INT UNSIGNED NULL,
+  `ticket_type` ENUM('new_request', 'repair', 'replacement', 'return', 'accessory_request', 'damage_report') NOT NULL,
+  `category` VARCHAR(100),
+  `subject` VARCHAR(255) NOT NULL,
+  `description` TEXT NOT NULL,
+  `priority` ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium',
+  `status` ENUM('open', 'approved', 'rejected', 'in_progress', 'resolved', 'closed') DEFAULT 'open',
+  `admin_comment` TEXT,
+  `resolved_at` TIMESTAMP NULL,
+  `resolved_by` INT UNSIGNED,
+  `sla_deadline` TIMESTAMP NULL,
+  `escalated_at` TIMESTAMP NULL DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`employee_id`) REFERENCES `employees`(`id`) ON DELETE RESTRICT,
+  FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`resolved_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_ticket_number` (`ticket_number`),
+  INDEX `idx_ticket_employee` (`employee_id`),
+  INDEX `idx_ticket_asset` (`asset_id`),
+  INDEX `idx_ticket_status` (`status`),
+  INDEX `idx_ticket_type` (`ticket_type`),
+  INDEX `idx_ticket_priority` (`priority`),
+  INDEX `idx_ticket_escalated` (`escalated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Ticket Comments
+CREATE TABLE IF NOT EXISTS `asset_ticket_comments` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `ticket_id` INT UNSIGNED NOT NULL,
+  `comment` TEXT NOT NULL,
+  `is_internal` TINYINT(1) DEFAULT 0,
+  `created_by` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`ticket_id`) REFERENCES `asset_tickets`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+  INDEX `idx_comment_ticket` (`ticket_id`),
+  INDEX `idx_comment_created_by` (`created_by`),
+  INDEX `idx_comment_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Ticket Attachments
+CREATE TABLE IF NOT EXISTS `asset_ticket_attachments` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `ticket_id` INT UNSIGNED NOT NULL,
+  `filename` VARCHAR(255) NOT NULL,
+  `file_path` VARCHAR(500) NOT NULL,
+  `file_url` VARCHAR(500) NULL,
+  `file_size` BIGINT UNSIGNED NULL,
+  `file_type` VARCHAR(100) NULL,
+  `comment` TEXT NULL,
+  `uploaded_by` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`ticket_id`) REFERENCES `asset_tickets`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`uploaded_by`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+  INDEX `idx_attachment_ticket` (`ticket_id`),
+  INDEX `idx_attachment_uploaded_by` (`uploaded_by`),
+  INDEX `idx_attachment_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Audit Logs
+CREATE TABLE IF NOT EXISTS `asset_audit_logs` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `asset_id` INT UNSIGNED NOT NULL,
+  `action` ENUM('created', 'updated', 'assigned', 'returned', 'repaired', 'damaged', 'retired', 'status_changed') NOT NULL,
+  `performed_by` INT UNSIGNED NOT NULL,
+  `performed_on` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `old_value` TEXT,
+  `new_value` TEXT,
+  `remarks` TEXT,
+  `ip_address` VARCHAR(45),
+  `user_agent` TEXT,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`performed_by`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+  INDEX `idx_audit_asset` (`asset_id`),
+  INDEX `idx_audit_performed_by` (`performed_by`),
+  INDEX `idx_audit_action` (`action`),
+  INDEX `idx_audit_performed_on` (`performed_on`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Maintenance
+CREATE TABLE IF NOT EXISTS `asset_maintenance` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `asset_id` INT UNSIGNED NOT NULL,
+  `ticket_id` INT UNSIGNED NULL,
+  `maintenance_type` ENUM('repair', 'preventive', 'warranty', 'upgrade') NOT NULL,
+  `vendor_name` VARCHAR(255),
+  `vendor_contact` VARCHAR(255),
+  `cost` DECIMAL(10, 2),
+  `start_date` DATE NOT NULL,
+  `end_date` DATE NULL,
+  `status` ENUM('scheduled', 'in_progress', 'completed', 'cancelled') DEFAULT 'scheduled',
+  `description` TEXT,
+  `notes` TEXT,
+  `created_by` INT UNSIGNED,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON DELETE RESTRICT,
+  FOREIGN KEY (`ticket_id`) REFERENCES `asset_tickets`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_maintenance_asset` (`asset_id`),
+  INDEX `idx_maintenance_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Approvals
+CREATE TABLE IF NOT EXISTS `asset_approvals` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `request_type` ENUM('assignment', 'return', 'maintenance', 'purchase', 'disposal') NOT NULL,
+  `asset_id` INT UNSIGNED NULL,
+  `assignment_id` INT UNSIGNED NULL,
+  `maintenance_id` INT UNSIGNED NULL,
+  `ticket_id` INT UNSIGNED NULL,
+  `requested_by` INT UNSIGNED NOT NULL,
+  `requested_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `approver_id` INT UNSIGNED NULL,
+  `approved_at` TIMESTAMP NULL,
+  `status` ENUM('pending', 'approved', 'rejected', 'cancelled') DEFAULT 'pending',
+  `approval_level` INT UNSIGNED DEFAULT 1,
+  `comments` TEXT,
+  `rejection_reason` TEXT,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_id`) REFERENCES `assets`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`assignment_id`) REFERENCES `asset_assignments`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`maintenance_id`) REFERENCES `asset_maintenance`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`ticket_id`) REFERENCES `asset_tickets`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`requested_by`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+  FOREIGN KEY (`approver_id`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_approval_type` (`request_type`),
+  INDEX `idx_approval_status` (`status`),
+  INDEX `idx_approval_requested_by` (`requested_by`),
+  INDEX `idx_approval_approver` (`approver_id`),
+  INDEX `idx_approval_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Asset Settings (Configuration)
+CREATE TABLE IF NOT EXISTS `asset_settings` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `setting_key` VARCHAR(100) NOT NULL UNIQUE,
+  `setting_value` TEXT,
+  `setting_type` ENUM('string', 'number', 'boolean', 'json') DEFAULT 'string',
+  `description` TEXT,
+  `category` VARCHAR(50) DEFAULT 'general',
+  `updated_by` INT UNSIGNED NULL,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`updated_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_setting_key` (`setting_key`),
+  INDEX `idx_setting_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- INVENTORY MANAGEMENT TABLES
+-- ============================================
+
+-- Inventory Items
+CREATE TABLE IF NOT EXISTS `inventory_items` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `asset_category_id` INT UNSIGNED NOT NULL,
+  `asset_name` VARCHAR(255) NOT NULL,
+  `asset_code` VARCHAR(50) UNIQUE,
+  `current_stock` INT NOT NULL DEFAULT 0,
+  `min_stock_level` INT NOT NULL DEFAULT 0,
+  `unit_price` DECIMAL(10, 2) NULL,
+  `location` VARCHAR(255) NULL,
+  `notes` TEXT NULL,
+  `created_by` INT UNSIGNED NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `last_updated` TIMESTAMP NULL,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`asset_category_id`) REFERENCES `asset_categories`(`id`) ON DELETE RESTRICT,
+  FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
+  INDEX `idx_inventory_category` (`asset_category_id`),
+  INDEX `idx_inventory_code` (`asset_code`),
+  INDEX `idx_inventory_name` (`asset_name`),
+  INDEX `idx_inventory_stock` (`current_stock`),
+  INDEX `idx_inventory_min_stock` (`min_stock_level`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Inventory Transactions
+CREATE TABLE IF NOT EXISTS `inventory_transactions` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `inventory_item_id` INT UNSIGNED NOT NULL,
+  `type` ENUM('addition', 'reduction', 'adjustment') NOT NULL,
+  `quantity_change` INT NOT NULL,
+  `previous_stock` INT NOT NULL,
+  `new_stock` INT NOT NULL,
+  `reason` VARCHAR(100) NOT NULL,
+  `notes` TEXT NULL,
+  `created_by` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`inventory_item_id`) REFERENCES `inventory_items`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+  INDEX `idx_transaction_item` (`inventory_item_id`),
+  INDEX `idx_transaction_type` (`type`),
+  INDEX `idx_transaction_date` (`created_at`),
+  INDEX `idx_transaction_user` (`created_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Inventory Attachments
+CREATE TABLE IF NOT EXISTS `inventory_attachments` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `inventory_item_id` INT UNSIGNED NOT NULL,
+  `filename` VARCHAR(255) NOT NULL,
+  `file_path` VARCHAR(500) NOT NULL,
+  `file_url` VARCHAR(500) NULL,
+  `file_size` BIGINT UNSIGNED NULL,
+  `file_type` VARCHAR(100) NULL,
+  `comment` TEXT NULL,
+  `uploaded_by` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`inventory_item_id`) REFERENCES `inventory_items`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`uploaded_by`) REFERENCES `users`(`id`) ON DELETE RESTRICT,
+  INDEX `idx_attachment_item` (`inventory_item_id`),
+  INDEX `idx_attachment_date` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- TRIGGERS
+-- ============================================
+
+-- Trigger: Update inventory item timestamp on stock change
+DROP TRIGGER IF EXISTS `update_inventory_timestamp`;
+
+DELIMITER $$
+
+CREATE TRIGGER `update_inventory_timestamp`
+AFTER INSERT ON `inventory_transactions`
+FOR EACH ROW
+BEGIN
+  UPDATE `inventory_items`
+  SET `last_updated` = NOW()
+  WHERE `id` = NEW.inventory_item_id;
+END$$
+
+DELIMITER ;
+
+-- ============================================
+-- VIEWS
+-- ============================================
+
+-- View: Low Stock Items
+CREATE OR REPLACE VIEW `v_low_stock_items` AS
+SELECT 
+  i.id,
+  i.asset_name,
+  i.asset_code,
+  i.current_stock,
+  i.min_stock_level,
+  i.asset_category_id,
+  c.name AS category_name,
+  (i.min_stock_level - i.current_stock) AS deficit,
+  CASE 
+    WHEN i.current_stock = 0 THEN 'out_of_stock'
+    WHEN i.current_stock <= i.min_stock_level THEN 'low_stock'
+    ELSE 'in_stock'
+  END AS stock_status
+FROM `inventory_items` i
+INNER JOIN `asset_categories` c ON i.asset_category_id = c.id
+WHERE i.current_stock <= i.min_stock_level
+ORDER BY 
+  CASE 
+    WHEN i.current_stock = 0 THEN 1
+    WHEN i.current_stock <= i.min_stock_level THEN 2
+    ELSE 3
+  END,
+  i.current_stock ASC;
+
+-- View: Inventory Stats Summary
+CREATE OR REPLACE VIEW `v_inventory_stats` AS
+SELECT 
+  COUNT(*) AS total_items,
+  SUM(CASE WHEN current_stock = 0 THEN 1 ELSE 0 END) AS out_of_stock_count,
+  SUM(CASE WHEN current_stock > 0 AND current_stock <= min_stock_level THEN 1 ELSE 0 END) AS low_stock_count,
+  SUM(CASE WHEN current_stock > min_stock_level THEN 1 ELSE 0 END) AS in_stock_count,
+  SUM(current_stock * COALESCE(unit_price, 0)) AS total_value,
+  SUM(current_stock) AS total_quantity
+FROM `inventory_items`;
+
+SET FOREIGN_KEY_CHECKS = 1;
+

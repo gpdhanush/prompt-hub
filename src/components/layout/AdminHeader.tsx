@@ -163,7 +163,19 @@ export function AdminHeader() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={async () => {
+              const newTheme = theme === "dark" ? "light" : "dark";
+              setTheme(newTheme);
+              
+              // Save to database
+              try {
+                const { authApi } = await import('@/features/auth/api');
+                await authApi.updateProfile({ theme_mode: newTheme });
+              } catch (error) {
+                // Log error but don't show toast (non-critical)
+                console.error('Failed to save theme mode:', error);
+              }
+            }}
             className="relative"
             title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >

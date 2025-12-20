@@ -19,7 +19,7 @@ export const tasksApi = {
     return response.data;
   },
 
-  getById: async (id: number) => {
+  getById: async (id: number | string) => {
     const response = await apiClient.get<{ data: any }>(`/tasks/${id}`);
     return response.data;
   },
@@ -38,35 +38,35 @@ export const tasksApi = {
     return response.data;
   },
 
-  update: async (id: number, data: any) => {
+  update: async (id: number | string, data: any) => {
     const response = await apiClient.put<{ data: any }>(`/tasks/${id}`, data);
     return response.data;
   },
 
-  delete: async (id: number) => {
+  delete: async (id: number | string) => {
     const response = await apiClient.delete<{ message: string }>(`/tasks/${id}`);
     return response.data;
   },
 
   // Comments
-  getComments: async (id: number) => {
+  getComments: async (id: number | string) => {
     const response = await apiClient.get<{ data: any[] }>(`/tasks/${id}/comments`);
     return response.data;
   },
 
-  createComment: async (id: number, data: { comment: string; parent_comment_id?: number; role?: string }) => {
+  createComment: async (id: number | string, data: { comment: string; parent_comment_id?: number; role?: string }) => {
     const response = await apiClient.post<{ data: any }>(`/tasks/${id}/comments`, data);
     return response.data;
   },
 
   // History
-  getHistory: async (id: number) => {
+  getHistory: async (id: number | string) => {
     const response = await apiClient.get<{ data: any[] }>(`/tasks/${id}/history`);
     return response.data;
   },
 
   // Timesheets
-  getTimesheets: async (id: number) => {
+  getTimesheets: async (id: number | string) => {
     const response = await apiClient.get<{ data: any[] }>(`/tasks/${id}/timesheets`);
     return response.data;
   },
@@ -96,7 +96,7 @@ export const tasksApi = {
     return response.data;
   },
 
-  createTimesheet: async (id: number, data: { date: string; hours: number; notes?: string }) => {
+  createTimesheet: async (id: number | string, data: { date: string; hours: number; notes?: string }) => {
     const response = await apiClient.post<{ data: any }>(`/tasks/${id}/timesheets`, data);
     return response.data;
   },
@@ -112,7 +112,7 @@ export const tasksApi = {
   },
 
   // Attachments
-  uploadAttachments: async (id: number, files: File[]) => {
+  uploadAttachments: async (id: number | string, files: File[]) => {
     const formData = new FormData();
     files.forEach(file => formData.append('attachments', file));
     // Use apiClient for FormData uploads - axios handles Content-Type automatically
@@ -123,7 +123,7 @@ export const tasksApi = {
     return response.data;
   },
 
-  deleteAttachment: async (id: number, attachmentId: number) => {
+  deleteAttachment: async (id: number | string, attachmentId: number) => {
     const response = await apiClient.delete<{ message: string }>(`/tasks/${id}/attachments/${attachmentId}`);
     return response.data;
   },

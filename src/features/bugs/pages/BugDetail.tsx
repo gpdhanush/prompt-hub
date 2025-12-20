@@ -467,7 +467,15 @@ export default function BugDetail() {
                     <Button
                       variant="link"
                       className="p-0 h-auto ml-2"
-                      onClick={() => navigate(`/projects/${bug.project_id}`)}
+                      onClick={() => {
+                        // Use UUID if available, otherwise use numeric ID
+                        const projectIdentifier = bug.project_uuid || bug.project_id;
+                        const currentUser = getCurrentUser();
+                        const userRole = currentUser?.role || '';
+                        const isClient = userRole === 'CLIENT' || userRole === 'Client';
+                        const basePath = isClient ? '/client/projects' : '/projects';
+                        navigate(`${basePath}/${projectIdentifier}`);
+                      }}
                     >
                       {bug.project_name || `Project #${bug.project_id}`}
                     </Button>

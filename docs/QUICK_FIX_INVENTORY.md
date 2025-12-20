@@ -6,23 +6,23 @@
 
 **Option A: Use the simplified migration (Recommended)**
 ```bash
-mysql -u root -p admin_dashboard < database/migrations/add_inventory_management_simple.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/add_inventory_management_simple.sql
 ```
 
 **Option B: Use the main migration**
 ```bash
-mysql -u root -p admin_dashboard < database/migrations/add_inventory_management.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/add_inventory_management.sql
 ```
 
 **Option C: Run directly in MySQL**
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 SOURCE database/migrations/add_inventory_management_simple.sql;
 ```
 
 ### Verify Tables Were Created
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 SHOW TABLES LIKE 'inventory%';
 ```
 
@@ -85,12 +85,12 @@ If using React Router v6, routes should work as configured. If you're on v5, you
 
 1. **Run Database Migration**
    ```bash
-   mysql -u root -p admin_dashboard < database/migrations/add_inventory_management_simple.sql
+   mysql -u root -p prasowla_ntpl_admin < database/migrations/add_inventory_management_simple.sql
    ```
 
 2. **Verify Database**
    ```sql
-   USE admin_dashboard;
+   USE prasowla_ntpl_admin;
    SELECT COUNT(*) FROM inventory_items;
    ```
 

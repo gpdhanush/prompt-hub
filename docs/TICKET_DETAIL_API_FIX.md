@@ -19,12 +19,12 @@ Added the missing ticket detail API routes to `server/routes/assets.js`:
 The ticket comments and attachments tables need to be created. Run this migration:
 
 ```bash
-mysql -u root -p admin_dashboard < database/migrations/add_ticket_comments_attachments.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/add_ticket_comments_attachments.sql
 ```
 
 Or in MySQL:
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 SOURCE database/migrations/add_ticket_comments_attachments.sql;
 ```
 
@@ -36,7 +36,7 @@ SOURCE database/migrations/add_ticket_comments_attachments.sql;
 
 1. **Run the migration** to create the tables:
    ```bash
-   mysql -u root -p admin_dashboard < database/migrations/add_ticket_comments_attachments.sql
+   mysql -u root -p prasowla_ntpl_admin < database/migrations/add_ticket_comments_attachments.sql
    ```
 
 2. **Restart your backend server**:

@@ -4,7 +4,7 @@
 -- Real-time Kanban Board with GitHub Integration
 -- ============================================
 
-USE `admin_dashboard`;
+USE `prasowla_ntpl_admin`;
 
 SET FOREIGN_KEY_CHECKS = 0;
 

@@ -2,6 +2,7 @@ import { Outlet, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminHeader } from "./AdminHeader";
+import { AppFooter } from "./AppFooter";
 import { isAuthenticated, getCurrentUserAsync, getAuthTokenAsync } from "@/lib/auth";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
 import { Loader2 } from "lucide-react";
@@ -71,6 +72,13 @@ export function AdminLayout() {
         const token = await getAuthTokenAsync();
         const user = await getCurrentUserAsync();
         
+        // Redirect CLIENT users to client dashboard (case-insensitive check)
+        if (user && user.role && user.role.toUpperCase() === 'CLIENT') {
+          logger.info('CLIENT user detected in AdminLayout, redirecting to client dashboard');
+          window.location.href = '/client/dashboard';
+          return;
+        }
+        
         setIsAuth(!!(token && user));
       } catch (error) {
         logger.error('Authentication check failed:', error);
@@ -130,9 +138,12 @@ export function AdminLayout() {
       <AdminSidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <AdminHeader />
-        <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
-        </main>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <main className="flex-1 overflow-y-scroll overflow-x-hidden p-6" style={{ scrollbarGutter: 'stable', minHeight: 0 }}>
+            <Outlet />
+          </main>
+          <AppFooter />
+        </div>
       </div>
       {/* PWA Components */}
       <PWAInstallPrompt />

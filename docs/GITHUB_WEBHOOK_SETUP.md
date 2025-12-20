@@ -41,7 +41,7 @@ Run the migration to create the `project_activities` table:
 
 ```bash
 # Connect to your MySQL database
-mysql -u your_user -p admin_dashboard < database/migrations/create_project_activities_table.sql
+mysql -u your_user -p prasowla_ntpl_admin < database/migrations/create_project_activities_table.sql
 ```
 
 Or execute the SQL directly:

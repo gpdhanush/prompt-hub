@@ -99,10 +99,28 @@ router.get('/', async (req, res) => {
     const { page = 1, limit = 10, project_id, my_tasks } = req.query;
     const offset = (page - 1) * limit;
     const userId = req.user?.id;
+    const userRole = req.user?.role || '';
     
     let query = `
       SELECT 
-        t.*,
+        t.id,
+        t.uuid,
+        t.task_code,
+        t.project_id,
+        t.title,
+        t.description,
+        t.assigned_to,
+        t.developer_id,
+        t.designer_id,
+        t.tester_id,
+        t.priority,
+        t.stage,
+        t.status,
+        t.deadline,
+        t.created_at,
+        t.updated_at,
+        t.created_by,
+        t.updated_by,
         u1.name as assigned_to_name,
         u1.email as assigned_to_email,
         u2.name as created_by_name,
@@ -114,7 +132,8 @@ router.get('/', async (req, res) => {
         des.name as designer_name,
         des.email as designer_email,
         test.name as tester_name,
-        test.email as tester_email
+        test.email as tester_email,
+        p.name as project_name
       FROM tasks t
       LEFT JOIN users u1 ON t.assigned_to = u1.id
       LEFT JOIN users u2 ON t.created_by = u2.id
@@ -122,9 +141,24 @@ router.get('/', async (req, res) => {
       LEFT JOIN users dev ON t.developer_id = dev.id
       LEFT JOIN users des ON t.designer_id = des.id
       LEFT JOIN users test ON t.tester_id = test.id
+      LEFT JOIN projects p ON t.project_id = p.id
       WHERE 1=1
     `;
     const params = [];
+    
+    // For CLIENT users, only show tasks from projects they have access to
+    if (userRole === 'CLIENT' || userRole === 'Client') {
+      query += ` AND EXISTS (
+        SELECT 1 FROM project_users pu
+        INNER JOIN projects p ON pu.project_id = p.id
+        WHERE pu.project_id = t.project_id
+          AND pu.user_id = ?
+          AND pu.is_active = 1
+          AND p.is_active = 1
+      )`;
+      params.push(userId);
+    }
+    
     if (project_id) {
       query += ' AND t.project_id = ?';
       params.push(project_id);
@@ -139,14 +173,28 @@ router.get('/', async (req, res) => {
     const [tasks] = await db.query(query, params);
     
     // Count query
-    let countQuery = 'SELECT COUNT(*) as total FROM tasks WHERE 1=1';
+    let countQuery = 'SELECT COUNT(*) as total FROM tasks t WHERE 1=1';
     const countParams = [];
+    
+    // For CLIENT users, only count tasks from projects they have access to
+    if (userRole === 'CLIENT' || userRole === 'Client') {
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM project_users pu
+        INNER JOIN projects p ON pu.project_id = p.id
+        WHERE pu.project_id = t.project_id
+          AND pu.user_id = ?
+          AND pu.is_active = 1
+          AND p.is_active = 1
+      )`;
+      countParams.push(userId);
+    }
+    
     if (project_id) {
-      countQuery += ' AND project_id = ?';
+      countQuery += ' AND t.project_id = ?';
       countParams.push(project_id);
     }
     if (my_tasks && userId) {
-      countQuery += ' AND (assigned_to = ? OR developer_id = ? OR designer_id = ? OR tester_id = ? OR created_by = ?)';
+      countQuery += ' AND (t.assigned_to = ? OR t.developer_id = ? OR t.designer_id = ? OR t.tester_id = ? OR t.created_by = ?)';
       countParams.push(userId, userId, userId, userId, userId);
     }
     const [countResult] = await db.query(countQuery, countParams);
@@ -186,6 +234,15 @@ router.get('/', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
+    const { id } = req.params;
+    
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     const [tasks] = await db.query(`
       SELECT 
         t.*,
@@ -209,7 +266,7 @@ router.get('/:id', async (req, res) => {
       LEFT JOIN users des ON t.designer_id = des.id
       LEFT JOIN users test ON t.tester_id = test.id
       WHERE t.id = ?
-    `, [req.params.id]);
+    `, [taskId]);
     if (tasks.length === 0) return res.status(404).json({ error: 'Task not found' });
     
     // Fetch attachments for this task
@@ -227,7 +284,7 @@ router.get('/:id', async (req, res) => {
       LEFT JOIN users u ON a.uploaded_by = u.id
       WHERE a.task_id = ?
       ORDER BY a.created_at DESC
-    `, [req.params.id]);
+    `, [taskId]);
     
     const taskData = tasks[0];
     taskData.attachments = attachments;
@@ -316,8 +373,8 @@ router.post('/', requirePermission('tasks.create'), upload.array('attachments', 
     
     // Check if columns exist, if not, use assigned_to only (backward compatibility)
     let query = `
-      INSERT INTO tasks (project_id, task_code, title, description, status, priority, stage, assigned_to, deadline, created_by`;
-    let values = `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?`;
+      INSERT INTO tasks (uuid, project_id, task_code, title, description, status, priority, stage, assigned_to, deadline, created_by`;
+    let values = `VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`;
     let params = [project_id, taskCode, title, description, status || 'Open', priority || 'Med', stage || 'Analysis', assigned_to || null, deadline || null, created_by];
     
     // Try to add role-specific assignments if columns exist
@@ -473,6 +530,13 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     // Validate and sanitize text inputs
     const textFields = ['title', 'description'];
     const validation = validateAndSanitizeObject(req.body, textFields);
@@ -490,7 +554,7 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
     const userRole = req.user.role;
     
     // Get before data for audit log
-    const [existingTasks] = await db.query('SELECT * FROM tasks WHERE id = ?', [id]);
+    const [existingTasks] = await db.query('SELECT * FROM tasks WHERE id = ?', [taskId]);
     if (existingTasks.length === 0) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -534,7 +598,7 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
     }
     
     updateQuery += ` WHERE id = ?`;
-    params.push(id);
+    params.push(taskId);
     
     await db.query(updateQuery, params);
     
@@ -562,7 +626,7 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
       LEFT JOIN users des ON t.designer_id = des.id
       LEFT JOIN users test ON t.tester_id = test.id
       WHERE t.id = ?
-    `, [id]);
+    `, [taskId]);
     
     // Record task history if status changed
     if (status !== undefined && status !== beforeData.status) {
@@ -570,7 +634,7 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
         await db.query(`
           INSERT INTO task_history (task_id, from_status, to_status, changed_by, note)
           VALUES (?, ?, ?, ?, ?)
-        `, [id, beforeData.status || 'N/A', status, updated_by, `Status changed from ${beforeData.status || 'N/A'} to ${status}`]);
+        `, [taskId, beforeData.status || 'N/A', status, updated_by, `Status changed from ${beforeData.status || 'N/A'} to ${status}`]);
       } catch (historyError) {
         logger.error('Error recording task history:', historyError);
         // Don't fail the update if history recording fails
@@ -578,7 +642,7 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
     }
     
     // Create audit log for task update
-    await logUpdate(req, 'Tasks', id, beforeData, updated[0], 'Task');
+    await logUpdate(req, 'Tasks', taskId, beforeData, updated[0], 'Task');
     
     // Notify newly assigned users about task assignment
     const assignedUserIds = [];
@@ -596,11 +660,11 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
     }
     
     // Remove duplicates and current user
-    const uniqueUserIds = [...new Set(assignedUserIds.filter(id => id && id !== updated_by))];
+    const uniqueUserIds = [...new Set(assignedUserIds.filter(uid => uid && uid !== updated_by))];
     
     if (uniqueUserIds.length > 0) {
       const notificationPromises = uniqueUserIds.map(userId => 
-        notifyTaskAssigned(userId, parseInt(id), title || updated[0].title, updated_by)
+        notifyTaskAssigned(userId, taskId, title || updated[0].title, updated_by)
       );
       await Promise.allSettled(notificationPromises);
     }
@@ -637,17 +701,24 @@ router.delete('/:id', requirePermission('tasks.delete'), async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     // Get before data for audit log
-    const [existingTasks] = await db.query('SELECT * FROM tasks WHERE id = ?', [id]);
+    const [existingTasks] = await db.query('SELECT * FROM tasks WHERE id = ?', [taskId]);
     if (existingTasks.length === 0) {
       return res.status(404).json({ error: 'Task not found' });
     }
     const beforeData = existingTasks[0];
     
-    await db.query('DELETE FROM tasks WHERE id = ?', [id]);
+    await db.query('DELETE FROM tasks WHERE id = ?', [taskId]);
     
     // Create audit log for task deletion
-    await logDelete(req, 'Tasks', id, beforeData, 'Task');
+    await logDelete(req, 'Tasks', taskId, beforeData, 'Task');
     
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
@@ -682,6 +753,13 @@ router.get('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     const [comments] = await db.query(`
       SELECT 
         tc.*,
@@ -693,7 +771,7 @@ router.get('/:id/comments', async (req, res) => {
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE tc.task_id = ?
       ORDER BY tc.created_at ASC
-    `, [id]);
+    `, [taskId]);
     
     res.json({ data: comments });
   } catch (error) {
@@ -740,6 +818,13 @@ router.post('/:id/comments', async (req, res) => {
     const { comment, parent_comment_id, role } = req.body;
     const userId = req.user?.id;
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     if (!comment || comment.trim() === '') {
       return res.status(400).json({ error: 'Comment is required' });
     }
@@ -749,7 +834,7 @@ router.post('/:id/comments', async (req, res) => {
       SELECT id, title, assigned_to
       FROM tasks
       WHERE id = ?
-    `, [id]);
+    `, [taskId]);
     
     if (tasks.length === 0) {
       return res.status(404).json({ error: 'Task not found' });
@@ -760,7 +845,7 @@ router.post('/:id/comments', async (req, res) => {
     const [result] = await db.query(`
       INSERT INTO task_comments (task_id, user_id, comment, parent_comment_id, role)
       VALUES (?, ?, ?, ?, ?)
-    `, [id, userId, comment.trim(), parent_comment_id || null, role || null]);
+    `, [taskId, userId, comment.trim(), parent_comment_id || null, role || null]);
     
     const [newComment] = await db.query(`
       SELECT 
@@ -802,6 +887,13 @@ router.get('/:id/history', async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     const [history] = await db.query(`
       SELECT 
         th.*,
@@ -811,7 +903,7 @@ router.get('/:id/history', async (req, res) => {
       LEFT JOIN users u ON th.changed_by = u.id
       WHERE th.task_id = ?
       ORDER BY th.timestamp DESC
-    `, [id]);
+    `, [taskId]);
     
     res.json({ data: history });
   } catch (error) {
@@ -1252,6 +1344,14 @@ router.post('/timesheets', async (req, res) => {
 router.get('/:id/timesheets', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     const userId = req.user?.id;
     const userRole = req.user?.role || '';
     const isSuperAdmin = userRole === 'Super Admin';
@@ -1268,7 +1368,7 @@ router.get('/:id/timesheets', async (req, res) => {
       LEFT JOIN users u2 ON ts.approved_by = u2.id
       WHERE ts.task_id = ?
     `;
-    const params = [id];
+    const params = [taskId];
     
     // If not Super Admin, only show their own timesheets
     if (!isSuperAdmin) {
@@ -1299,6 +1399,13 @@ router.post('/:id/timesheets', async (req, res) => {
     const { date, hours, notes, bug_id } = req.body;
     const userId = req.user?.id;
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     if (!date || !hours) {
       return res.status(400).json({ error: 'Date and hours are required' });
     }
@@ -1310,7 +1417,7 @@ router.post('/:id/timesheets', async (req, res) => {
     }
     
     // Get task details to determine project_id
-    const [task] = await db.query('SELECT project_id FROM tasks WHERE id = ?', [id]);
+    const [task] = await db.query('SELECT project_id FROM tasks WHERE id = ?', [taskId]);
     if (task.length === 0) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -1324,7 +1431,7 @@ router.post('/:id/timesheets', async (req, res) => {
       if (bug.length === 0) {
         return res.status(404).json({ error: 'Bug not found' });
       }
-      if (bug[0].task_id && bug[0].task_id != id) {
+      if (bug[0].task_id && bug[0].task_id != taskId) {
         return res.status(400).json({ error: 'Bug does not belong to this task' });
       }
       bugProjectId = bug[0].project_id || projectId;
@@ -1333,7 +1440,7 @@ router.post('/:id/timesheets', async (req, res) => {
     const [result] = await db.query(`
       INSERT INTO timesheets (employee_id, task_id, bug_id, project_id, date, hours, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [employee[0].id, id, bug_id || null, bugProjectId || projectId, date, hours, notes || null]);
+    `, [employee[0].id, taskId, bug_id || null, bugProjectId || projectId, date, hours, notes || null]);
     
     const [newTimesheet] = await db.query(`
       SELECT 
@@ -1465,6 +1572,13 @@ router.get('/:id/attachments', async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     const [attachments] = await db.query(`
       SELECT 
         a.*,
@@ -1473,7 +1587,7 @@ router.get('/:id/attachments', async (req, res) => {
       LEFT JOIN users u ON a.uploaded_by = u.id
       WHERE a.task_id = ?
       ORDER BY a.created_at DESC
-    `, [id]);
+    `, [taskId]);
     
     res.json({ data: attachments });
   } catch (error) {
@@ -1488,12 +1602,19 @@ router.post('/:id/attachments', requirePermission('tasks.edit'), upload.array('a
     const { id } = req.params;
     const userId = req.user?.id;
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
     }
     
     // Check if task exists
-    const [tasks] = await db.query('SELECT id FROM tasks WHERE id = ?', [id]);
+    const [tasks] = await db.query('SELECT id FROM tasks WHERE id = ?', [taskId]);
     if (tasks.length === 0) {
       // Clean up uploaded files
       req.files.forEach((file) => {
@@ -1512,7 +1633,7 @@ router.post('/:id/attachments', requirePermission('tasks.edit'), upload.array('a
           task_id, uploaded_by, path, original_filename, mime_type, size
         )
         VALUES (?, ?, ?, ?, ?, ?)
-      `, [id, userId, filePath, file.originalname, file.mimetype, file.size]);
+      `, [taskId, userId, filePath, file.originalname, file.mimetype, file.size]);
       
       uploadedFiles.push({
         id: attachmentResult.insertId,
@@ -1546,13 +1667,20 @@ router.delete('/:id/attachments/:attachmentId', requirePermission('tasks.edit'),
     const userRole = req.user?.role || '';
     const isSuperAdmin = userRole === 'Super Admin';
     
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const taskId = await resolveIdFromUuid('tasks', id);
+    if (!taskId) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
     // Get attachment info
     const [attachments] = await db.query(`
       SELECT a.*, t.created_by as task_created_by
       FROM attachments a
       LEFT JOIN tasks t ON a.task_id = t.id
       WHERE a.id = ? AND a.task_id = ?
-    `, [attachmentId, id]);
+    `, [attachmentId, taskId]);
     
     if (attachments.length === 0) {
       return res.status(404).json({ error: 'Attachment not found' });

@@ -51,6 +51,22 @@ export function initializeSocketIO(server) {
       }
 
       const user = users[0];
+      
+      // Check if user is active (for client activation/deactivation)
+      if (user.is_active === 0 || user.is_active === false) {
+        logger.warn(`Socket connection attempt for inactive user: ${userId}`);
+        return next(new Error('Authentication error: Account has been deactivated'));
+      }
+      
+      // Check token version for force logout on deactivation
+      const tokenTokenVersion = decoded.tokenVersion;
+      const userTokenVersion = user.token_version || 0;
+      
+      if (tokenTokenVersion !== undefined && tokenTokenVersion !== userTokenVersion) {
+        logger.warn(`Token version mismatch for socket connection. User: ${userId}, Token version: ${tokenTokenVersion}, Current version: ${userTokenVersion}`);
+        return next(new Error('Authentication error: Session has been invalidated'));
+      }
+      
       socket.userId = user.id;
       socket.userRole = user.role;
       socket.userName = user.name;
@@ -104,8 +120,30 @@ export function initializeSocketIO(server) {
       logger.debug(`User ${socket.userId} left board ${boardId}`);
     });
 
+    // Periodic check for user deactivation (every 30 seconds)
+    const deactivationCheck = setInterval(async () => {
+      try {
+        const [users] = await db.query(`
+          SELECT is_active, token_version FROM users WHERE id = ?
+        `, [socket.userId]);
+        
+        if (users.length === 0 || users[0].is_active === 0 || users[0].is_active === false) {
+          logger.info(`Disconnecting socket for deactivated user: ${socket.userId}`);
+          socket.emit('force_logout', { 
+            message: 'Your account has been deactivated',
+            code: 'ACCOUNT_DEACTIVATED'
+          });
+          socket.disconnect(true);
+          clearInterval(deactivationCheck);
+        }
+      } catch (error) {
+        logger.error('Error checking user deactivation status:', error);
+      }
+    }, 30000); // Check every 30 seconds
+    
     // Disconnect handler
     socket.on('disconnect', (reason) => {
+      clearInterval(deactivationCheck);
       logger.info(`Socket disconnected: User ${socket.userId} - ${reason}`);
     });
 

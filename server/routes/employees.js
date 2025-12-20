@@ -1502,8 +1502,8 @@ router.post('/', async (req, res) => {
             const empCodeForTL = `NTPL${String(empCount[0].count + 1).padStart(4, '0')}`;
             
             const [newEmpResult] = await db.query(`
-              INSERT INTO employees (user_id, emp_code, employee_status)
-              VALUES (?, ?, 'Active')
+              INSERT INTO employees (uuid, user_id, emp_code, employee_status)
+              VALUES (UUID(), ?, ?, 'Active')
             `, [teamLeadId, empCodeForTL]);
             
             teamLeadEmployeeId = newEmpResult.insertId;
@@ -1524,7 +1524,7 @@ router.post('/', async (req, res) => {
     // We don't need it as a form field - it's determined by the role and usage
     const [empResult] = await db.query(`
       INSERT INTO employees (
-        user_id, emp_code, team_lead_id,
+        uuid, user_id, emp_code, team_lead_id,
         date_of_birth, gender, date_of_joining, employee_status,
         bank_name, bank_account_number, ifsc_code,
         address1, address2, landmark, state, district, pincode,
@@ -1532,7 +1532,7 @@ router.post('/', async (req, res) => {
         annual_leave_count, sick_leave_count, casual_leave_count, profile_photo_url, created_by,
         teams_id, whatsapp
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       userResult.insertId, finalEmpCode, teamLeadEmployeeId,
       formatDateForDB(date_of_birth), gender || null, formatDateForDB(date_of_joining), employee_status || 'Active',
@@ -1961,8 +1961,8 @@ router.put('/:id', async (req, res) => {
                 
                 // Create employee record
                 const [newEmpResult] = await db.query(`
-                  INSERT INTO employees (user_id, emp_code, employee_status)
-                  VALUES (?, ?, 'Active')
+                  INSERT INTO employees (uuid, user_id, emp_code, employee_status)
+                  VALUES (UUID(), ?, ?, 'Active')
                 `, [teamLeadId, empCode]);
                 
                 teamLeadEmployeeId = newEmpResult.insertId;

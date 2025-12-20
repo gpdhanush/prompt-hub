@@ -2,7 +2,7 @@
 -- HOLIDAYS TABLE MIGRATION
 -- ============================================
 
-USE `admin_dashboard`;
+USE `prasowla_ntpl_admin`;
 
 -- Create holidays table
 CREATE TABLE IF NOT EXISTS `holidays` (

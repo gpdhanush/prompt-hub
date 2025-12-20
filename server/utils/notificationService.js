@@ -143,15 +143,25 @@ export async function notifyUserUpdated(userId, updatedBy, changes = {}) {
  */
 export async function notifyProjectAssigned(userId, projectId, projectName, assignedBy) {
   try {
-    // Get assigner info
+    // Get assigner info and project UUID
     const [assigners] = await db.query(
       'SELECT name FROM users WHERE id = ?',
       [assignedBy]
     );
     const assigner = assigners[0]?.name || 'Admin';
 
+    // Get project UUID if available
+    const [projects] = await db.query(
+      'SELECT uuid FROM projects WHERE id = ?',
+      [projectId]
+    );
+    const projectUuid = projects[0]?.uuid || null;
+
     const title = 'New Project Assigned';
     const message = `You have been assigned to project: ${projectName}`;
+    
+    // Use UUID if available, otherwise use numeric ID
+    const projectIdentifier = projectUuid || projectId;
     
     return await createNotification(
       userId,
@@ -160,9 +170,10 @@ export async function notifyProjectAssigned(userId, projectId, projectName, assi
       message,
       {
         projectId: projectId,
+        projectUuid: projectUuid,
         projectName: projectName,
         assignedBy: assigner,
-        link: `/projects/${projectId}`,
+        link: `/projects/${projectIdentifier}`,
       }
     );
   } catch (error) {

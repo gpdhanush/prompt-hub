@@ -1,7 +1,9 @@
 export type Task = {
   id: number;
+  uuid?: string;
   task_code?: string;
   project_id?: number;
+  project_name?: string;
   title: string;
   description?: string;
   assigned_to?: number;

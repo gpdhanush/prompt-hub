@@ -65,7 +65,7 @@ All API methods have been added for:
 
 ## 🚀 To Complete Implementation
 
-1. Run database migration: `mysql -u root -p admin_dashboard < database/migrations/add_asset_approvals.sql`
+1. Run database migration: `mysql -u root -p prasowla_ntpl_admin < database/migrations/add_asset_approvals.sql`
 2. Implement frontend pages (in progress)
 3. Test all CRUD operations
 4. Add advanced features (barcode scanning, bulk operations, etc.)

@@ -33,7 +33,7 @@ Stores file attachments related to inventory items
 
 ### Option 1: Using MySQL Command Line
 ```bash
-mysql -u root -p admin_dashboard < database/migrations/add_inventory_management.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/add_inventory_management.sql
 ```
 
 ### Option 2: Using MySQL Workbench
@@ -43,7 +43,7 @@ mysql -u root -p admin_dashboard < database/migrations/add_inventory_management.
 4. Execute the script
 
 ### Option 3: Using phpMyAdmin
-1. Select the `admin_dashboard` database
+1. Select the `prasowla_ntpl_admin` database
 2. Go to the "Import" tab
 3. Choose the file `database/migrations/add_inventory_management.sql`
 4. Click "Go"

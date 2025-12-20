@@ -58,11 +58,11 @@ The migrations are organized into 5 parts that should be run in sequence:
 
 ```bash
 # Run in order
-mysql -u your_username -p admin_dashboard < consolidated_migrations_part_01.sql
-mysql -u your_username -p admin_dashboard < consolidated_migrations_part_02.sql
-mysql -u your_username -p admin_dashboard < consolidated_migrations_part_03.sql
-mysql -u your_username -p admin_dashboard < consolidated_migrations_part_04.sql
-mysql -u your_username -p admin_dashboard < consolidated_migrations_part_05.sql
+mysql -u your_username -p prasowla_ntpl_admin < consolidated_migrations_part_01.sql
+mysql -u your_username -p prasowla_ntpl_admin < consolidated_migrations_part_02.sql
+mysql -u your_username -p prasowla_ntpl_admin < consolidated_migrations_part_03.sql
+mysql -u your_username -p prasowla_ntpl_admin < consolidated_migrations_part_04.sql
+mysql -u your_username -p prasowla_ntpl_admin < consolidated_migrations_part_05.sql
 ```
 
 ### Option 2: Using MySQL Command Line
@@ -72,7 +72,7 @@ mysql -u your_username -p admin_dashboard < consolidated_migrations_part_05.sql
 mysql -u your_username -p
 
 -- Select database
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 
 -- Run each file
 SOURCE /path/to/consolidated_migrations_part_01.sql;
@@ -95,7 +95,7 @@ SOURCE /path/to/consolidated_migrations_part_05.sql;
 
 2. **Backup First**: Always backup your database before running migrations:
    ```bash
-   mysqldump -u your_username -p admin_dashboard > backup_before_migration.sql
+   mysqldump -u your_username -p prasowla_ntpl_admin > backup_before_migration.sql
    ```
 
 3. **Fresh Installation**: If creating a fresh database, you can run all parts sequentially. The files use `CREATE TABLE IF NOT EXISTS` and `INSERT ... ON DUPLICATE KEY UPDATE` to be idempotent.

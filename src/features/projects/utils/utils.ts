@@ -1,5 +1,6 @@
 export type Project = {
   id: number;
+  uuid?: string;
   project_code?: string;
   name: string;
   description?: string;

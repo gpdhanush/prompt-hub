@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AdminLayout } from "./components/layout/AdminLayout";
+import { ClientLayout } from "./components/layout/ClientLayout";
 import { LoadingProvider, useLoading } from "./contexts/LoadingContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { NotificationAlert } from "./components/NotificationAlert";
@@ -15,6 +16,7 @@ import { queryClient } from "./lib/queryClient";
 import { useEffect, useRef, lazy } from "react";
 import { toast } from "@/hooks/use-toast";
 import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
+import { getCurrentUserAsync } from "@/lib/auth";
 import { registerLoadingCallback } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,6 +30,10 @@ import { LazyRoute } from "./components/LazyRoute";
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ClientDashboard = lazy(() => import("./pages/ClientDashboard"));
+const ClientTimeline = lazy(() => import("./pages/ClientTimeline"));
+const ClientReleases = lazy(() => import("./pages/ClientReleases"));
+const ClientComments = lazy(() => import("./pages/ClientComments"));
 const Users = lazy(() => import("./features/users/pages/Users"));
 const Employees = lazy(() => import("./features/employees/pages/Employees"));
 const Projects = lazy(() => import("./features/projects/pages/Projects"));
@@ -122,7 +128,8 @@ function ProtectedRoute({
   let hasAccess = false;
   
   if (allowedRoles && allowedRoles.length > 0) {
-    hasAccess = allowedRoles.includes(userRole);
+    // Case-insensitive role check
+    hasAccess = allowedRoles.some(role => role.toUpperCase() === userRole.toUpperCase());
   } else if (requiredPermission) {
     hasAccess = hasPermission(requiredPermission);
   } else {
@@ -664,6 +671,98 @@ const AppContent = () => {
               />
             </Route>
             
+            {/* Protected Client Routes */}
+            <Route element={<ClientLayout />}>
+              <Route 
+                path="/client/dashboard" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><ClientDashboard /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/projects" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><Projects /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/projects/:id" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><ProjectDetail /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/tasks" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><Tasks /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/tasks/:id" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><TaskView /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/bugs" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><Bugs /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/bugs/:id" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><BugDetail /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/kanban" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><Kanban /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/timeline" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><ClientTimeline /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/releases" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><ClientReleases /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/client/comments" 
+                element={
+                  <ProtectedRoute allowedRoles={['CLIENT']}>
+                    <LazyRoute><ClientComments /></LazyRoute>
+                  </ProtectedRoute>
+                } 
+              />
+            </Route>
+            
             <Route path="*" element={<LazyRoute><NotFound /></LazyRoute>} />
           </Routes>
     </BrowserRouter>
@@ -671,32 +770,66 @@ const AppContent = () => {
 };
 
 const App = () => {
-  // Initialize theme color from localStorage on app start, or use default
+  // Load theme preferences from database after user is authenticated
   useEffect(() => {
-    const root = document.documentElement;
-    const savedColor = localStorage.getItem("theme-color");
-    const defaultColor = "242 57% 58%"; // Default indigo color
-    
-    // Use saved color or default
-    const colorToUse = savedColor || defaultColor;
-    
-    // Apply color to CSS variables
-    root.style.setProperty("--primary", colorToUse);
-    root.style.setProperty("--ring", colorToUse);
-    root.style.setProperty("--sidebar-primary", colorToUse);
-    root.style.setProperty("--sidebar-ring", colorToUse);
-    root.style.setProperty("--chart-1", colorToUse);
-    
-    // If no color was saved, save the default
-    if (!savedColor) {
-      localStorage.setItem("theme-color", defaultColor);
-    }
-    
-    // Set default theme to light if not set
-    const savedTheme = localStorage.getItem("vite-ui-theme");
-    if (!savedTheme) {
-      localStorage.setItem("vite-ui-theme", "light");
-    }
+    const loadThemeFromDB = async () => {
+      try {
+        // Check if user is authenticated
+        const user = await getCurrentUserAsync();
+        if (!user) {
+          // Not logged in - use localStorage as fallback
+          const savedColor = localStorage.getItem("theme-color");
+          const defaultColor = "242 57% 58%";
+          const colorToUse = savedColor || defaultColor;
+          const root = document.documentElement;
+          root.style.setProperty("--primary", colorToUse);
+          root.style.setProperty("--ring", colorToUse);
+          root.style.setProperty("--sidebar-primary", colorToUse);
+          root.style.setProperty("--sidebar-ring", colorToUse);
+          root.style.setProperty("--chart-1", colorToUse);
+          return;
+        }
+
+        // User is authenticated - fetch theme from database
+        const { authApi } = await import('./features/auth/api');
+        const userProfile = await authApi.getMe();
+        
+        if (userProfile?.data) {
+          const themeColor = userProfile.data.theme_color || "242 57% 58%";
+          const themeMode = userProfile.data.theme_mode || "light";
+          
+          // Apply theme color
+          const root = document.documentElement;
+          root.style.setProperty("--primary", themeColor);
+          root.style.setProperty("--ring", themeColor);
+          root.style.setProperty("--sidebar-primary", themeColor);
+          root.style.setProperty("--sidebar-ring", themeColor);
+          root.style.setProperty("--chart-1", themeColor);
+          
+          // Apply theme mode (will be handled by ThemeProvider, but set localStorage for consistency)
+          if (themeMode === 'system') {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.classList.toggle('dark', prefersDark);
+            localStorage.setItem("vite-ui-theme", prefersDark ? "dark" : "light");
+          } else {
+            document.documentElement.classList.toggle('dark', themeMode === 'dark');
+            localStorage.setItem("vite-ui-theme", themeMode);
+          }
+        }
+      } catch (error) {
+        logger.error('Error loading theme from database:', error);
+        // Fallback to localStorage
+        const savedColor = localStorage.getItem("theme-color") || "242 57% 58%";
+        const root = document.documentElement;
+        root.style.setProperty("--primary", savedColor);
+        root.style.setProperty("--ring", savedColor);
+        root.style.setProperty("--sidebar-primary", savedColor);
+        root.style.setProperty("--sidebar-ring", savedColor);
+        root.style.setProperty("--chart-1", savedColor);
+      }
+    };
+
+    loadThemeFromDB();
   }, []);
 
   // Set up global error handlers for production crash reporting

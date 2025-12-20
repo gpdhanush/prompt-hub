@@ -4,7 +4,7 @@
 -- Seed Data, Permissions, and Initial Setup
 -- ============================================
 
-USE `admin_dashboard`;
+-- USE `prasowla_ntpl_admin`;
 
 -- ============================================
 -- SEED DATA - ROLES

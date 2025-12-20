@@ -1,10 +1,12 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate, requireSuperAdmin, requirePermission } from '../middleware/auth.js';
+import { authenticate, requireSuperAdmin, requirePermission, authorize } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyUserUpdated } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
 import { validateUserCreation, getAvailablePositions } from '../utils/positionValidation.js';
+import { getClientIp, getUserAgent } from '../utils/auditLogger.js';
+import { resolveIdFromUuid, getRecordByIdentifier } from '../utils/uuidResolver.js';
 
 const router = express.Router();
 
@@ -101,7 +103,7 @@ router.get('/available-positions', requirePermission('users.view'), async (req, 
   }
 });
 
-// Get all users with pagination - check for users.view permission
+// Get all users with pagination - check for users.view permission (Super Admin bypasses)
 router.get('/', requirePermission('users.view'), async (req, res) => {
   try {
     // Parse and validate query parameters
@@ -199,10 +201,16 @@ router.get('/', requirePermission('users.view'), async (req, res) => {
   }
 });
 
-// Get user by ID - check for users.view permission
+// Get user by ID or UUID - check for users.view permission
 router.get('/:id', requirePermission('users.view'), async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Resolve UUID to numeric ID if needed
+    const userId = await resolveIdFromUuid('users', id);
+    if (!userId) {
+      return res.status(404).json({ error: 'User not found' });
+    }
     
     const [users] = await db.query(`
       SELECT 
@@ -213,7 +221,7 @@ router.get('/:id', requirePermission('users.view'), async (req, res) => {
       LEFT JOIN roles r ON u.role_id = r.id
       LEFT JOIN positions p ON u.position_id = p.id
       WHERE u.id = ?
-    `, [id]);
+    `, [userId]);
     
     if (users.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -265,21 +273,27 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
       });
     }
     
-    // Team Leader, Team Lead, and Manager can only create Developer, Designer, and Tester roles
+    // Super Admin can create users with any role - skip restrictions
     const currentUserRole = req.user.role;
-    if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
-        !['Developer', 'Designer', 'Tester'].includes(dbRoleName)) {
-      return res.status(403).json({ 
-        error: `${currentUserRole} can only create employees with Developer, Designer, or Tester roles` 
-      });
-    }
+    const isSuperAdmin = currentUserRole === 'Super Admin';
     
-    // Team Leader and Manager cannot create Admin roles
-    if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
-        dbRoleName === 'Admin') {
-      return res.status(403).json({ 
-        error: `${currentUserRole} cannot create Admin users. Only Super Admin can create Admin users.` 
-      });
+    // Only apply restrictions if not Super Admin
+    if (!isSuperAdmin) {
+      // Team Leader, Team Lead, and Manager can only create Developer, Designer, and Tester roles
+      if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+          !['Developer', 'Designer', 'Tester'].includes(dbRoleName)) {
+        return res.status(403).json({ 
+          error: `${currentUserRole} can only create employees with Developer, Designer, or Tester roles` 
+        });
+      }
+      
+      // Team Leader and Manager cannot create Admin roles
+      if ((currentUserRole === 'Team Leader' || currentUserRole === 'Team Lead' || currentUserRole === 'Manager') && 
+          dbRoleName === 'Admin') {
+        return res.status(403).json({ 
+          error: `${currentUserRole} cannot create Admin users. Only Super Admin can create Admin users.` 
+        });
+      }
     }
     
     // Debug: Log the role mapping
@@ -311,37 +325,40 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
     const [roleInfo] = await db.query('SELECT reporting_person_role_id FROM roles WHERE id = ?', [roleId]);
     const reportingPersonRoleId = roleInfo[0]?.reporting_person_role_id || null;
     
+    // Get position_id if provided (declare outside if block for scope)
+    let positionId = null;
+    if (position) {
+      // Map frontend position values to database position names
+      const positionMapping = {
+        'developer': 'Developer',
+        'senior-dev': 'Senior Developer',
+        'tech-lead': 'Team Lead',
+        'pm': 'Project Manager',
+        'qa': 'QA Engineer'
+      };
+      
+      const dbPositionName = positionMapping[position] || position;
+      const [positions] = await db.query('SELECT id FROM positions WHERE name = ?', [dbPositionName]);
+      if (positions.length > 0) {
+        positionId = positions[0].id;
+      } else {
+        // If position doesn't exist, return error (don't auto-create)
+        return res.status(400).json({ error: `Position "${dbPositionName}" not found. Please select a valid position.` });
+      }
+    }
+    
     // Validate role level - check if creator can create user with this role
     // This validation is based on level (Level 1 can create Level 2, etc.)
     const creatorUserId = req.user?.id;
     if (creatorUserId && roleId) {
-      // Get position_id if provided
-      let positionId = null;
-      if (position) {
-        // Map frontend position values to database position names
-        const positionMapping = {
-          'developer': 'Developer',
-          'senior-dev': 'Senior Developer',
-          'tech-lead': 'Team Lead',
-          'pm': 'Project Manager',
-          'qa': 'QA Engineer'
-        };
-        
-        const dbPositionName = positionMapping[position] || position;
-        const [positions] = await db.query('SELECT id FROM positions WHERE name = ?', [dbPositionName]);
-        if (positions.length > 0) {
-          positionId = positions[0].id;
-        } else {
-          // If position doesn't exist, return error (don't auto-create)
-          return res.status(400).json({ error: `Position "${dbPositionName}" not found. Please select a valid position.` });
-        }
-      }
-      
       // Always validate role level (even if position is not provided)
-      // Level 1 users (Team Leader, Manager) can create Level 2 users (Developer, Designer, Tester)
-      const validation = await validateUserCreation(creatorUserId, roleId, positionId);
-      if (!validation.valid) {
-        return res.status(403).json({ error: validation.error });
+      // Super Admin bypasses level validation - can create any role
+      if (!isSuperAdmin) {
+        // Level 1 users (Team Leader, Manager) can create Level 2 users (Developer, Designer, Tester)
+        const validation = await validateUserCreation(creatorUserId, roleId, positionId);
+        if (!validation.valid) {
+          return res.status(403).json({ error: validation.error });
+        }
       }
     }
     
@@ -367,8 +384,8 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
     }
     
     const [result] = await db.query(`
-      INSERT INTO users (name, email, mobile, password_hash, role_id, position_id, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (uuid, name, email, mobile, password_hash, role_id, position_id, status)
+      VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)
     `, [name, email, mobile || null, passwordHash, roleId, positionId, status]);
     
     const newUserId = result.insertId;
@@ -385,8 +402,8 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
         
         // Create employee record for Team Lead (no team_lead_id since they are the lead)
         await db.query(`
-          INSERT INTO employees (user_id, emp_code, employee_status)
-          VALUES (?, ?, 'Active')
+          INSERT INTO employees (uuid, user_id, emp_code, employee_status)
+          VALUES (UUID(), ?, ?, 'Active')
         `, [newUserId, empCode]);
         logger.debug(`Created employee record for Team Lead user_id: ${newUserId}, emp_code: ${empCode}`);
       }
@@ -408,8 +425,8 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
         const empCode = `NTPL${String(empCount[0].count + 1).padStart(4, '0')}`;
         
         const [newTeamLeadEmp] = await db.query(`
-          INSERT INTO employees (user_id, emp_code, employee_status)
-          VALUES (?, ?, 'Active')
+          INSERT INTO employees (uuid, user_id, emp_code, employee_status)
+          VALUES (UUID(), ?, ?, 'Active')
         `, [team_lead_id, empCode]);
         
         teamLeadEmployeeId = newTeamLeadEmp.insertId;
@@ -426,8 +443,8 @@ router.post('/', requirePermission('users.create'), async (req, res) => {
         const empCode = `NTPL${String(empCount[0].count + 1).padStart(4, '0')}`;
         
         await db.query(`
-          INSERT INTO employees (user_id, emp_code, team_lead_id)
-          VALUES (?, ?, ?)
+          INSERT INTO employees (uuid, user_id, emp_code, team_lead_id)
+          VALUES (UUID(), ?, ?, ?)
         `, [newUserId, empCode, teamLeadEmployeeId]);
       }
     }
@@ -473,6 +490,12 @@ router.put('/:id', requirePermission('users.edit'), async (req, res) => {
     const { id } = req.params;
     const { name, email, password, role, position, mobile, status } = req.body;
     
+    // Resolve UUID to numeric ID if needed
+    const userId = await resolveIdFromUuid('users', id);
+    if (!userId) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
     // Get before data for audit log
     const [existingUsers] = await db.query(`
       SELECT 
@@ -483,7 +506,7 @@ router.put('/:id', requirePermission('users.edit'), async (req, res) => {
       LEFT JOIN roles r ON u.role_id = r.id
       LEFT JOIN positions p ON u.position_id = p.id
       WHERE u.id = ?
-    `, [id]);
+    `, [userId]);
     
     if (existingUsers.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -615,7 +638,7 @@ router.put('/:id', requirePermission('users.edit'), async (req, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
     
-    params.push(id);
+    params.push(userId);
     
     await db.query(`
       UPDATE users 
@@ -632,14 +655,14 @@ router.put('/:id', requirePermission('users.edit'), async (req, res) => {
       LEFT JOIN roles r ON u.role_id = r.id
       LEFT JOIN positions p ON u.position_id = p.id
       WHERE u.id = ?
-    `, [id]);
+    `, [userId]);
     
     // Create audit log for user update
-    await logUpdate(req, 'Users', id, beforeData, updatedUser[0], 'User');
+    await logUpdate(req, 'Users', userId, beforeData, updatedUser[0], 'User');
     
     // Send notification to user if updated by Super Admin or Team Lead
     // Only notify if the user being updated is not the same as the updater
-    if (req.user.id !== parseInt(id) && (req.user.role === 'Super Admin' || req.user.role === 'Team Leader' || req.user.role === 'Team Lead')) {
+    if (req.user.id !== userId && (req.user.role === 'Super Admin' || req.user.role === 'Team Leader' || req.user.role === 'Team Lead')) {
       // Track what changed
       const changes = {};
       if (name && name !== beforeData.name) changes.name = { from: beforeData.name, to: name };
@@ -666,10 +689,103 @@ router.put('/:id', requirePermission('users.edit'), async (req, res) => {
   }
 });
 
+// Activate/Deactivate client user - Only SUPER_ADMIN or ADMIN can do this
+router.patch('/:id/activate', authorize('Super Admin', 'Admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_active } = req.body;
+    
+    if (typeof is_active !== 'boolean') {
+      return res.status(400).json({ error: 'is_active must be a boolean value' });
+    }
+    
+    // Get user to check role
+    const [users] = await db.query(`
+      SELECT u.*, r.name as role
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = ?
+    `, [id]);
+    
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const user = users[0];
+    const beforeData = { is_active: user.is_active, token_version: user.token_version };
+    
+    // Only allow activation/deactivation for CLIENT users
+    if (user.role !== 'CLIENT') {
+      return res.status(403).json({ 
+        error: 'Only CLIENT users can be activated/deactivated using this endpoint' 
+      });
+    }
+    
+    // Update is_active and increment token_version to force logout
+    await db.query(`
+      UPDATE users 
+      SET is_active = ?,
+          token_version = COALESCE(token_version, 0) + 1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [is_active ? 1 : 0, id]);
+    
+    // Get updated user
+    const [updatedUsers] = await db.query(`
+      SELECT u.*, r.name as role
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+      WHERE u.id = ?
+    `, [id]);
+    
+    const afterData = { 
+      is_active: updatedUsers[0].is_active, 
+      token_version: updatedUsers[0].token_version 
+    };
+    
+    // Create audit log
+    await logUpdate(req, 'Users', id, beforeData, afterData, 'Client Activation');
+    
+    // Log additional audit for client activation/deactivation
+    await db.query(`
+      INSERT INTO audit_logs (
+        user_id, action, module, item_id, item_type,
+        before_data, after_data, ip_address, user_agent, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    `, [
+      req.user.id,
+      is_active ? 'ACTIVATE' : 'DEACTIVATE',
+      'Client Access',
+      id,
+      'CLIENT',
+      JSON.stringify(beforeData),
+      JSON.stringify(afterData),
+      getClientIp(req),
+      getUserAgent(req)
+    ]);
+    
+    logger.info(`Client user ${id} ${is_active ? 'activated' : 'deactivated'} by user ${req.user.id}`);
+    
+    res.json({ 
+      data: updatedUsers[0],
+      message: `Client user ${is_active ? 'activated' : 'deactivated'} successfully. All active sessions have been invalidated.`
+    });
+  } catch (error) {
+    logger.error('Error activating/deactivating client:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete user - check for users.delete permission
 router.delete('/:id', requirePermission('users.delete'), async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Resolve UUID to numeric ID if needed
+    const userId = await resolveIdFromUuid('users', id);
+    if (!userId) {
+      return res.status(404).json({ error: 'User not found' });
+    }
     
     // Check if the user being deleted is a Super Admin
     const [users] = await db.query(`
@@ -677,7 +793,7 @@ router.delete('/:id', requirePermission('users.delete'), async (req, res) => {
       FROM users u
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE u.id = ?
-    `, [id]);
+    `, [userId]);
     
     if (users.length === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -702,14 +818,14 @@ router.delete('/:id', requirePermission('users.delete'), async (req, res) => {
       });
     }
     
-    const [result] = await db.query('DELETE FROM users WHERE id = ?', [id]);
+    const [result] = await db.query('DELETE FROM users WHERE id = ?', [userId]);
     
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
     
     // Create audit log for user deletion
-    await logDelete(req, 'Users', id, beforeData, 'User');
+      await logDelete(req, 'Users', userId, beforeData, 'User');
     
     res.json({ message: 'User deleted successfully' });
   } catch (error) {

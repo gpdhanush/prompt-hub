@@ -12,10 +12,40 @@ router.use(authenticate);
 // Get all roles - Admin, Team Leader, and Super Admin can view (needed for user/employee creation)
 router.get('/', authorize('Super Admin', 'Admin', 'Team Leader', 'Team Lead'), async (req, res) => {
   try {
-    const [roles] = await db.query(`
+    const userRole = req.user?.role || '';
+    const isSuperAdmin = userRole === 'Super Admin';
+    
+    let query = `
       SELECT 
         r.*,
         rp.name as reporting_person_role_name
+      FROM roles r
+      LEFT JOIN roles rp ON r.reporting_person_role_id = rp.id
+    `;
+    
+    // Super Admin can see all roles, others may have restrictions
+    if (!isSuperAdmin) {
+      // Non-Super Admin users might have role restrictions (add if needed)
+      // For now, all authorized users see all roles
+    }
+    
+    query += ` ORDER BY r.name ASC`;
+    
+    const [roles] = await db.query(query);
+    res.json({ data: roles });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all roles for Super Admin (unrestricted) - Super Admin only
+router.get('/all', authorize('Super Admin'), async (req, res) => {
+  try {
+    const [roles] = await db.query(`
+      SELECT 
+        r.*,
+        rp.name as reporting_person_role_name,
+        (SELECT COUNT(*) FROM users WHERE role_id = r.id) as user_count
       FROM roles r
       LEFT JOIN roles rp ON r.reporting_person_role_id = rp.id
       ORDER BY r.name ASC

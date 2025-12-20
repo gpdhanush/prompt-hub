@@ -12,9 +12,9 @@ SET FOREIGN_KEY_CHECKS = 0;
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 SET time_zone = "+00:00";
 
--- Database: admin_dashboard
-CREATE DATABASE IF NOT EXISTS `admin_dashboard` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `admin_dashboard`;
+-- Database: prasowla_ntpl_admin
+-- CREATE DATABASE IF NOT EXISTS `prasowla_ntpl_admin` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- USE `prasowla_ntpl_admin`;
 
 -- ============================================
 -- AUTHENTICATION & AUTHORIZATION TABLES

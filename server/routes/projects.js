@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate, authorize, requirePermission } from '../middleware/auth.js';
+import { authenticate, authorize, requirePermission, requireProjectAccess } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyProjectAssigned, notifyProjectComment } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
@@ -132,6 +132,11 @@ router.get('/', requirePermission('projects.view'), async (req, res) => {
     } else {
       logger.debug('Showing ALL projects (no filter applied)');
     }
+    // For CLIENT users, only show projects they have access to
+    if (userRole === 'CLIENT') {
+      query += ` AND pu.user_id = ? AND pu.is_active = 1 AND p.is_active = 1`;
+      params.push(userId);
+    }
     // For "all" view, all authenticated users see all projects - no role-based filtering
     
     query += ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
@@ -141,6 +146,19 @@ router.get('/', requirePermission('projects.view'), async (req, res) => {
     
     try {
       [projects] = await db.query(query, params);
+      
+      // For CLIENT users, hide sensitive fields
+      if (userRole === 'CLIENT') {
+        projects = projects.map(project => {
+          const filtered = { ...project };
+          delete filtered.internal_notes;
+          delete filtered.admin_remarks;
+          delete filtered.estimated_delivery_plan;
+          if (filtered.estimated_cost) delete filtered.estimated_cost;
+          if (filtered.actual_cost) delete filtered.actual_cost;
+          return filtered;
+        });
+      }
     } catch (dbError) {
       logger.error('Database query error (projects):', dbError);
       if (dbError.code === 'ECONNREFUSED' || dbError.code === 'PROTOCOL_CONNECTION_LOST') {
@@ -181,6 +199,12 @@ router.get('/', requirePermission('projects.view'), async (req, res) => {
         pu.user_id = ?
       )`;
       countParams.push(userId, userId, userId, userId);
+    }
+    
+    // For CLIENT users, only count projects they have access to
+    if (userRole === 'CLIENT') {
+      countQuery += ` AND pu.user_id = ? AND pu.is_active = 1 AND p.is_active = 1`;
+      countParams.push(userId);
     }
     // For "all" view, all authenticated users see all projects - no role-based filtering
     
@@ -237,44 +261,74 @@ router.get('/', requirePermission('projects.view'), async (req, res) => {
   }
 });
 
-// Get project by ID - check for projects.view permission
-router.get('/:id', requirePermission('projects.view'), async (req, res) => {
+// Get project by ID or UUID - check for projects.view permission and project access
+router.get('/:id', requirePermission('projects.view'), requireProjectAccess, async (req, res) => {
   try {
-    const [projects] = await db.query(`
-      SELECT 
-        p.*,
-        u1.name as created_by_name,
-        u1.email as created_by_email,
-        u2.name as updated_by_name,
-        u2.email as updated_by_email,
-        tl.name as team_lead_name,
-        tl.email as team_lead_email,
-        tl_emp.profile_photo_url as team_lead_photo_url
-      FROM projects p
-      LEFT JOIN users u1 ON p.created_by = u1.id
-      LEFT JOIN users u2 ON p.updated_by = u2.id
-      LEFT JOIN users tl ON p.team_lead_id = tl.id
-      LEFT JOIN employees tl_emp ON tl.id = tl_emp.user_id
-      WHERE p.id = ?
-    `, [req.params.id]);
+    const projectId = req.projectId || req.params.id; // Use projectId from requireProjectAccess if available
+    
+    // Check if id is UUID or numeric
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id);
+    
+    let projectQuery;
+    if (isUUID) {
+      projectQuery = `
+        SELECT 
+          p.*,
+          u1.name as created_by_name,
+          u1.email as created_by_email,
+          u2.name as updated_by_name,
+          u2.email as updated_by_email,
+          tl.name as team_lead_name,
+          tl.email as team_lead_email,
+          tl_emp.profile_photo_url as team_lead_photo_url
+        FROM projects p
+        LEFT JOIN users u1 ON p.created_by = u1.id
+        LEFT JOIN users u2 ON p.updated_by = u2.id
+        LEFT JOIN users tl ON p.team_lead_id = tl.id
+        LEFT JOIN employees tl_emp ON tl.id = tl_emp.user_id
+        WHERE p.uuid = ?
+      `;
+    } else {
+      projectQuery = `
+        SELECT 
+          p.*,
+          u1.name as created_by_name,
+          u1.email as created_by_email,
+          u2.name as updated_by_name,
+          u2.email as updated_by_email,
+          tl.name as team_lead_name,
+          tl.email as team_lead_email,
+          tl_emp.profile_photo_url as team_lead_photo_url
+        FROM projects p
+        LEFT JOIN users u1 ON p.created_by = u1.id
+        LEFT JOIN users u2 ON p.updated_by = u2.id
+        LEFT JOIN users tl ON p.team_lead_id = tl.id
+        LEFT JOIN employees tl_emp ON tl.id = tl_emp.user_id
+        WHERE p.id = ?
+      `;
+    }
+    
+    const [projects] = await db.query(projectQuery, [req.params.id]);
     if (projects.length === 0) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectIdForQueries = projects[0].id;
     
     // Fetch project members with roles
     const [members] = await db.query(
       'SELECT user_id, role_in_project FROM project_users WHERE project_id = ?',
-      [req.params.id]
+      [projectIdForQueries]
     );
     
     // Fetch milestones
     const [milestones] = await db.query(
       'SELECT * FROM project_milestones WHERE project_id = ? ORDER BY start_date ASC',
-      [req.params.id]
+      [projectIdForQueries]
     );
     
     // Fetch project files
     const [files] = await db.query(
       'SELECT * FROM project_files WHERE project_id = ?',
-      [req.params.id]
+      [projectIdForQueries]
     );
     
     const projectData = projects[0];
@@ -287,6 +341,16 @@ router.get('/:id', requirePermission('projects.view'), async (req, res) => {
     }, {});
     projectData.milestones = milestones;
     projectData.files = files;
+    
+    // For CLIENT users, hide sensitive fields
+    if (req.user.role === 'CLIENT') {
+      delete projectData.internal_notes;
+      delete projectData.admin_remarks;
+      delete projectData.estimated_delivery_plan;
+      // Hide cost/estimate related fields if they exist
+      if (projectData.estimated_cost) delete projectData.estimated_cost;
+      if (projectData.actual_cost) delete projectData.actual_cost;
+    }
     
     res.json({ data: projectData });
   } catch (error) {
@@ -340,16 +404,37 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
     
     // Normalize status - map old/invalid values to valid ones
     let normalizedStatus = status || 'Not Started';
-    const statusMap = {
-      'Development': 'In Progress',
-      'Dev': 'In Progress',
-      'In-Progress': 'In Progress',
-      'PreProd': 'Pre-Prod',
-      'Pre Prod': 'Pre-Prod',
-    };
     
-    if (statusMap[normalizedStatus]) {
-      normalizedStatus = statusMap[normalizedStatus];
+    // Convert to title case and handle common variations
+    if (normalizedStatus) {
+      // Normalize case: convert to title case (first letter uppercase, rest lowercase)
+      normalizedStatus = normalizedStatus.trim();
+      const lowerStatus = normalizedStatus.toLowerCase();
+      
+      // Map common variations (case-insensitive)
+      const statusMap = {
+        'development': 'In Progress',
+        'dev': 'In Progress',
+        'in-progress': 'In Progress',
+        'inprogress': 'In Progress',
+        'preprod': 'Pre-Prod',
+        'pre prod': 'Pre-Prod',
+        'pre-prod': 'Pre-Prod',
+        'not started': 'Not Started',
+        'notstarted': 'Not Started',
+        'on hold': 'On Hold',
+        'onhold': 'On Hold',
+      };
+      
+      if (statusMap[lowerStatus]) {
+        normalizedStatus = statusMap[lowerStatus];
+      } else {
+        // Try to match case-insensitively with valid statuses
+        const matchedStatus = validStatuses.find(s => s.toLowerCase() === lowerStatus);
+        if (matchedStatus) {
+          normalizedStatus = matchedStatus;
+        }
+      }
     }
     
     // Validate status is in allowed values
@@ -395,15 +480,15 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
     
     const [result] = await db.query(`
       INSERT INTO projects (
-        project_code, name, description, logo_url, estimated_delivery_plan,
+        uuid, project_code, name, description, logo_url, estimated_delivery_plan,
         client_name, client_contact_person, client_email, client_phone, is_internal,
         start_date, end_date, target_end_date, actual_end_date, project_duration_days,
         status, progress, risk_level, priority,
         daily_reporting_required, report_submission_time, auto_reminder_notifications,
         internal_notes, client_notes, admin_remarks,
-      github_repo_url, bitbucket_repo_url, technologies_used,
-      created_by, team_lead_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        github_repo_url, bitbucket_repo_url, technologies_used,
+        created_by, team_lead_id
+    ) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       projectCode, name, description || null, logo_url || null, estimated_delivery_plan || null,
       client_name || null, client_contact_person || null, client_email || null, client_phone || null, is_internal || false,
@@ -1183,17 +1268,37 @@ router.get('/:id/total-worked-time', requirePermission('projects.view'), async (
 // PROJECT COMMENTS ROUTES
 // ============================================
 
-// Create comment
-router.post('/:id/comments', async (req, res) => {
+// Create comment - add project access check for clients
+router.post('/:id/comments', requireProjectAccess, async (req, res) => {
   try {
     const { id } = req.params;
-    const { comment, comment_type, is_internal } = req.body;
+    const { comment, comment_type, is_internal, parent_comment_id } = req.body;
     const user_id = req.user.id;
+    const userRole = req.user.role;
+    
+    // Determine comment source (CLIENT or INTERNAL)
+    const comment_source = userRole === 'CLIENT' ? 'CLIENT' : 'INTERNAL';
+    const isInternal = is_internal !== undefined ? is_internal : (userRole !== 'CLIENT');
+    
+    // If parent_comment_id is provided, verify it exists and belongs to the same project
+    if (parent_comment_id) {
+      const [parentComments] = await db.query(
+        'SELECT id FROM project_comments WHERE id = ? AND project_id = ?',
+        [parent_comment_id, id]
+      );
+      if (parentComments.length === 0) {
+        return res.status(400).json({ error: 'Parent comment not found or does not belong to this project' });
+      }
+    }
+    
+    // Encrypt comment before storing
+    const { encrypt } = await import('../utils/crypto.js');
+    const encryptedComment = encrypt(comment);
     
     const [result] = await db.query(`
-      INSERT INTO project_comments (project_id, user_id, comment, comment_type, is_internal)
-      VALUES (?, ?, ?, ?, ?)
-    `, [id, user_id, comment, comment_type || 'General', is_internal !== undefined ? is_internal : true]);
+      INSERT INTO project_comments (project_id, user_id, comment, encrypted_comment, comment_type, is_internal, comment_source, parent_comment_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, user_id, comment, encryptedComment, comment_type || 'General', isInternal ? 1 : 0, comment_source, parent_comment_id || null]);
     
     const [newComment] = await db.query(`
       SELECT c.*, u.name as user_name, u.email as user_email
@@ -1201,6 +1306,12 @@ router.post('/:id/comments', async (req, res) => {
       LEFT JOIN users u ON c.user_id = u.id
       WHERE c.id = ?
     `, [result.insertId]);
+    
+    // Decrypt comment for response (only for authorized users)
+    const { decrypt } = await import('../utils/crypto.js');
+    if (newComment[0].encrypted_comment) {
+      newComment[0].comment = decrypt(newComment[0].encrypted_comment);
+    }
     
     // Get project name for notification
     const [projects] = await db.query('SELECT name FROM projects WHERE id = ?', [id]);
@@ -1253,11 +1364,12 @@ router.get('/:id/activities', requirePermission('projects.view'), async (req, re
   }
 });
 
-// Get project comments - check for projects.view permission
-router.get('/:id/comments', requirePermission('projects.view'), async (req, res) => {
+// Get project comments - check for projects.view permission and project access
+router.get('/:id/comments', requirePermission('projects.view'), requireProjectAccess, async (req, res) => {
   try {
     const { id } = req.params;
     const { comment_type } = req.query;
+    const userRole = req.user.role;
     
     let query = `
       SELECT c.*, u.name as user_name, u.email as user_email
@@ -1267,6 +1379,23 @@ router.get('/:id/comments', requirePermission('projects.view'), async (req, res)
     `;
     const params = [id];
     
+    // For CLIENT users, show:
+    // 1. Comments that are CLIENT source OR not internal
+    // 2. Replies to visible comments (even if the reply itself is internal)
+    if (userRole === 'CLIENT') {
+      query += ` AND (
+        (c.comment_source = 'CLIENT' OR c.is_internal = 0)
+        OR 
+        (c.parent_comment_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM project_comments parent
+          WHERE parent.id = c.parent_comment_id
+          AND parent.project_id = ?
+          AND (parent.comment_source = 'CLIENT' OR parent.is_internal = 0)
+        ))
+      )`;
+      params.push(id);
+    }
+    
     if (comment_type) {
       query += ' AND c.comment_type = ?';
       params.push(comment_type);
@@ -1275,18 +1404,33 @@ router.get('/:id/comments', requirePermission('projects.view'), async (req, res)
     query += ' ORDER BY c.created_at DESC';
     
     const [comments] = await db.query(query, params);
-    res.json({ data: comments });
+    
+    // Decrypt comments for authorized users
+    const { decrypt } = await import('../utils/crypto.js');
+    const decryptedComments = comments.map(comment => {
+      const decrypted = { ...comment };
+      // Use encrypted_comment if available, otherwise use comment (backward compatibility)
+      if (decrypted.encrypted_comment) {
+        decrypted.comment = decrypt(decrypted.encrypted_comment);
+      }
+      // Remove encrypted_comment from response
+      delete decrypted.encrypted_comment;
+      return decrypted;
+    });
+    
+    res.json({ data: decryptedComments });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Update comment
-router.put('/:id/comments/:commentId', async (req, res) => {
+// Update comment - add project access check for clients
+router.put('/:id/comments/:commentId', requireProjectAccess, async (req, res) => {
   try {
     const { id, commentId } = req.params;
     const { comment, comment_type } = req.body;
     const user_id = req.user.id;
+    const userRole = req.user.role;
     
     // Check if comment exists and user owns it or is admin/team lead
     const [existing] = await db.query(`
@@ -1297,13 +1441,6 @@ router.put('/:id/comments/:commentId', async (req, res) => {
       return res.status(404).json({ error: 'Comment not found' });
     }
     
-    const [user] = await db.query(`
-      SELECT r.name as role 
-      FROM users u
-      LEFT JOIN roles r ON u.role_id = r.id
-      WHERE u.id = ?
-    `, [user_id]);
-    const userRole = user[0]?.role || '';
     const isOwner = existing[0].user_id === user_id;
     const isAdmin = ['Admin', 'Super Admin', 'Team Lead'].includes(userRole);
     
@@ -1311,11 +1448,15 @@ router.put('/:id/comments/:commentId', async (req, res) => {
       return res.status(403).json({ error: 'You can only edit your own comments' });
     }
     
+    // Encrypt comment before storing
+    const { encrypt } = await import('../utils/crypto.js');
+    const encryptedComment = encrypt(comment);
+    
     await db.query(`
       UPDATE project_comments 
-      SET comment = ?, comment_type = ?, updated_at = CURRENT_TIMESTAMP
+      SET comment = ?, encrypted_comment = ?, comment_type = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND project_id = ?
-    `, [comment, comment_type || 'General', commentId, id]);
+    `, [comment, encryptedComment, comment_type || 'General', commentId, id]);
     
     const [updated] = await db.query(`
       SELECT c.*, u.name as user_name, u.email as user_email
@@ -1324,14 +1465,21 @@ router.put('/:id/comments/:commentId', async (req, res) => {
       WHERE c.id = ?
     `, [commentId]);
     
+    // Decrypt comment for response
+    const { decrypt } = await import('../utils/crypto.js');
+    if (updated[0].encrypted_comment) {
+      updated[0].comment = decrypt(updated[0].encrypted_comment);
+    }
+    delete updated[0].encrypted_comment;
+    
     res.json({ data: updated[0] });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Delete comment
-router.delete('/:id/comments/:commentId', async (req, res) => {
+// Delete comment - add project access check for clients
+router.delete('/:id/comments/:commentId', requireProjectAccess, async (req, res) => {
   try {
     const { id, commentId } = req.params;
     const user_id = req.user.id;

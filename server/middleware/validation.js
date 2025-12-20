@@ -74,7 +74,9 @@ export const schemas = {
       then: Joi.required(),
       otherwise: Joi.optional()
     }),
-    session_timeout: Joi.number().integer().min(1).max(1440).optional()
+    session_timeout: Joi.number().integer().min(1).max(1440).optional(),
+    theme_color: Joi.string().max(50).optional().allow(null, ''),
+    theme_mode: Joi.string().valid('light', 'dark', 'system').optional()
   }),
 
   // Pagination schemas

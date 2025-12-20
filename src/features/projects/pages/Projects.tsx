@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
+import { getCurrentUser } from "@/lib/auth";
 import { useProjectsQuery, useProjectMutations } from "../hooks/useProjects";
 import { ProjectsHeader } from "../components/ProjectsHeader";
 import { ProjectsFilters } from "../components/ProjectsFilters";
@@ -20,6 +21,12 @@ export default function Projects() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [page, setPage] = useState(1);
   const limit = DEFAULT_PAGE_LIMIT;
+  
+  // Check if user is CLIENT to determine route prefix
+  const currentUser = getCurrentUser();
+  const userRole = currentUser?.role || '';
+  const isClient = userRole === 'CLIENT' || userRole === 'Client';
+  const basePath = isClient ? '/client/projects' : '/projects';
   
   // Use permission-based checks instead of hardcoded roles
   const { hasPermission } = usePermissions();
@@ -44,8 +51,13 @@ export default function Projects() {
 
   // Handlers with useCallback to prevent unnecessary re-renders
   const handleView = useCallback((project: Project) => {
-    navigate(`/projects/${project.id}`);
-  }, [navigate]);
+    // Always use UUID if available, fallback to numeric ID only if UUID is missing
+    if (!project.uuid) {
+      console.warn('Project missing UUID:', project.id, project.name);
+    }
+    const projectIdentifier = project.uuid || project.id;
+    navigate(`${basePath}/${projectIdentifier}`);
+  }, [navigate, basePath]);
 
   const handleEdit = useCallback((project: Project) => {
     // Ensure project has a valid ID before navigating
@@ -59,9 +71,19 @@ export default function Projects() {
       });
       return;
     }
+    // CLIENT users can't edit, but keep route for other users
+    if (isClient) {
+      toast({
+        title: "Access Denied",
+        description: "Client users have read-only access to projects.",
+        variant: "destructive",
+      });
+      return;
+    }
     console.log('Navigating to edit project:', project.id, project.name);
-    navigate(`/projects/${project.id}/edit`);
-  }, [navigate, toast]);
+    const projectIdentifier = project.uuid || project.id;
+    navigate(`${basePath}/${projectIdentifier}/edit`);
+  }, [navigate, toast, basePath, isClient]);
 
   const handleDelete = useCallback((project: Project) => {
     setSelectedProject(project);

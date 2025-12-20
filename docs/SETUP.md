@@ -22,7 +22,7 @@ npm install
 DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=your_password
-DB_NAME=admin_dashboard
+DB_NAME=prasowla_ntpl_admin
 DB_PORT=3306
 PORT=3001
 NODE_ENV=development
@@ -31,10 +31,10 @@ NODE_ENV=development
 4. Set up the database:
 ```bash
 # Run the schema file to create tables
-mysql -u root -p admin_dashboard < ../database/schema.sql
+mysql -u root -p prasowla_ntpl_admin < ../database/schema.sql
 
 # Optionally seed with sample data
-mysql -u root -p admin_dashboard < ../database/seed.sql
+mysql -u root -p prasowla_ntpl_admin < ../database/seed.sql
 ```
 
 5. Start the backend server:

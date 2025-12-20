@@ -195,7 +195,7 @@ export default function Settings() {
     }
   }, [setTheme]);
 
-  const handleColorChange = useCallback((colorValue: string) => {
+  const handleColorChange = useCallback(async (colorValue: string) => {
     setSelectedColor(colorValue);
     const root = document.documentElement;
     root.style.setProperty("--primary", colorValue);
@@ -203,9 +203,18 @@ export default function Settings() {
     root.style.setProperty("--sidebar-primary", colorValue);
     root.style.setProperty("--sidebar-ring", colorValue);
     root.style.setProperty("--chart-1", colorValue);
-    // Save to localStorage
-    localStorage.setItem("theme-color", colorValue);
-    toast({ title: "Success", description: "Theme color updated successfully." });
+    
+    // Save to database
+    try {
+      await authApi.updateProfile({ theme_color: colorValue });
+      toast({ title: "Success", description: "Theme color updated successfully." });
+    } catch (error: any) {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to save theme color.", 
+        variant: "destructive" 
+      });
+    }
   }, []);
 
   const handleCurrencyChange = useCallback((symbol: string) => {

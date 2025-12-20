@@ -90,6 +90,7 @@ router.get('/', async (req, res) => {
         u4.name as team_lead_name,
         u4.email as team_lead_email,
         p.name as project_name,
+        p.uuid as project_uuid,
         t.title as task_title`;
     
     if (hasRoleColumns) {
@@ -115,6 +116,20 @@ router.get('/', async (req, res) => {
     
     query += ` WHERE 1=1`;
     const params = [];
+    
+    // For CLIENT users, only show bugs from projects they have access to
+    if (userRole === 'CLIENT' || userRole === 'Client') {
+      query += ` AND EXISTS (
+        SELECT 1 FROM project_users pu
+        INNER JOIN projects p ON pu.project_id = p.id
+        WHERE pu.project_id = b.project_id
+          AND pu.user_id = ?
+          AND pu.is_active = 1
+          AND p.is_active = 1
+      )`;
+      params.push(userId);
+      logger.debug('Filtering bugs by CLIENT project access for user:', userId);
+    }
     
     // All users can see all bugs and their statuses
     // Only apply "My Bugs" filter if specifically requested (and not the string "undefined")
@@ -150,6 +165,19 @@ router.get('/', async (req, res) => {
       WHERE 1=1
     `;
     const countParams = [];
+    
+    // For CLIENT users, only count bugs from projects they have access to
+    if (userRole === 'CLIENT' || userRole === 'Client') {
+      countQuery += ` AND EXISTS (
+        SELECT 1 FROM project_users pu
+        INNER JOIN projects p ON pu.project_id = p.id
+        WHERE pu.project_id = b.project_id
+          AND pu.user_id = ?
+          AND pu.is_active = 1
+          AND p.is_active = 1
+      )`;
+      countParams.push(userId);
+    }
     
     // All users can see all bugs - only apply "My Bugs" filter if requested (and not the string "undefined")
     const shouldFilterMyBugsCount = my_bugs && 
@@ -196,6 +224,7 @@ router.get('/:id', async (req, res) => {
         u4.name as team_lead_name,
         u4.email as team_lead_email,
         p.name as project_name,
+        p.uuid as project_uuid,
         t.title as task_title`;
     
     if (hasRoleColumns) {
@@ -425,7 +454,9 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
       insertValues.push(tags);
     }
     
-    const placeholders = insertFields.map(() => '?').join(', ');
+    // Add uuid as first field
+    insertFields.unshift('uuid');
+    const placeholders = insertFields.map((field, index) => field === 'uuid' ? 'UUID()' : '?').join(', ');
     const query = `INSERT INTO bugs (${insertFields.join(', ')}) VALUES (${placeholders})`;
     
     const [result] = await db.query(query, insertValues);

@@ -1,17 +1,32 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X, GitCommit, GitBranch, GitPullRequest, GitMerge } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X, GitCommit, GitBranch, GitPullRequest, GitMerge, MoreHorizontal, Eye } from "lucide-react";
 import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
 import { projectsApi } from "@/features/projects/api";
+import { ProjectCommentsSection } from "@/features/projects/components/ProjectCommentsSection";
 import { usersApi } from "@/features/users/api";
 import { employeesApi } from "@/features/employees/api";
 import { getCurrentUser } from "@/lib/auth";
@@ -204,21 +219,36 @@ export default function ProjectDetail() {
 
   // Get current user info
   const currentUser = getCurrentUser();
+  const isClient = currentUser?.role === 'CLIENT' || currentUser?.role === 'Client';
   
   // Use permission-based checks instead of role-based checks
   const { hasPermission } = usePermissions();
   const canEditProject = hasPermission('projects.edit');
   const canDeleteProject = hasPermission('projects.delete');
 
+  // Check if id is UUID or numeric
+  const isUUID = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const projectId = isUUID ? id : (id ? Number(id) : null);
+  
   // Fetch project details
   const { data: projectData, isLoading, error } = useQuery({
     queryKey: ['project', id],
-    queryFn: () => projectsApi.getById(Number(id)),
+    queryFn: () => {
+      if (!projectId) {
+        throw new Error('Invalid project ID');
+      }
+      return projectsApi.getById(projectId);
+    },
+    enabled: !!projectId && (isUUID || !isNaN(Number(id))),
     staleTime: 0, // Always refetch when query is invalidated
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+  // Get numeric project ID from project data (for API calls that need numeric ID)
+  // If UUID was used, get numeric ID from fetched project data
+  const numericProjectId = projectData?.data?.id || (isUUID ? null : projectId);
 
   // Fetch users for member names - use for-dropdown endpoint which doesn't require full permission
   const { data: usersData } = useQuery({
@@ -240,11 +270,16 @@ export default function ProjectDetail() {
     refetchOnReconnect: false,
   });
 
-  // Fetch additional project data
+  // Fetch additional project data (only after project is loaded and we have numeric ID)
   const { data: filesData } = useQuery({
-    queryKey: ['project-files', id],
-    queryFn: () => projectsApi.getFiles(Number(id)),
-    enabled: !!id,
+    queryKey: ['project-files', numericProjectId],
+    queryFn: () => {
+      if (!numericProjectId) {
+        throw new Error('Project ID not available');
+      }
+      return projectsApi.getFiles(numericProjectId);
+    },
+    enabled: !!numericProjectId && !!projectData?.data,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
@@ -252,9 +287,14 @@ export default function ProjectDetail() {
   });
 
   const { data: workedTimeData } = useQuery({
-    queryKey: ['project-worked-time', id],
-    queryFn: () => projectsApi.getTotalWorkedTime(Number(id)),
-    enabled: !!id,
+    queryKey: ['project-worked-time', numericProjectId],
+    queryFn: () => {
+      if (!numericProjectId) {
+        throw new Error('Project ID not available');
+      }
+      return projectsApi.getTotalWorkedTime(numericProjectId);
+    },
+    enabled: !!numericProjectId && !!projectData?.data,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
@@ -263,9 +303,14 @@ export default function ProjectDetail() {
 
   // Fetch comments
   const { data: commentsData } = useQuery({
-    queryKey: ['project-comments', id],
-    queryFn: () => projectsApi.getComments(Number(id)),
-    enabled: !!id,
+    queryKey: ['project-comments', numericProjectId],
+    queryFn: () => {
+      if (!numericProjectId) {
+        throw new Error('Project ID not available');
+      }
+      return projectsApi.getComments(numericProjectId);
+    },
+    enabled: !!numericProjectId && !!projectData?.data,
     staleTime: 1000 * 60 * 2, // 2 minutes (comments may change more frequently)
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
@@ -274,13 +319,16 @@ export default function ProjectDetail() {
 
   // Fetch project activities (GitHub/Bitbucket commits, PRs, etc.)
   const { data: activitiesData, isLoading: activitiesLoading, error: activitiesError } = useQuery({
-    queryKey: ['project-activities', id],
+    queryKey: ['project-activities', numericProjectId],
     queryFn: async () => {
-      const result = await projectsApi.getActivities(Number(id), { limit: 20 });
+      if (!numericProjectId) {
+        throw new Error('Project ID not available');
+      }
+      const result = await projectsApi.getActivities(numericProjectId, { limit: 20 });
       logger.debug('Activities data received:', result);
       return result;
     },
-    enabled: !!id,
+    enabled: !!numericProjectId && !!projectData?.data,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
@@ -329,17 +377,22 @@ export default function ProjectDetail() {
   };
 
   const handleEdit = () => {
-    navigate(`/projects/${id}/edit`);
+    const basePath = currentUser?.role === 'CLIENT' || currentUser?.role === 'Client' ? '/client/projects' : '/projects';
+    navigate(`${basePath}/${id}/edit`);
   };
 
   const handleDelete = async () => {
     try {
-      await projectsApi.delete(Number(id));
+      if (!numericProjectId) {
+        throw new Error('Project ID not available');
+      }
+      await projectsApi.delete(numericProjectId);
       toast({
         title: "Success",
         description: "Project deleted successfully.",
       });
-      navigate('/projects');
+      const basePath = currentUser?.role === 'CLIENT' || currentUser?.role === 'Client' ? '/client/projects' : '/projects';
+      navigate(basePath);
     } catch (error: any) {
       logger.error('Error deleting project:', error);
       toast({ 
@@ -883,19 +936,17 @@ export default function ProjectDetail() {
           </Card>
           )}
 
-          {/* Comments */}
-          {commentsData?.data && commentsData.data.length > 0 && (
+          {/* Comments Section - Conversation Format */}
+          {numericProjectId && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MessageSquare className="h-5 w-5" />
-                  Comments ({commentsData.data.length})
+                  Comments
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {commentsData.data.map((comment: any) => (
-                  <CommentItem key={comment.id} comment={comment} projectId={Number(id)} />
-                ))}
+              <CardContent>
+                <ProjectCommentsSection projectId={numericProjectId} />
               </CardContent>
             </Card>
           )}

@@ -4,7 +4,7 @@
 -- IT Asset Management Tables
 -- ============================================
 
-USE `admin_dashboard`;
+-- USE `prasowla_ntpl_admin`;
 
 SET FOREIGN_KEY_CHECKS = 0;
 

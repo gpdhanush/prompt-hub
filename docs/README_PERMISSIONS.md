@@ -9,13 +9,13 @@ Run the SQL script to initialize all permissions and role-permission mappings:
 ### Option 1: Using MySQL Command Line
 
 ```bash
-mysql -u your_username -p admin_dashboard < database/initialize_permissions.sql
+mysql -u your_username -p prasowla_ntpl_admin < database/initialize_permissions.sql
 ```
 
 ### Option 2: Using MySQL Workbench or phpMyAdmin
 
 1. Open MySQL Workbench or phpMyAdmin
-2. Select the `admin_dashboard` database
+2. Select the `prasowla_ntpl_admin` database
 3. Open the file `database/initialize_permissions.sql`
 4. Execute the entire script
 
@@ -102,7 +102,7 @@ If you have custom permissions or different IDs, you may need to:
 If you want to start fresh with all default data:
 
 ```bash
-mysql -u your_username -p admin_dashboard < database/seed.sql
+mysql -u your_username -p prasowla_ntpl_admin < database/seed.sql
 ```
 
 **Warning**: This will insert default roles, permissions, and sample users. Use only if you want to reset everything.

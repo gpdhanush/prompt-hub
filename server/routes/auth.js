@@ -77,6 +77,15 @@ router.post('/login', validate(schemas.login), async (req, res) => {
     const user = users[0];
     logger.debug('User found:', user.email, 'Role:', user.role);
     
+    // Check if user is active (for client activation/deactivation)
+    if (user.is_active === 0 || user.is_active === false) {
+      logger.warn('Login attempt for inactive user:', email);
+      return res.status(403).json({ 
+        error: 'Your account has been deactivated. Please contact administrator.',
+        code: 'ACCOUNT_DEACTIVATED'
+      });
+    }
+    
     // Verify password
     const bcrypt = await import('bcryptjs');
     const isValid = await bcrypt.default.compare(password, user.password_hash);
@@ -125,16 +134,19 @@ router.post('/login', validate(schemas.login), async (req, res) => {
     logger.info(`Revoked all previous tokens for user ${user.id} (single-device login)`);
     
     // Update last login and increment session version (for single-device login)
+    // Also increment token_version for force logout on deactivation
     await db.query(`
       UPDATE users 
       SET last_login = CURRENT_TIMESTAMP,
-          session_version = COALESCE(session_version, 0) + 1
+          session_version = COALESCE(session_version, 0) + 1,
+          token_version = COALESCE(token_version, 0) + 1
       WHERE id = ?
     `, [user.id]);
     
-    // Get updated session version
-    const [updatedUsers] = await db.query('SELECT session_version FROM users WHERE id = ?', [user.id]);
+    // Get updated session version and token version
+    const [updatedUsers] = await db.query('SELECT session_version, token_version FROM users WHERE id = ?', [user.id]);
     const sessionVersion = updatedUsers[0]?.session_version || 1;
+    const tokenVersion = updatedUsers[0]?.token_version || 1;
     
     // Generate JWT tokens
     // Access token: 15 minutes (configurable via user's session_timeout or default)
@@ -144,7 +156,8 @@ router.post('/login', validate(schemas.login), async (req, res) => {
       email: user.email,
       role: user.role,
       roleId: user.role_id,
-      sessionVersion // Include session version for single-device validation
+      sessionVersion, // Include session version for single-device validation
+      tokenVersion // Include token version for force logout on deactivation
     }, accessTokenExpiry);
     
     // Refresh token: 30 days
@@ -286,6 +299,14 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
     
     const user = users[0];
     
+    // Check if user is active (for client activation/deactivation)
+    if (user.is_active === 0 || user.is_active === false) {
+      return res.status(403).json({ 
+        error: 'Your account has been deactivated. Please contact administrator.',
+        code: 'ACCOUNT_DEACTIVATED'
+      });
+    }
+    
     // Check session version for single-device login
     // If refresh token was issued before a new login, the session version won't match
     const tokenSessionVersion = decoded.sessionVersion;
@@ -301,14 +322,27 @@ router.post('/refresh', validate(schemas.refreshToken), async (req, res) => {
       });
     }
     
-    // Generate new access token with current session version
+    // Check token version for force logout on deactivation
+    const tokenTokenVersion = decoded.tokenVersion;
+    const userTokenVersion = user.token_version || 0;
+    
+    if (tokenTokenVersion !== undefined && tokenTokenVersion !== userTokenVersion) {
+      logger.warn(`Token version mismatch during token refresh for user ${user.id}. Token version: ${tokenTokenVersion}, Current version: ${userTokenVersion}`);
+      return res.status(401).json({ 
+        error: 'Your session has been invalidated. Please login again.',
+        code: 'SESSION_INVALIDATED'
+      });
+    }
+    
+    // Generate new access token with current session version and token version
     const accessTokenExpiry = user.session_timeout || 15;
     const accessToken = generateAccessToken({
       userId: user.id,
       email: user.email,
       role: user.role,
       roleId: user.role_id,
-      sessionVersion: userSessionVersion // Include current session version
+      sessionVersion: userSessionVersion, // Include current session version
+      tokenVersion: userTokenVersion // Include current token version
     }, accessTokenExpiry);
     
     logger.debug(`Access token refreshed for user ${user.email}`);
@@ -451,6 +485,31 @@ router.get('/me', authenticate, async (req, res) => {
       WHERE u.id = ?
     `, [userId]);
     
+    // Ensure user has UUID (generate if missing)
+    if (users.length > 0 && !users[0].uuid) {
+      const [updateResult] = await db.query(
+        'UPDATE users SET uuid = UUID() WHERE id = ? AND uuid IS NULL',
+        [userId]
+      );
+      // Re-fetch user to get the new UUID
+      const [updatedUsers] = await db.query(`
+        SELECT 
+          u.*, 
+          r.name as role,
+          r.level as role_level,
+          e.id as employee_id,
+          e.profile_photo_url,
+          e.emp_code
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        LEFT JOIN employees e ON u.id = e.user_id
+        WHERE u.id = ?
+      `, [userId]);
+      if (updatedUsers.length > 0) {
+        users[0] = updatedUsers[0];
+      }
+    }
+    
     if (users.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -523,7 +582,7 @@ router.put('/me/profile', authenticate, validate(schemas.updateProfile), async (
   try {
     const userId = req.user.id;
     
-    const { name, email, mobile, password, oldPassword, session_timeout } = req.body;
+    const { name, email, mobile, password, oldPassword, session_timeout, theme_color, theme_mode } = req.body;
     
     // If password is being updated, validate old password first
     if (password) {
@@ -574,6 +633,18 @@ router.put('/me/profile', authenticate, validate(schemas.updateProfile), async (
       }
       updates.push('session_timeout = ?');
       params.push(timeout);
+    }
+    if (theme_color !== undefined) {
+      updates.push('theme_color = ?');
+      params.push(theme_color);
+    }
+    if (theme_mode !== undefined) {
+      // Validate theme_mode
+      if (!['light', 'dark', 'system'].includes(theme_mode)) {
+        return res.status(400).json({ error: 'Theme mode must be light, dark, or system' });
+      }
+      updates.push('theme_mode = ?');
+      params.push(theme_mode);
     }
     
     if (updates.length === 0) {

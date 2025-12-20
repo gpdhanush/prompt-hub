@@ -17,7 +17,7 @@ This document verifies that all requirements from the specification have been im
 - ✅ Seed data (`database/seed.sql`) with sample records
 
 ### 3. API Documentation
-- ✅ Complete Postman collection (`postman/Admin_Dashboard_API.postman_collection.json`)
+- ✅ Complete Postman collection (`postman/prasowla_ntpl_admin_API.postman_collection.json`)
 - ✅ All API endpoints documented
 - ✅ Request/response examples included
 - ✅ Authentication setup configured
@@ -194,7 +194,7 @@ The following features require backend API implementation:
 
 1. `database/schema.sql` - Complete database schema
 2. `database/seed.sql` - Sample seed data
-3. `postman/Admin_Dashboard_API.postman_collection.json` - API collection
+3. `postman/prasowla_ntpl_admin_API.postman_collection.json` - API collection
 4. `REQUIREMENTS_CHECKLIST.md` - This file
 
 ## 🎯 Next Steps

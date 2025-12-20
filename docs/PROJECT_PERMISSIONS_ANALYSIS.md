@@ -87,7 +87,7 @@ This script includes:
 
 1. **Run the Migration Script**:
    ```bash
-   mysql -u root -p admin_dashboard < database/migrations/add_all_missing_permissions.sql
+   mysql -u root -p prasowla_ntpl_admin < database/migrations/add_all_missing_permissions.sql
    ```
 
 2. **Assign Permissions to Roles**:

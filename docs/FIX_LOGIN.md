@@ -9,7 +9,7 @@ The password hash in `seed.sql` uses PHP's bcrypt format (`$2y$`) which is incom
 Run this SQL script to fix passwords for existing users:
 
 ```bash
-mysql -u root -p admin_dashboard < database/fix_passwords.sql
+mysql -u root -p prasowla_ntpl_admin < database/fix_passwords.sql
 ```
 
 This will update all users to have password: **admin123**
@@ -30,7 +30,7 @@ Then enter:
 Run this in MySQL:
 
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 
 -- Update Super Admin password to 'admin123'
 UPDATE users 

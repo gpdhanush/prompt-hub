@@ -4,7 +4,7 @@
 -- Add time estimation and tracking fields to kanban_tasks
 -- ============================================
 
-USE `admin_dashboard`;
+USE `prasowla_ntpl_admin`;
 
 -- Add time tracking columns to kanban_tasks
 ALTER TABLE `kanban_tasks`

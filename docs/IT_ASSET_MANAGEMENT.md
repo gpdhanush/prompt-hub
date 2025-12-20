@@ -26,7 +26,7 @@ The IT Asset Management system provides comprehensive tracking and management of
 Run the migration script to create all tables:
 
 ```bash
-mysql -u root -p admin_dashboard < database/migrations/add_it_asset_management.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/add_it_asset_management.sql
 ```
 
 ## Features
@@ -236,7 +236,7 @@ database/migrations/
 
 1. Run the database migration:
    ```bash
-   mysql -u root -p admin_dashboard < database/migrations/add_it_asset_management.sql
+   mysql -u root -p prasowla_ntpl_admin < database/migrations/add_it_asset_management.sql
    ```
 
 2. Restart the server to load new routes

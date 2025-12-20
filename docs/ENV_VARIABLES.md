@@ -58,7 +58,7 @@ All database variables are required.
 | `DB_HOST` | ✅ Yes | MySQL database host | - | `localhost` |
 | `DB_USER` | ✅ Yes | MySQL database user | - | `root` |
 | `DB_PASSWORD` | ✅ Yes | MySQL database password | - | `your_password` |
-| `DB_NAME` | ✅ Yes | MySQL database name | - | `admin_dashboard` |
+| `DB_NAME` | ✅ Yes | MySQL database name | - | `prasowla_ntpl_admin` |
 | `DB_PORT` | ❌ Optional | MySQL database port | `3306` | `3306` |
 | `DB_CONNECTION_LIMIT` | ❌ Optional | Connection pool limit | `10` | `10` |
 

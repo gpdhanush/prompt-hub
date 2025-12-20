@@ -315,10 +315,10 @@ router.post('/', requirePermission('reimbursements.create'), uploadReimbursement
     // Insert reimbursement
     const [result] = await db.query(`
       INSERT INTO reimbursements (
-        employee_id, amount, category, description, 
+        uuid, employee_id, amount, category, description, 
         status, claim_code, current_approval_level
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?)
     `, [employeeId, amount, category, description || null, status, claimCode, currentApprovalLevel]);
     
     const reimbursementId = result.insertId;

@@ -16,7 +16,7 @@ Just login with these credentials!
 Run this SQL command in your MySQL database:
 
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 
 -- Make sure Super Admin role exists (id=1)
 INSERT INTO `roles` (`id`, `name`, `description`) 

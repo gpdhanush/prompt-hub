@@ -21,20 +21,20 @@ This means the database tables haven't been created yet.
 
 3. **Run the migration**
    ```bash
-   mysql -u root -p admin_dashboard < database/migrations/STEP_BY_STEP_INVENTORY_SETUP.sql
+   mysql -u root -p prasowla_ntpl_admin < database/migrations/STEP_BY_STEP_INVENTORY_SETUP.sql
    ```
    
    Enter your MySQL password when prompted.
 
 4. **Verify it worked**
    ```bash
-   mysql -u root -p admin_dashboard -e "SELECT COUNT(*) FROM inventory_items;"
+   mysql -u root -p prasowla_ntpl_admin -e "SELECT COUNT(*) FROM inventory_items;"
    ```
 
 ### Method 2: Using phpMyAdmin
 
 1. **Open phpMyAdmin** in your browser
-2. **Select the `admin_dashboard` database** from the left sidebar
+2. **Select the `prasowla_ntpl_admin` database** from the left sidebar
 3. **Click on the "SQL" tab** at the top
 4. **Open the file** `database/migrations/STEP_BY_STEP_INVENTORY_SETUP.sql` in a text editor
 5. **Copy the entire contents** and paste into the SQL textarea
@@ -55,19 +55,19 @@ If you get foreign key errors, run each section separately:
 
 1. **First, check dependencies:**
    ```sql
-   USE admin_dashboard;
+   USE prasowla_ntpl_admin;
    SELECT * FROM asset_categories LIMIT 1;
    SELECT * FROM users LIMIT 1;
    ```
    
    If either of these fails, you need to run the asset management migration first:
    ```bash
-   mysql -u root -p admin_dashboard < database/migrations/add_it_asset_management.sql
+   mysql -u root -p prasowla_ntpl_admin < database/migrations/add_it_asset_management.sql
    ```
 
 2. **Then run the inventory migration:**
    ```bash
-   mysql -u root -p admin_dashboard < database/migrations/STEP_BY_STEP_INVENTORY_SETUP.sql
+   mysql -u root -p prasowla_ntpl_admin < database/migrations/STEP_BY_STEP_INVENTORY_SETUP.sql
    ```
 
 ## Verification
@@ -75,7 +75,7 @@ If you get foreign key errors, run each section separately:
 After running the migration, verify it worked:
 
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 
 -- Check tables exist
 SHOW TABLES LIKE 'inventory%';
@@ -96,10 +96,10 @@ DESCRIBE inventory_items;
 
 ## Common Errors and Fixes
 
-### Error: "Table 'admin_dashboard.asset_categories' doesn't exist"
+### Error: "Table 'prasowla_ntpl_admin.asset_categories' doesn't exist"
 **Fix:** Run the asset management migration first:
 ```bash
-mysql -u root -p admin_dashboard < database/migrations/add_it_asset_management.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/add_it_asset_management.sql
 ```
 
 ### Error: "Access denied for user"
@@ -109,7 +109,7 @@ mysql -u root -p
 ```
 Then manually:
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 SOURCE database/migrations/STEP_BY_STEP_INVENTORY_SETUP.sql;
 ```
 
@@ -138,7 +138,7 @@ Then run the migration again.
 
 2. **Check database exists:**
    ```bash
-   mysql -u root -p -e "SHOW DATABASES LIKE 'admin_dashboard';"
+   mysql -u root -p -e "SHOW DATABASES LIKE 'prasowla_ntpl_admin';"
    ```
 
 3. **Check file path:**
@@ -146,7 +146,7 @@ Then run the migration again.
 
 4. **Try running SQL directly:**
    ```bash
-   mysql -u root -p admin_dashboard
+   mysql -u root -p prasowla_ntpl_admin
    ```
    Then:
    ```sql

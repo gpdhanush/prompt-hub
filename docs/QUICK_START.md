@@ -10,12 +10,12 @@
 ### ⚡ Method 1: Copy-Paste in phpMyAdmin (Easiest)
 
 1. Open phpMyAdmin
-2. Select `admin_dashboard` database
+2. Select `prasowla_ntpl_admin` database
 3. Click "SQL" tab
 4. Copy and paste this:
 
 ```sql
-USE `admin_dashboard`;
+USE `prasowla_ntpl_admin`;
 
 CREATE TABLE IF NOT EXISTS `inventory_items` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -79,14 +79,14 @@ CREATE TABLE IF NOT EXISTS `inventory_attachments` (
 
 ```bash
 cd /Users/naethra/Desktop/Projects/ntpl/project-mgmt-new/prompt-hub
-mysql -u root -p admin_dashboard < database/migrations/CREATE_INVENTORY_TABLES_ONLY.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/CREATE_INVENTORY_TABLES_ONLY.sql
 ```
 
 ### ⚡ Method 3: Full Migration (Recommended)
 
 ```bash
 cd /Users/naethra/Desktop/Projects/ntpl/project-mgmt-new/prompt-hub
-mysql -u root -p admin_dashboard < database/migrations/STEP_BY_STEP_INVENTORY_SETUP.sql
+mysql -u root -p prasowla_ntpl_admin < database/migrations/STEP_BY_STEP_INVENTORY_SETUP.sql
 ```
 
 ## Verify It Worked
@@ -94,14 +94,14 @@ mysql -u root -p admin_dashboard < database/migrations/STEP_BY_STEP_INVENTORY_SE
 Run this in phpMyAdmin or MySQL:
 
 ```sql
-USE admin_dashboard;
+USE prasowla_ntpl_admin;
 SELECT COUNT(*) FROM inventory_items;
 ```
 
 If you get a number (even 0), it worked! ✅
 
 If you get an error, check:
-1. Are you using the correct database? (`admin_dashboard`)
+1. Are you using the correct database? (`prasowla_ntpl_admin`)
 2. Do `asset_categories` and `users` tables exist?
 3. Check the error message for clues
 
@@ -115,7 +115,7 @@ If you get an error, check:
    
    If these fail, run:
    ```bash
-   mysql -u root -p admin_dashboard < database/migrations/add_it_asset_management.sql
+   mysql -u root -p prasowla_ntpl_admin < database/migrations/add_it_asset_management.sql
    ```
 
 2. **Try without foreign keys first:**

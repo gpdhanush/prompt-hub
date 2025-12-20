@@ -128,6 +128,8 @@ export const authApi = {
     password?: string;
     oldPassword?: string;
     session_timeout?: number;
+    theme_color?: string;
+    theme_mode?: 'light' | 'dark' | 'system';
   }) => {
     const response = await apiClient.put<{ data: any }>('/auth/me/profile', data);
     return response.data;

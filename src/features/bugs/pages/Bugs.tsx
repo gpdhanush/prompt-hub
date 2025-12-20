@@ -122,12 +122,16 @@ export default function Bugs() {
 
   // Handlers with useCallback
   const handleView = useCallback((bug: Bug) => {
-    navigate(`/bugs/${bug.id}`);
-  }, [navigate]);
+    // Use client route if user is CLIENT
+    const basePath = userRole === 'CLIENT' || userRole === 'Client' ? '/client/bugs' : '/bugs';
+    navigate(`${basePath}/${bug.id}`);
+  }, [navigate, userRole]);
 
   const handleEdit = useCallback((bug: Bug) => {
-    navigate(`/bugs/${bug.id}/edit`);
-  }, [navigate]);
+    // CLIENT users can't edit, but keep route for other users
+    const basePath = userRole === 'CLIENT' || userRole === 'Client' ? '/client/bugs' : '/bugs';
+    navigate(`${basePath}/${bug.id}/edit`);
+  }, [navigate, userRole]);
 
   const handleDelete = useCallback((bug: Bug) => {
     setSelectedBug(bug);

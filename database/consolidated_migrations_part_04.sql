@@ -4,7 +4,7 @@
 -- ALTER TABLE Statements and Table Modifications
 -- ============================================
 
-USE `admin_dashboard`;
+-- USE `prasowla_ntpl_admin`;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -75,9 +75,9 @@ ADD INDEX IF NOT EXISTS `idx_position_level` (`level`),
 ADD INDEX IF NOT EXISTS `idx_position_parent` (`parent_id`);
 
 -- Add foreign key constraint for parent_id
-ALTER TABLE `positions`
-ADD CONSTRAINT IF NOT EXISTS `fk_position_parent` 
-FOREIGN KEY (`parent_id`) REFERENCES `positions`(`id`) ON DELETE SET NULL;
+-- ALTER TABLE `positions`
+-- ADD CONSTRAINT IF NOT EXISTS `fk_position_parent` 
+-- FOREIGN KEY (`parent_id`) REFERENCES `positions`(`id`) ON DELETE SET NULL;
 
 -- Update existing positions with default levels
 UPDATE `positions` SET `level` = 0 WHERE `name` = 'Super Admin';
