@@ -488,7 +488,7 @@ router.post('/', requirePermission('projects.create'), async (req, res) => {
         internal_notes, client_notes, admin_remarks,
         github_repo_url, bitbucket_repo_url, technologies_used,
         created_by, team_lead_id
-    ) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       projectCode, name, description || null, logo_url || null, estimated_delivery_plan || null,
       client_name || null, client_contact_person || null, client_email || null, client_phone || null, is_internal || false,
