@@ -397,24 +397,77 @@ app.use((req, res) => {
 
   // Listen on all interfaces (0.0.0.0) for cPanel compatibility
   // cPanel will automatically set the PORT environment variable
-  server.listen(PORT, "0.0.0.0", async () => {
+  // server.listen(PORT, "0.0.0.0", async () => {
+  //   const protocol = useHttps && server !== app ? "https" : "http";
+  //   const publicApiUrl =
+  //     process.env.API_BASE_URL || `${protocol}://localhost:${PORT}/api`;
+
+  //   logger.info(`🌐 Public Backend API URL: ${publicApiUrl}`);
+  //   logger.info(`❤️ Health Check: ${publicApiUrl}/health`);
+  //   logger.info(`✅ Server running on ${protocol}://0.0.0.0:${PORT}`);
+  //   logger.info(`✅ Health check : ${protocol}://0.0.0.0:${PORT}/health`);
+
+  //   // Perform database health check on startup
+  //   try {
+  //     await performHealthCheck();
+
+  //     // Initialize refresh token cleanup job (run every 24 hours)
+  //     const { cleanupExpiredTokens } = await import(
+  //       "./utils/refreshTokenService.js"
+  //     );
+  //     setInterval(async () => {
+  //       try {
+  //         const deleted = await cleanupExpiredTokens();
+  //         if (deleted > 0) {
+  //           logger.info(`🧹 Cleaned up ${deleted} expired refresh tokens`);
+  //         }
+  //       } catch (error) {
+  //         logger.error("Error cleaning up expired tokens:", error);
+  //       }
+  //     }, 24 * 60 * 60 * 1000); // 24 hours
+
+  //     // Run cleanup once on startup
+  //     try {
+  //       const deleted = await cleanupExpiredTokens();
+  //       if (deleted > 0) {
+  //         logger.info(
+  //           `🧹 Cleaned up ${deleted} expired refresh tokens on startup`
+  //         );
+  //       }
+  //     } catch (error) {
+  //       logger.error("Error cleaning up expired tokens on startup:", error);
+  //     }
+
+  //     // Initialize reminder scheduler
+  //     initializeReminderScheduler();
+
+  //     // Initialize ticket escalation scheduler
+  //     initializeTicketEscalationScheduler();
+  //   } catch (error) {
+  //     logger.error("❌ Health check failed:", error);
+  //     logger.error("⚠️  Server started but database may have issues");
+  //   }
+  // });
+  const port = process.env.PORT || 3000;
+
+  server.listen(port, async () => {
     const protocol = useHttps && server !== app ? "https" : "http";
+
     const publicApiUrl =
-      process.env.API_BASE_URL || `${protocol}://localhost:${PORT}/api`;
+      process.env.API_BASE_URL || `${protocol}://localhost:${port}/api`;
 
     logger.info(`🌐 Public Backend API URL: ${publicApiUrl}`);
     logger.info(`❤️ Health Check: ${publicApiUrl}/health`);
-    logger.info(`✅ Server running on ${protocol}://0.0.0.0:${PORT}`);
-    logger.info(`✅ Health check : ${protocol}://0.0.0.0:${PORT}/health`);
+    logger.info(`✅ Server listening on port ${port}`);
 
     // Perform database health check on startup
     try {
       await performHealthCheck();
 
-      // Initialize refresh token cleanup job (run every 24 hours)
       const { cleanupExpiredTokens } = await import(
         "./utils/refreshTokenService.js"
       );
+
       setInterval(async () => {
         try {
           const deleted = await cleanupExpiredTokens();
@@ -424,31 +477,22 @@ app.use((req, res) => {
         } catch (error) {
           logger.error("Error cleaning up expired tokens:", error);
         }
-      }, 24 * 60 * 60 * 1000); // 24 hours
+      }, 24 * 60 * 60 * 1000);
 
-      // Run cleanup once on startup
-      try {
-        const deleted = await cleanupExpiredTokens();
-        if (deleted > 0) {
-          logger.info(
-            `🧹 Cleaned up ${deleted} expired refresh tokens on startup`
-          );
-        }
-      } catch (error) {
-        logger.error("Error cleaning up expired tokens on startup:", error);
+      const deleted = await cleanupExpiredTokens();
+      if (deleted > 0) {
+        logger.info(
+          `🧹 Cleaned up ${deleted} expired refresh tokens on startup`
+        );
       }
 
-      // Initialize reminder scheduler
       initializeReminderScheduler();
-
-      // Initialize ticket escalation scheduler
       initializeTicketEscalationScheduler();
     } catch (error) {
       logger.error("❌ Health check failed:", error);
-      logger.error("⚠️  Server started but database may have issues");
+      logger.error("⚠️ Server started but database may have issues");
     }
   });
-
   // Handle server errors
   server.on("error", (err) => {
     if (err.code === "EADDRINUSE") {
