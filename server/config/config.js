@@ -34,6 +34,9 @@ export const SERVER_CONFIG = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   API_BASE_URL: process.env.API_BASE_URL,
 };
+logger.debug('SEVER CONNCTED WITH PORT', SERVER_CONFIG.PORT);
+logger.debug('SEVER CONNCTED WITH NODE_ENV', SERVER_CONFIG.NODE_ENV);
+logger.debug('SEVER CONNCTED WITH API_BASE_URL', SERVER_CONFIG.API_BASE_URL);
 
 /**
  * JWT Configuration
