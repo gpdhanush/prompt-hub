@@ -110,14 +110,17 @@ export default function Login() {
             <Logo iconSize={128} showText={false} noBox={true} />
             <div className="text-center">
               <h1 className="text-4xl font-bold">Naethra EMS</h1>
-              <p className="text-lg text-muted-foreground mt-2">Employee and Project Management System</p>
+              <p className="text-lg text-muted-foreground mt-2">
+                Employee and Project Management System
+              </p>
             </div>
           </div>
         </div>
 
         <div className="relative z-10 space-y-6">
           <h2 className="text-4xl font-bold leading-tight">
-            Employee and Project<br />
+            Employee and Project
+            <br />
             <span className="text-primary">Management System</span>
           </h2>
           <p className="text-lg text-muted-foreground max-w-md">
@@ -139,7 +142,9 @@ export default function Login() {
         {/* Bottom note */}
         <div className="relative z-10 pt-6 border-t border-border/50">
           <p className="text-sm text-muted-foreground/80">
-            For optimal experience, use desktop screens (~1280-1920px wide). Not suitable for mobile view.
+            Best viewed on desktop screens (1280-1920px). Compatible with IE 9+,
+            Firefox 34+, Chrome 40+, and Safari 7+ at a minimum resolution of
+            1024x768; not optimized for mobile devices.
           </p>
         </div>
 
@@ -155,10 +160,17 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8 animate-fade-in">
           {/* Mobile logo */}
           <div className="lg:hidden flex flex-col items-center justify-center mb-8 gap-3">
-            <Logo className="h-24 w-24" iconSize={96} showText={false} noBox={true} />
+            <Logo
+              className="h-24 w-24"
+              iconSize={96}
+              showText={false}
+              noBox={true}
+            />
             <div className="text-center">
               <h1 className="text-2xl font-bold">Naethra EMS</h1>
-              <p className="text-sm text-muted-foreground">Employee and Project Management System</p>
+              <p className="text-sm text-muted-foreground">
+                Employee and Project Management System
+              </p>
             </div>
           </div>
 
@@ -206,7 +218,11 @@ export default function Login() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -216,29 +232,42 @@ export default function Login() {
                 <Checkbox
                   id="remember"
                   checked={rememberMe}
-                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                  onCheckedChange={(checked) =>
+                    setRememberMe(checked as boolean)
+                  }
                 />
-                <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
+                <Label
+                  htmlFor="remember"
+                  className="text-sm font-normal cursor-pointer"
+                >
                   Remember me
                 </Label>
               </div>
               <button
                 type="button"
-                onClick={() => navigate("/forgot-password", { state: { email } })}
+                onClick={() =>
+                  navigate("/forgot-password", { state: { email } })
+                }
                 className="text-sm text-primary hover:underline"
               >
                 Forgot password?
               </button>
             </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={isLoading}
+            >
               {isLoading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
 
           <div className="text-center text-sm text-muted-foreground space-y-1">
             <p>
-              © {new Date().getFullYear()} Naethra Technologies Pvt. Ltd. All rights reserved.
+              © {new Date().getFullYear()} Naethra Technologies Pvt. Ltd. All
+              rights reserved.
             </p>
             <p>
               Created by <span className="font-semibold">gpdhanush</span>
