@@ -180,7 +180,9 @@ app.get('/', (req, res) => {
     name: 'PMS API',
     status: 'running',
     docs: '/api-docs',
-    health: '/health'
+    health: '/health',
+    node: process.version,
+    env: process.env.NODE_ENV
   });
 });
 // Serve static files with proper MIME types for cPanel
