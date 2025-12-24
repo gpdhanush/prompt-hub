@@ -394,14 +394,16 @@ export default function Settings() {
                       <div className="space-y-4">
                         <div className="flex items-center justify-center">
                           <div className="relative">
-                            <Input 
-                              type="text" 
+                            <Input
+                              type="number"
                               value={sessionTimeout}
-                              onChange={handleSaveSessionTimeout}
+                              onChange={(e) => setSessionTimeout(Number((e.target as HTMLInputElement).value) || 0)}
                               onBlur={handleSaveSessionTimeout}
-                              className="w-32 text-center font-semibold text-lg pr-12" 
+                              className="w-32 text-center font-semibold text-lg pr-12"
                               maxLength={4}
                               placeholder="30"
+                              min={1}
+                              max={1440}
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
                               min
