@@ -320,7 +320,7 @@ export const BugComments = memo(function BugComments({ bugId }: BugCommentsProps
     const isLong = isCommentLong(comment.comment_text);
     const profilePhotoUrl = comment.user_id ? userPhotoMap.get(comment.user_id) : null;
     const photoUrl = getProfilePhotoUrl(profilePhotoUrl || null);
-    const userInitials = comment.user_name ? comment.user_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U";
+    const userInitials = comment.user_name ? comment.user_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 3) : "U";
 
     return (
       <div className="space-y-2">

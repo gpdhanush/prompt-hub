@@ -278,6 +278,76 @@ router.post('/', async (req, res) => {
       status: 'Pending'
     }, 'Leave');
     
+    // Notify approver (team lead) or Super Admins when a new leave is created
+    try {
+      const approverUserIds = [];
+      // Get requester's team lead
+      const [empRows] = await db.query('SELECT team_lead_id FROM employees WHERE id = ?', [employeeId]);
+      const teamLeadId = empRows[0]?.team_lead_id;
+      if (teamLeadId) {
+        const [leadUsers] = await db.query('SELECT user_id FROM employees WHERE id = ?', [teamLeadId]);
+        if (leadUsers.length > 0 && leadUsers[0].user_id) {
+          approverUserIds.push(leadUsers[0].user_id);
+        }
+      }
+
+      // Fallback to Super Admins if no team lead found
+      if (approverUserIds.length === 0) {
+        const [superAdmins] = await db.query(`
+          SELECT u.id
+          FROM users u
+          INNER JOIN roles r ON u.role_id = r.id
+          WHERE r.name = 'Super Admin' AND u.status = 'Active'
+        `);
+        superAdmins.forEach(sa => approverUserIds.push(sa.id));
+      }
+
+      if (approverUserIds.length > 0) {
+        const { notifyMultipleUsers } = await import('../utils/notificationService.js');
+        const message = `New leave request from ${newLeave[0].employee_name} (${leave_type}) for ${start_date} to ${end_date}.`;
+        await notifyMultipleUsers(
+          approverUserIds,
+          'leave_requested',
+          'New Leave Request',
+          message,
+          {
+            leaveId: result.insertId,
+            leaveType: leave_type,
+            startDate: start_date,
+            endDate: end_date,
+            link: `/leaves/${result.insertId}`,
+          }
+        );
+
+        // Send email notifications to approvers using templates
+        const { sendEmail } = await import('../utils/emailService.js');
+        const { renderLeaveRequestEmail } = await import('../utils/emailTemplates.js');
+        const [approverUsers] = await db.query('SELECT id, email, name FROM users WHERE id IN (?)', [approverUserIds]);
+        const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:8080';
+        const leaveLink = `${baseUrl}/leaves/${result.insertId}`;
+
+        for (const approver of approverUsers) {
+          if (!approver.email) continue;
+          const emailHtml = renderLeaveRequestEmail({
+            approverName: approver.name,
+            employeeName: newLeave[0].employee_name,
+            leaveType: leave_type,
+            startDate: start_date,
+            endDate: end_date,
+            reason: reason,
+            link: leaveLink,
+          });
+          try {
+            await sendEmail({ to: approver.email, subject: `New Leave Request from ${newLeave[0].employee_name}`, html: emailHtml });
+          } catch (err) {
+            logger.error('Failed to send leave request email to approver:', err);
+          }
+        }
+      }
+    } catch (notifyErr) {
+      logger.error('Error notifying approvers for new leave:', notifyErr);
+    }
+
     res.status(201).json({ data: newLeave[0] });
   } catch (error) {
     logger.error('Error creating leave:', error);

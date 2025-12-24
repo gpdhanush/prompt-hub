@@ -104,25 +104,27 @@ function CommentItemEdit({ comment, projectId, queryClient }: { comment: any; pr
         <div className="flex items-center gap-2">
           <StatusBadge variant="neutral">{comment.comment_type}</StatusBadge>
           {canEdit && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
-                variant="ghost"
+                variant="secondary"
                 size="icon"
-                className="h-6 w-6"
+                className="h-7 w-7 p-1"
+                aria-label="Edit comment"
                 onClick={() => setIsEditing(!isEditing)}
               >
-                <Edit className="h-3 w-3" />
+                <Edit className="h-4 w-4" />
               </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-destructive"
-                                onClick={() => setShowDeleteDialog(true)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="h-7 w-7 p-1"
+                aria-label="Delete comment"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </div>
@@ -154,7 +156,7 @@ function CommentItemEdit({ comment, projectId, queryClient }: { comment: any; pr
               size="sm"
               onClick={async () => {
                 try {
-                  await projectsApi.updateComment(Number(projectId), comment.id, {
+                  await projectsApi.updateComment(projectId, comment.id, {
                     comment: editComment,
                     comment_type: editCommentType
                   });
@@ -209,7 +211,7 @@ function CommentItemEdit({ comment, projectId, queryClient }: { comment: any; pr
             <AlertDialogAction
               onClick={async () => {
                 try {
-                  await projectsApi.deleteComment(Number(projectId), comment.id);
+                  await projectsApi.deleteComment(projectId, comment.id);
                   toast({
                     title: "Success",
                     description: "Comment deleted successfully.",
@@ -245,14 +247,23 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   const { securityAlertProps } = useSecurityValidation();
   
   // Fallback: Try to get projectId from route params if not provided as prop
-  // This handles cases where the prop might be undefined
-  const routeProjectId = params.id ? parseInt(params.id, 10) : undefined;
-  const projectId = propProjectId ?? routeProjectId;
-  
-  logger.debug('ProjectForm - propProjectId:', propProjectId, 'params.id:', params.id, 'routeProjectId:', routeProjectId, 'final projectId:', projectId);
-  
-  // Early validation for edit mode - check before setting up state
-  if (mode === 'edit' && (projectId === undefined || projectId === null || isNaN(projectId) || projectId <= 0)) {
+  // This handles cases where the prop might be undefined; projectId may be a number or a UUID string
+  const routeProjectId = params.id ?? undefined;
+  const projectId = propProjectId ?? routeProjectId; // number | string | undefined
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isUUID = typeof projectId === 'string' && uuidRegex.test(projectId);
+
+  logger.debug('ProjectForm - propProjectId:', propProjectId, 'params.id:', params.id, 'routeProjectId:', routeProjectId, 'final projectId:', projectId, 'isUUID:', isUUID);
+
+  // Early validation for edit mode - allow UUID strings or positive numbers
+  if (
+    mode === 'edit' && (
+      projectId === undefined || projectId === null ||
+      (typeof projectId === 'string' && projectId.trim() === '') ||
+      (typeof projectId === 'string' && !isUUID && (isNaN(Number(projectId)) || Number(projectId) <= 0)) ||
+      (typeof projectId === 'number' && projectId <= 0)
+    )
+  ) {
     logger.error('ProjectForm - Invalid projectId early check:', projectId);
     return (
       <div className="container mx-auto p-6">
@@ -311,16 +322,17 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch project data for edit mode
+  // Fetch project data for edit mode (supports numeric ID or UUID)
+  const fetchId = isUUID ? (projectId as string) : (projectId !== undefined ? Number(projectId) : undefined);
   const { data: projectData, isLoading, error } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => {
-      if (!projectId || isNaN(Number(projectId)) || Number(projectId) <= 0) {
+      if (!fetchId) {
         throw new Error('Invalid project ID');
       }
-      return projectsApi.getById(Number(projectId));
+      return projectsApi.getById(fetchId as any);
     },
-    enabled: mode === 'edit' && !!projectId && !isNaN(Number(projectId)) && Number(projectId) > 0,
+    enabled: mode === 'edit' && !!projectId && (isUUID || (!isNaN(Number(projectId)) && Number(projectId) > 0)),
     retry: false,
   });
 
@@ -336,11 +348,12 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     queryFn: () => employeesApi.getAll({ page: 1, limit: 1000 }),
   });
 
-  // Fetch comments for edit mode
+  // Fetch comments for edit mode (use numericProjectId after project is fetched if UUID was used)
+  const numericProjectId = projectData?.data?.id || (isUUID ? undefined : (projectId !== undefined ? Number(projectId) : undefined));
   const { data: commentsData } = useQuery({
-    queryKey: ['project-comments', projectId],
-    queryFn: () => projectsApi.getComments(Number(projectId)),
-    enabled: mode === 'edit' && !!projectId && !isNaN(Number(projectId)) && Number(projectId) > 0,
+    queryKey: ['project-comments', numericProjectId],
+    queryFn: () => projectsApi.getComments(numericProjectId as any),
+    enabled: mode === 'edit' && !!numericProjectId && Number(numericProjectId) > 0,
   });
 
   const allUsers = usersData?.data || [];
@@ -349,52 +362,18 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   
   // Filter assignable users based on selected team lead
   const assignableUsers = useMemo(() => {
-    if (!formData.team_lead_id) {
-      return [];
-    }
-    
-    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.team_lead_id);
-    if (!selectedTeamLeadUser) {
-      return [];
-    }
-    
-    const teamLeadEmployee = allEmployees.find((emp: any) => 
-      emp.user_id === selectedTeamLeadUser.id
-    );
-    
-    if (!teamLeadEmployee) {
-      return [];
-    }
-    
-    // Get all employees that report to this team lead (recursively get all subordinates)
-    const getSubordinateEmployees = (teamLeadEmpId: number, visited: Set<number> = new Set()): any[] => {
-      if (visited.has(teamLeadEmpId)) {
-        return []; // Prevent infinite loops
-      }
-      visited.add(teamLeadEmpId);
-      
-      const directReports = allEmployees.filter((emp: any) => 
-        emp.team_lead_id && emp.team_lead_id === teamLeadEmpId
-      );
-      
-      // Recursively get subordinates of subordinates
-      const allSubordinates = [...directReports];
-      directReports.forEach((emp: any) => {
-        const subordinates = getSubordinateEmployees(emp.id, visited);
-        allSubordinates.push(...subordinates);
-      });
-      
-      return allSubordinates;
-    };
-    
-    const teamEmployees = getSubordinateEmployees(teamLeadEmployee.id);
-    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
-    
-    // Return all users that are employees of this team lead, excluding team leads
-    return allUsers.filter((user: any) => 
-      teamEmployeeUserIds.includes(user.id) && 
-      user.role !== 'Team Lead' // Exclude other team leads
-    );
+    // Always show global developers/testers/designers and CLIENT users (no team-lead scoping)
+    const roleAllowlist = ['Developer', 'Tester', 'Designer', 'QA', 'developer', 'tester', 'designer', 'qa'];
+    const roleUsers = allUsers.filter((u: any) => roleAllowlist.includes((u.role || '').toString()));
+
+    const clientUsers = allUsers
+      .filter((u: any) => u.role === 'CLIENT' || u.role === 'Client')
+      .map((user: any) => ({ ...user, is_client: true }));
+
+    // Combine and dedupe
+    const combined = [...roleUsers, ...clientUsers];
+    const unique = combined.filter((user, index, self) => index === self.findIndex((u) => u.id === user.id));
+    return unique;
   }, [formData.team_lead_id, allUsers, allEmployees]);
 
   // Load project data into form for edit mode
@@ -434,8 +413,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
 
   // Load project files for edit mode
   useEffect(() => {
-    if (mode === 'edit' && projectId) {
-      projectsApi.getFiles(projectId)
+    const resolvedId = projectData?.data?.id ?? fetchId;
+    if (mode === 'edit' && resolvedId) {
+      projectsApi.getFiles(resolvedId as any)
         .then((response) => {
           setUploadedFiles(response.data || []);
         })
@@ -566,7 +546,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     if (mode === 'create') {
       createMutation.mutate(submitData);
     } else {
-      updateMutation.mutate({ id: Number(projectId), data: submitData });
+      updateMutation.mutate({ id: (numericProjectId as any) || (fetchId as any), data: submitData });
     }
   };
 
@@ -1214,12 +1194,13 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                                 size="icon"
                                 onClick={async () => {
                                   try {
-                                    await projectsApi.deleteFile(projectId, file.id);
+                                    const resolvedId = (projectData?.data?.id ?? fetchId) as any;
+                                    await projectsApi.deleteFile(resolvedId, file.id);
                                     toast({
                                       title: "Success",
                                       description: "File deleted successfully",
                                     });
-                                    const filesData = await projectsApi.getFiles(projectId);
+                                    const filesData = await projectsApi.getFiles(resolvedId);
                                     setUploadedFiles(filesData.data || []);
                                   } catch (error: any) {
                                     toast({
@@ -1260,7 +1241,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   <CommentItemEdit 
                     key={comment.id || index} 
                     comment={comment} 
-                    projectId={Number(projectId)!} 
+                    projectId={numericProjectId!} 
                     queryClient={queryClient}
                   />
                 ))}
@@ -1352,7 +1333,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                     onClick={async () => {
                       if (commentForm.comment.trim() && projectId) {
                         try {
-                          await projectsApi.createComment(Number(projectId), {
+                          await projectsApi.createComment(numericProjectId as any, {
                             comment: commentForm.comment,
                             comment_type: commentForm.comment_type,
                             is_internal: commentForm.is_internal
@@ -1470,7 +1451,8 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                       formData.append('file_type', 'Other');
                       formData.append('file_category', 'project_document');
                       
-                      await projectsApi.uploadFile(projectId, formData);
+                      const resolvedId = (projectData?.data?.id ?? fetchId) as any;
+                      await projectsApi.uploadFile(resolvedId, formData);
                     }
                     toast({
                       title: "Success",
@@ -1479,7 +1461,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                         : `${pendingFiles.length} files uploaded successfully`,
                     });
                     // Refresh files list
-                    const filesData = await projectsApi.getFiles(projectId);
+                    const filesData = await projectsApi.getFiles((projectData?.data?.id ?? fetchId) as any);
                     setUploadedFiles(filesData.data || []);
                     setShowUploadDialog(false);
                     setPendingFiles([]);

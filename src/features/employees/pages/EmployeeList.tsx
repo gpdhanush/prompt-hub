@@ -74,7 +74,7 @@ export default function EmployeeList() {
                 src={getProfilePhotoUrl(employee.profile_photo_url || null)} 
               />
               <AvatarFallback className="text-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground justify-center">
-                {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("") : "E"}
+                {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "E"}
               </AvatarFallback>
             </Avatar>
           </div>

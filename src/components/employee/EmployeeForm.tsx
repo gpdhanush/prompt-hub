@@ -202,7 +202,16 @@ export default function EmployeeForm({ employeeId, mode }: EmployeeFormProps) {
         })
         .filter((p: any) => p !== undefined && p !== null)
     : formData.role && rolePositions.length === 0 && !isLoadingPositions
-    ? [] // No positions mapped to this role
+    ? (
+        // Fallback: if no role->position mappings exist, show common level-2 positions
+        (() => {
+          const keywords = ['dev', 'developer', 'qa', 'tester', 'designer', 'engineer', 'employee'];
+          return allPositions.filter((p: any) => {
+            const name = (p.name || '').toString().toLowerCase();
+            return keywords.some(k => name.includes(k));
+          });
+        })()
+      ) // No specific mappings, but provide sensible fallback
     : formData.role && isLoadingPositions
     ? [] // Loading positions
     : !formData.role

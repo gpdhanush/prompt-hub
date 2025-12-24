@@ -93,92 +93,18 @@ export function TaskForm({
 
   // Filter users based on selected team leader for Developer, Designer, Tester
   const developers = useMemo(() => {
-    if (!formData.assigned_to || formData.assigned_to === 'none' || formData.assigned_to === '') {
-      return allUsers.filter((user: any) => user.role === 'Developer');
-    }
-    
-    // Find the selected team lead's employee record
-    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.assigned_to);
-    if (!selectedTeamLeadUser) {
-      return allUsers.filter((user: any) => user.role === 'Developer');
-    }
-    
-    const teamLeadEmployee = allEmployees.find((emp: any) => 
-      emp.user_id === selectedTeamLeadUser.id
-    );
-    
-    if (!teamLeadEmployee) {
-      return allUsers.filter((user: any) => user.role === 'Developer');
-    }
-    
-    // Find employees under this team lead
-    const teamEmployees = allEmployees.filter((emp: any) => 
-      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
-    );
-    
-    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
-    
-    return allUsers.filter((user: any) => 
-      user.role === 'Developer' && teamEmployeeUserIds.includes(user.id)
-    );
+    // Always show all users with role Developer (do not restrict by team lead)
+    return allUsers.filter((user: any) => user.role === 'Developer');
   }, [allUsers, allEmployees, formData.assigned_to]);
   
   const designers = useMemo(() => {
-    if (!formData.assigned_to || formData.assigned_to === 'none' || formData.assigned_to === '') {
-      return allUsers.filter((user: any) => user.role === 'Designer');
-    }
-    
-    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.assigned_to);
-    if (!selectedTeamLeadUser) {
-      return allUsers.filter((user: any) => user.role === 'Designer');
-    }
-    
-    const teamLeadEmployee = allEmployees.find((emp: any) => 
-      emp.user_id === selectedTeamLeadUser.id
-    );
-    
-    if (!teamLeadEmployee) {
-      return allUsers.filter((user: any) => user.role === 'Designer');
-    }
-    
-    const teamEmployees = allEmployees.filter((emp: any) => 
-      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
-    );
-    
-    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
-    
-    return allUsers.filter((user: any) => 
-      user.role === 'Designer' && teamEmployeeUserIds.includes(user.id)
-    );
+    // Always show all users with role Designer (do not restrict by team lead)
+    return allUsers.filter((user: any) => user.role === 'Designer');
   }, [allUsers, allEmployees, formData.assigned_to]);
   
   const testers = useMemo(() => {
-    if (!formData.assigned_to || formData.assigned_to === 'none' || formData.assigned_to === '') {
-      return allUsers.filter((user: any) => user.role === 'Tester');
-    }
-    
-    const selectedTeamLeadUser = allUsers.find((u: any) => u.id.toString() === formData.assigned_to);
-    if (!selectedTeamLeadUser) {
-      return allUsers.filter((user: any) => user.role === 'Tester');
-    }
-    
-    const teamLeadEmployee = allEmployees.find((emp: any) => 
-      emp.user_id === selectedTeamLeadUser.id
-    );
-    
-    if (!teamLeadEmployee) {
-      return allUsers.filter((user: any) => user.role === 'Tester');
-    }
-    
-    const teamEmployees = allEmployees.filter((emp: any) => 
-      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
-    );
-    
-    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
-    
-    return allUsers.filter((user: any) => 
-      user.role === 'Tester' && teamEmployeeUserIds.includes(user.id)
-    );
+    // Always show all users with role Tester (do not restrict by team lead)
+    return allUsers.filter((user: any) => user.role === 'Tester');
   }, [allUsers, allEmployees, formData.assigned_to]);
 
   const handleInputChange = (field: keyof TaskFormData, value: string) => {

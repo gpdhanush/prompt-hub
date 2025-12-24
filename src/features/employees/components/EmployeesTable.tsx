@@ -176,7 +176,7 @@ export const EmployeesTable = memo(function EmployeesTable({
                       <Avatar className="h-8 w-8">
                         <AvatarImage src={getProfilePhotoUrl(emp.profile_photo_url || null)} />
                         <AvatarFallback className="text-xs">
-                          {emp.name ? emp.name.split(" ").map((n: string) => n[0]).join("") : "E"}
+                          {emp.name ? emp.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "E"}
                         </AvatarFallback>
                       </Avatar>
                       <span className="font-medium">{emp.name}</span>

@@ -124,52 +124,14 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
   // Filter Level 2 users (Testers, Developers, Designers) who are under Level 1 users
   // Use assignable users from API as base, then filter by hierarchy if employees data is available
   const assignableUsers = useMemo(() => {
-    // Use assignable users from API (includes Tester, Developer, Designer, Team Lead)
-    // Filter to only Level 2 users (Tester, Developer, Designer)
-    const baseLevel2Users = assignableUsersFromAPI.filter((user: any) => 
+    // Always show all Level 2 users (Tester, Developer, Designer)
+    const baseLevel2Users = assignableUsersFromAPI.filter((user: any) =>
       ['Tester', 'Developer', 'Designer'].includes(user.role)
     );
 
-    // If no employees data or no team lead selected, return all Level 2 users
-    if (!allEmployees.length || !formData.team_lead_id || formData.team_lead_id === "none") {
-      return baseLevel2Users.length > 0 ? baseLevel2Users : [];
-    }
-
-    // If a team lead is selected, filter to show only users under that team lead
-    const selectedTeamLeadUser = assignableUsersFromAPI.find((u: any) => u.id.toString() === formData.team_lead_id);
-    if (!selectedTeamLeadUser) {
-      return baseLevel2Users.length > 0 ? baseLevel2Users : [];
-    }
-
-    // Find the employee record for the selected team lead
-    const teamLeadEmployee = allEmployees.find((emp: any) => 
-      emp.user_id === selectedTeamLeadUser.id
-    );
-    
-    if (!teamLeadEmployee) {
-      return baseLevel2Users.length > 0 ? baseLevel2Users : 
-        allUsers.filter((user: any) => ['Tester', 'Developer', 'Designer'].includes(user.role));
-    }
-
-    // Find all employees under this team lead
-    const teamEmployees = allEmployees.filter((emp: any) => 
-      emp.team_lead_id && emp.team_lead_id === teamLeadEmployee.id
-    );
-    
-    // Get user IDs of employees under this team lead
-    const teamEmployeeUserIds = teamEmployees.map((emp: any) => emp.user_id).filter(Boolean);
-    
-    // Filter to show only Level 2 users under this team lead
-    const filtered = baseLevel2Users.filter((user: any) => 
-      teamEmployeeUserIds.includes(user.id)
-    );
-
-    // If filtered list is empty, return all Level 2 users as fallback
-    const result = filtered.length > 0 ? filtered : baseLevel2Users;
-    
     // Exclude current user from the list
-    return result.filter((user: any) => user.id !== currentUserId);
-  }, [assignableUsersFromAPI, allEmployees, formData.team_lead_id, currentUserId]);
+    return baseLevel2Users.filter((user: any) => user.id !== currentUserId);
+  }, [assignableUsersFromAPI, currentUserId]);
 
   const handleInputChange = (field: keyof BugFormData, value: string) => {
     const normalizedValue = (value === "none" || value === "unassigned" || value === "all") ? "" : value;

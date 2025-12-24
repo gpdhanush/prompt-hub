@@ -370,7 +370,91 @@ router.post('/', requirePermission('reimbursements.create'), uploadReimbursement
       status: status,
       current_approval_level: currentApprovalLevel
     }, 'Reimbursement');
-    
+
+    // Notify approver(s) when a new reimbursement is created
+    try {
+      // Determine approver user ids
+      const approverUserIds = [];
+
+      if (userLevel === 1) {
+        // Level 1 creator → notify Super Admins
+        const [superAdmins] = await db.query(`
+          SELECT u.id, u.email, u.name
+          FROM users u
+          INNER JOIN roles r ON u.role_id = r.id
+          WHERE r.name = 'Super Admin' AND u.status = 'Active'
+        `);
+        superAdmins.forEach(sa => approverUserIds.push(sa.id));
+      } else if (userLevel === 2 || userLevel === null) {
+        // Level 2 creator → notify their Level 1 (team lead)
+        const [empRows] = await db.query('SELECT team_lead_id FROM employees WHERE id = ?', [employeeId]);
+        const teamLeadId = empRows[0]?.team_lead_id;
+        if (teamLeadId) {
+          const [leadUsers] = await db.query('SELECT user_id FROM employees WHERE id = ?', [teamLeadId]);
+          if (leadUsers.length > 0 && leadUsers[0].user_id) {
+            approverUserIds.push(leadUsers[0].user_id);
+          }
+        }
+
+        // If no team lead found, fallback to Super Admins
+        if (approverUserIds.length === 0) {
+          const [superAdmins] = await db.query(`
+            SELECT u.id
+            FROM users u
+            INNER JOIN roles r ON u.role_id = r.id
+            WHERE r.name = 'Super Admin' AND u.status = 'Active'
+          `);
+          superAdmins.forEach(sa => approverUserIds.push(sa.id));
+        }
+      }
+
+      if (approverUserIds.length > 0) {
+        const { notifyMultipleUsers } = await import('../utils/notificationService.js');
+        const approverList = approverUserIds.join(', ');
+        const message = `New reimbursement request (${claimCode}) for ${amount} ${category} submitted by ${newReimbursement[0].employee_name}.`;
+
+        await notifyMultipleUsers(
+          approverUserIds,
+          'reimbursement_requested',
+          'New Reimbursement Request',
+          message,
+          {
+            reimbursementId: reimbursementId,
+            claimCode: claimCode,
+            amount: amount,
+            category: category,
+            link: `/reimbursements/${reimbursementId}`,
+          }
+        );
+
+        // Send email notifications to approvers using templates
+        const { sendEmail } = await import('../utils/emailService.js');
+        const { renderReimbursementRequestEmail } = await import('../utils/emailTemplates.js');
+        const [approverUsers] = await db.query('SELECT id, email, name FROM users WHERE id IN (?)', [approverUserIds]);
+        const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:8080';
+        const reimbursementLink = `${baseUrl}/reimbursements/${reimbursementId}`;
+
+        for (const approver of approverUsers) {
+          if (!approver.email) continue;
+          const emailHtml = renderReimbursementRequestEmail({
+            approverName: approver.name,
+            claimCode: claimCode,
+            amount: amount,
+            category: category,
+            employeeName: newReimbursement[0].employee_name,
+            link: reimbursementLink,
+          });
+          try {
+            await sendEmail({ to: approver.email, subject: `New Reimbursement Request: ${claimCode}`, html: emailHtml });
+          } catch (err) {
+            logger.error('Failed to send reimbursement request email to approver:', err);
+          }
+        }
+      }
+    } catch (notifyErr) {
+      logger.error('Error notifying approvers for new reimbursement:', notifyErr);
+    }
+
     res.status(201).json({ data: newReimbursement[0], message: 'Reimbursement claim created successfully' });
   } catch (error) {
     logger.error('Error creating reimbursement:', error);

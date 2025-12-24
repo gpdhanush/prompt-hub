@@ -83,7 +83,7 @@ export default function ClientComments() {
         <div className="space-y-4">
           {allComments.map((comment: any, index: number) => {
             const userName = comment.user_name || comment.created_by_name || 'Unknown User';
-            const userInitials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+            const userInitials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 3);
             
             return (
               <Card key={comment.id || index}>

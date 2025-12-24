@@ -13,6 +13,9 @@ export default function ProjectEdit() {
       return null;
     }
     const trimmedId = id.trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // If UUID, return the raw string so downstream components can fetch by UUID
+    if (uuidRegex.test(trimmedId)) return trimmedId;
     const parsedId = parseInt(trimmedId, 10);
     return isNaN(parsedId) || parsedId <= 0 ? null : parsedId;
   }, [id]);
@@ -21,7 +24,7 @@ export default function ProjectEdit() {
     navigate('/projects');
   }, [navigate]);
   
-  // Validate that id is a valid number
+  // Validate that id is present
   if (!id || typeof id !== 'string' || id.trim() === '') {
     logger.warn('ProjectEdit - Missing or invalid id parameter:', id);
     return (
@@ -33,34 +36,22 @@ export default function ProjectEdit() {
     );
   }
   
-  // Parse the ID and validate it
-  const trimmedId = id.trim();
-  const parsedProjectId = parseInt(trimmedId, 10);
-  
-  logger.debug('ProjectEdit - id from params:', id, 'trimmed:', trimmedId, 'parsed projectId:', parsedProjectId);
-  
-  // If projectId is invalid (including 0), show error instead of passing undefined
-  if (isNaN(parsedProjectId) || parsedProjectId <= 0) {
-    logger.error('ProjectEdit - Invalid project ID:', id, 'parsed as:', parsedProjectId);
+  // Log and render Edit form. `projectId` may be a number or a UUID string.
+  logger.debug('ProjectEdit - id param:', id, 'resolved projectId:', projectId);
+
+  if (projectId === null) {
+    logger.error('ProjectEdit - Invalid project ID parameter:', id);
     return (
       <div className="container mx-auto p-6">
         <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-          <div className="text-destructive text-lg font-semibold">
-            Invalid Project ID: {parsedProjectId === 0 ? '0' : trimmedId}
-          </div>
-          <div className="text-sm text-muted-foreground max-w-md text-center">
-            {parsedProjectId === 0 
-              ? 'This project has ID 0 in the database. Please run the SQL fix: database/migrations/fix_project_id_zero_all_in_one.sql'
-              : 'The project ID in the URL is invalid. Please go back and try again.'}
-          </div>
-          <Button onClick={handleBack} variant="outline">
-            Back to Projects
-          </Button>
+          <div className="text-destructive text-lg font-semibold">Invalid Project ID: {id?.trim() || 'undefined'}</div>
+          <div className="text-sm text-muted-foreground max-w-md text-center">The project ID in the URL is invalid. Please go back and try again.</div>
+          <Button onClick={handleBack} variant="outline">Back to Projects</Button>
         </div>
       </div>
     );
   }
-  
-  // Pass the valid projectId to ProjectForm
-  return <ProjectForm mode="edit" projectId={parsedProjectId} />;
+
+  // Pass either numeric ID or UUID string to ProjectForm; ProjectForm will handle both.
+  return <ProjectForm mode="edit" projectId={projectId as any} />;
 }

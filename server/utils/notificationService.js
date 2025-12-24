@@ -308,7 +308,7 @@ export async function notifyLeaveStatusUpdated(userId, leaveId, oldStatus, newSt
       message = `Your leave request status has been changed from ${oldStatus} to ${newStatus} by ${updater}.`;
     }
     
-    return await createNotification(
+    const notification = await createNotification(
       userId,
       'leave_status_updated',
       title,
@@ -324,6 +324,30 @@ export async function notifyLeaveStatusUpdated(userId, leaveId, oldStatus, newSt
         link: '/leaves',
       }
     );
+
+    // Send email to user about leave status update (using template)
+    try {
+      const { renderLeaveStatusEmail } = await import('./emailTemplates.js');
+      const [users] = await db.query('SELECT email, name FROM users WHERE id = ?', [userId]);
+      const userInfo = users[0];
+      if (userInfo && userInfo.email) {
+        const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:8080';
+        const leaveLink = `${baseUrl}/leaves/${leaveId}`;
+        const emailHtml = renderLeaveStatusEmail({
+          userName: userInfo.name,
+          leaveType: leaveType,
+          startDate: startDate,
+          endDate: endDate,
+          status: newStatus,
+          link: leaveLink,
+        });
+        await sendEmail({ to: userInfo.email, subject: title, html: emailHtml });
+      }
+    } catch (emailErr) {
+      logger.error('Failed to send leave status email:', emailErr);
+    }
+
+    return notification;
   } catch (error) {
     logger.error('Error notifying leave status update:', error);
   }
@@ -354,7 +378,7 @@ export async function notifyReimbursementStatusUpdated(userId, reimbursementId, 
       message = `Your reimbursement request status has been changed from ${oldStatus} to ${newStatus} by ${updater}.`;
     }
     
-    return await createNotification(
+    const notification = await createNotification(
       userId,
       'reimbursement_status_updated',
       title,
@@ -369,6 +393,30 @@ export async function notifyReimbursementStatusUpdated(userId, reimbursementId, 
         link: '/reimbursements',
       }
     );
+
+    // Send email to user about reimbursement status update (using template)
+    try {
+      const { renderReimbursementStatusEmail } = await import('./emailTemplates.js');
+      const [users] = await db.query('SELECT email, name FROM users WHERE id = ?', [userId]);
+      const userInfo = users[0];
+      if (userInfo && userInfo.email) {
+        const baseUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:8080';
+        const reimbursementLink = `${baseUrl}/reimbursements/${reimbursementId}`;
+        const emailHtml = renderReimbursementStatusEmail({
+          userName: userInfo.name,
+          claimCode: reimbursementId, // numeric id used if claim code not available here
+          amount: amount,
+          category: category,
+          status: newStatus,
+          link: reimbursementLink,
+        });
+        await sendEmail({ to: userInfo.email, subject: title, html: emailHtml });
+      }
+    } catch (emailErr) {
+      logger.error('Failed to send reimbursement status email:', emailErr);
+    }
+
+    return notification;
   } catch (error) {
     logger.error('Error notifying reimbursement status update:', error);
   }
