@@ -65,7 +65,6 @@ const allMenuItems = [
   { name: "Contact Directory", href: "/employees/list", icon: UserSearch, section: "main" },
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
   { name: "Tasks", href: "/tasks", icon: CheckSquare, section: "main" },
-  // { name: "Kanban", href: "/kanban", icon: LayoutGrid, section: "main" },
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Holidays", href: "/holidays", icon: Calendar, section: "main" },
@@ -112,7 +111,6 @@ export function AdminSidebar() {
   const canAccessEmployees = isSuperAdmin || hasPermission('employees.view');
   const canAccessProjects = isSuperAdmin || hasPermission('projects.view');
   const canAccessTasks = isSuperAdmin || hasPermission('tasks.view');
-  const canAccessKanban = isSuperAdmin || hasPermission('tasks.view'); // Use tasks.view permission for Kanban
   const canAccessBugs = isSuperAdmin || hasPermission('bugs.view');
   // Permission-based access checks
   const canAccessLeaves = isSuperAdmin || hasPermission('leaves.view');
@@ -275,7 +273,6 @@ export function AdminSidebar() {
             if (item.href === '/employees' && !canAccessEmployees) return false;
             if (item.href === '/projects' && !canAccessProjects) return false;
             if (item.href === '/tasks' && !canAccessTasks) return false;
-            // if (item.href === '/kanban' && !canAccessKanban) return false; // Kanban menu hidden
             if (item.href === '/bugs' && !canAccessBugs) return false;
             if (item.href === '/leaves' && !canAccessLeaves) return false;
             if (item.href === '/reimbursements' && !canAccessReimbursements) return false;

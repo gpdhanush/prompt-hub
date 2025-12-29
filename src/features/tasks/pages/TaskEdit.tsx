@@ -75,9 +75,20 @@ export default function TaskEdit() {
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => tasksApi.update(id!, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['task', id] });
+    onSuccess: async (response) => {
+      // Invalidate all task-related queries
+      await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      await queryClient.invalidateQueries({ queryKey: ['task', id] });
+      
+      // Refetch to immediately show updated data
+      await queryClient.refetchQueries({ queryKey: ['tasks'] });
+      await queryClient.refetchQueries({ queryKey: ['task', id] });
+      
+      // Update cache with response data if available
+      if (response?.data) {
+        queryClient.setQueryData(['task', id], response);
+      }
+      
       toast({
         title: "Success",
         description: "Task updated successfully.",

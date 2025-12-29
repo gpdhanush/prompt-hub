@@ -27,7 +27,7 @@ export default function TaskView() {
     queryKey: ['task', id],
     queryFn: () => tasksApi.getById(id!),
     enabled: !!id,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 0, // Always refetch when query is invalidated
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

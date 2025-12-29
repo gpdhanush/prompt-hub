@@ -662,12 +662,22 @@ router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
     technologies_used = validation.data.technologies_used || technologies_used;
     estimated_delivery_plan = validation.data.estimated_delivery_plan || estimated_delivery_plan;
     
-    // Get before data for audit log
-    const [existingProjects] = await db.query('SELECT * FROM projects WHERE id = ?', [id]);
+    // Check if id is UUID or numeric
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    
+    // Get before data for audit log - handle both UUID and numeric ID
+    let existingProjects;
+    if (isUUID) {
+      [existingProjects] = await db.query('SELECT * FROM projects WHERE uuid = ?', [id]);
+    } else {
+      [existingProjects] = await db.query('SELECT * FROM projects WHERE id = ?', [id]);
+    }
+    
     if (existingProjects.length === 0) {
       return res.status(404).json({ error: 'Project not found' });
     }
     const beforeData = existingProjects[0];
+    const numericProjectId = beforeData.id; // Use numeric ID for all subsequent queries
     
     // Valid status values matching database ENUM
     const validStatuses = ['Not Started', 'Planning', 'In Progress', 'Testing', 'Pre-Prod', 'Production', 'Completed', 'On Hold', 'Cancelled'];
@@ -741,7 +751,7 @@ router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
     updateFields.push('updated_by = ?');
     updateValues.push(updated_by);
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
-    updateValues.push(id);
+    updateValues.push(numericProjectId);
     
     if (updateFields.length > 2) { // More than just updated_by and updated_at
       logger.debug('Updating project with fields:', updateFields);
@@ -770,12 +780,12 @@ router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
       logger.debug('member_ids values:', member_ids);
       const [existingMembers] = await db.query(
         'SELECT user_id FROM project_users WHERE project_id = ?',
-        [id]
+        [numericProjectId]
       );
       existingMemberIds = existingMembers.map(m => m.user_id);
       
       // Delete existing members
-      await db.query('DELETE FROM project_users WHERE project_id = ?', [id]);
+      await db.query('DELETE FROM project_users WHERE project_id = ?', [numericProjectId]);
       
       // Add new members with roles
       if (member_ids.length > 0) {
@@ -788,7 +798,7 @@ router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
             return db.query(`
               INSERT INTO project_users (project_id, user_id, role_in_project)
               VALUES (?, ?, ?)
-            `, [id, userId, role]);
+            `, [numericProjectId, userId, role]);
           });
         await Promise.all(memberPromises);
         logger.debug('All members added successfully');
@@ -802,7 +812,7 @@ router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
     // Update milestones if provided
     if (milestones !== undefined && Array.isArray(milestones)) {
       // Delete existing milestones
-      await db.query('DELETE FROM project_milestones WHERE project_id = ?', [id]);
+      await db.query('DELETE FROM project_milestones WHERE project_id = ?', [numericProjectId]);
       
       // Add new milestones
       if (milestones.length > 0) {
@@ -813,7 +823,7 @@ router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
               INSERT INTO project_milestones (project_id, name, start_date, end_date, status)
               VALUES (?, ?, ?, ?, ?)
             `, [
-              id,
+              numericProjectId,
               milestone.name,
               milestone.start_date || null,
               milestone.end_date || null,
@@ -824,10 +834,10 @@ router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
       }
     }
     
-    const [updated] = await db.query('SELECT * FROM projects WHERE id = ?', [id]);
+    const [updated] = await db.query('SELECT * FROM projects WHERE id = ?', [numericProjectId]);
     
     // Create audit log for project update
-    await logUpdate(req, 'Projects', id, beforeData, updated[0], 'Project');
+    await logUpdate(req, 'Projects', numericProjectId, beforeData, updated[0], 'Project');
     
     // Notify newly assigned project members
     if (member_ids !== undefined && Array.isArray(member_ids) && member_ids.length > 0) {
@@ -841,7 +851,7 @@ router.put('/:id', requirePermission('projects.edit'), async (req, res) => {
       
       if (newMemberIds.length > 0) {
         const notificationPromises = newMemberIds.map(userId => 
-          notifyProjectAssigned(userId, parseInt(id), projectName, req.user.id)
+          notifyProjectAssigned(userId, numericProjectId, projectName, req.user.id)
         );
         await Promise.allSettled(notificationPromises);
       }
@@ -1039,20 +1049,87 @@ router.put('/:id/change-requests/:requestId', authorize('Team Leader', 'Team Lea
 // ============================================
 
 // Create client call note
-router.post('/:id/call-notes', async (req, res) => {
+router.post('/:id/call-notes', requirePermission('projects.edit'), async (req, res) => {
   try {
     const { id } = req.params;
     const { call_date, call_duration_minutes, participants, notes, action_items, follow_up_required, follow_up_date } = req.body;
     const created_by = req.user.id;
     
+    // Resolve project UUID to numeric ID
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let projectId;
+    
+    if (isUUID) {
+      const [projects] = await db.query('SELECT id FROM projects WHERE uuid = ?', [id]);
+      if (projects.length === 0) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      projectId = projects[0].id;
+    } else {
+      projectId = parseInt(id);
+      if (isNaN(projectId)) {
+        return res.status(400).json({ error: 'Invalid project ID' });
+      }
+    }
+    
+    // Normalize datetime values for MySQL (remove timezone, convert to DATETIME format)
+    let normalizedCallDate = null;
+    if (call_date) {
+      try {
+        const dateObj = new Date(call_date);
+        if (isNaN(dateObj.getTime())) {
+          return res.status(400).json({ error: 'Invalid call date format' });
+        }
+        // Convert to MySQL DATETIME format: YYYY-MM-DD HH:MM:SS
+        normalizedCallDate = dateObj.toISOString().slice(0, 19).replace('T', ' ');
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid call date format' });
+      }
+    } else {
+      return res.status(400).json({ error: 'Call date is required' });
+    }
+    
+    // Normalize follow-up date (DATE format: YYYY-MM-DD)
+    let normalizedFollowUpDate = null;
+    if (follow_up_date) {
+      try {
+        const dateObj = new Date(follow_up_date);
+        if (isNaN(dateObj.getTime())) {
+          return res.status(400).json({ error: 'Invalid follow-up date format' });
+        }
+        // Convert to MySQL DATE format: YYYY-MM-DD
+        normalizedFollowUpDate = dateObj.toISOString().slice(0, 10);
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid follow-up date format' });
+      }
+    }
+    
     const [result] = await db.query(`
       INSERT INTO project_client_call_notes (project_id, call_date, call_duration_minutes, participants, notes, action_items, follow_up_required, follow_up_date, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, call_date, call_duration_minutes || null, participants || null, notes, action_items || null, follow_up_required || false, follow_up_date || null, created_by]);
+    `, [
+      projectId,
+      normalizedCallDate,
+      call_duration_minutes || null,
+      participants || null,
+      notes,
+      action_items || null,
+      follow_up_required ? 1 : 0,
+      normalizedFollowUpDate,
+      created_by
+    ]);
     
-    const [newNote] = await db.query('SELECT * FROM project_client_call_notes WHERE id = ?', [result.insertId]);
+    // Fetch the created note with created_by_name
+    const [newNote] = await db.query(`
+      SELECT cn.*, u.name as created_by_name
+      FROM project_client_call_notes cn
+      LEFT JOIN users u ON cn.created_by = u.id
+      WHERE cn.id = ?
+    `, [result.insertId]);
+    
     res.status(201).json({ data: newNote[0] });
   } catch (error) {
+    logger.error('Error creating call note:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1062,15 +1139,207 @@ router.post('/:id/call-notes', async (req, res) => {
 router.get('/:id/call-notes', requirePermission('projects.view'), async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Resolve project UUID to numeric ID
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let projectId;
+    
+    if (isUUID) {
+      const [projects] = await db.query('SELECT id FROM projects WHERE uuid = ?', [id]);
+      if (projects.length === 0) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      projectId = projects[0].id;
+    } else {
+      projectId = parseInt(id);
+      if (isNaN(projectId)) {
+        return res.status(400).json({ error: 'Invalid project ID' });
+      }
+    }
+    
+    const [callNotes] = await db.query(`
+      SELECT cn.*, u.name as created_by_name
+      FROM project_client_call_notes cn
+      LEFT JOIN users u ON cn.created_by = u.id
+      WHERE cn.project_id = ?
+      ORDER BY cn.call_date DESC
+    `, [projectId]);
+    res.json({ data: callNotes });
+  } catch (error) {
+    logger.error('Error fetching call notes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update call note
+router.put('/:id/call-notes/:noteId', requirePermission('projects.edit'), async (req, res) => {
+  try {
+    const { id, noteId } = req.params;
+    const { call_date, call_duration_minutes, participants, notes, action_items, follow_up_required, follow_up_date } = req.body;
+    
+    // Resolve project UUID to numeric ID
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let projectId;
+    
+    if (isUUID) {
+      const [projects] = await db.query('SELECT id FROM projects WHERE uuid = ?', [id]);
+      if (projects.length === 0) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      projectId = projects[0].id;
+    } else {
+      projectId = parseInt(id);
+      if (isNaN(projectId)) {
+        return res.status(400).json({ error: 'Invalid project ID' });
+      }
+    }
+    
+    // Verify call note exists and belongs to this project
+    const [existingNotes] = await db.query(
+      'SELECT id FROM project_client_call_notes WHERE id = ? AND project_id = ?',
+      [noteId, projectId]
+    );
+    
+    if (existingNotes.length === 0) {
+      return res.status(404).json({ error: 'Call note not found' });
+    }
+    
+    const updateFields = [];
+    const params = [];
+
+    if (call_date !== undefined) {
+      if (call_date) {
+        try {
+          const dateObj = new Date(call_date);
+          if (isNaN(dateObj.getTime())) {
+            return res.status(400).json({ error: 'Invalid call date format' });
+          }
+          // Convert to MySQL DATETIME format: YYYY-MM-DD HH:MM:SS
+          const normalizedCallDate = dateObj.toISOString().slice(0, 19).replace('T', ' ');
+          updateFields.push('call_date = ?');
+          params.push(normalizedCallDate);
+        } catch (error) {
+          return res.status(400).json({ error: 'Invalid call date format' });
+        }
+      } else {
+        return res.status(400).json({ error: 'Call date cannot be empty' });
+      }
+    }
+    if (call_duration_minutes !== undefined) {
+      updateFields.push('call_duration_minutes = ?');
+      params.push(call_duration_minutes || null);
+    }
+    if (participants !== undefined) {
+      updateFields.push('participants = ?');
+      params.push(participants || null);
+    }
+    if (notes !== undefined) {
+      updateFields.push('notes = ?');
+      params.push(notes);
+    }
+    if (action_items !== undefined) {
+      updateFields.push('action_items = ?');
+      params.push(action_items || null);
+    }
+    if (follow_up_required !== undefined) {
+      updateFields.push('follow_up_required = ?');
+      params.push(follow_up_required ? 1 : 0);
+    }
+    if (follow_up_date !== undefined) {
+      if (follow_up_date) {
+        try {
+          const dateObj = new Date(follow_up_date);
+          if (isNaN(dateObj.getTime())) {
+            return res.status(400).json({ error: 'Invalid follow-up date format' });
+          }
+          // Convert to MySQL DATE format: YYYY-MM-DD
+          const normalizedFollowUpDate = dateObj.toISOString().slice(0, 10);
+          updateFields.push('follow_up_date = ?');
+          params.push(normalizedFollowUpDate);
+        } catch (error) {
+          return res.status(400).json({ error: 'Invalid follow-up date format' });
+        }
+      } else {
+        updateFields.push('follow_up_date = ?');
+        params.push(null);
+      }
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    // Add WHERE clause conditions
+    params.push(noteId, projectId);
+    await db.query(`
+      UPDATE project_client_call_notes
+      SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND project_id = ?
+    `, params);
+
+    // Fetch updated call notes using numeric project ID
+    const [callNotes] = await db.query(`
+      SELECT cn.*, u.name as created_by_name
+      FROM project_client_call_notes cn
+      LEFT JOIN users u ON cn.created_by = u.id
+      WHERE cn.project_id = ?
+      ORDER BY cn.call_date DESC
+    `, [projectId]);
+
+    res.json({ data: callNotes });
+  } catch (error) {
+    logger.error('Error updating call note:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete call note
+router.delete('/:id/call-notes/:noteId', requirePermission('projects.edit'), async (req, res) => {
+  try {
+    const { id, noteId } = req.params;
+    
+    // Resolve project UUID to numeric ID
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let projectId;
+    
+    if (isUUID) {
+      const [projects] = await db.query('SELECT id FROM projects WHERE uuid = ?', [id]);
+      if (projects.length === 0) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      projectId = projects[0].id;
+    } else {
+      projectId = parseInt(id);
+      if (isNaN(projectId)) {
+        return res.status(400).json({ error: 'Invalid project ID' });
+      }
+    }
+    
+    // Verify call note exists and belongs to this project before deleting
+    const [existingNotes] = await db.query(
+      'SELECT id FROM project_client_call_notes WHERE id = ? AND project_id = ?',
+      [noteId, projectId]
+    );
+    
+    if (existingNotes.length === 0) {
+      return res.status(404).json({ error: 'Call note not found' });
+    }
+    
+    // Delete the call note
+    await db.query('DELETE FROM project_client_call_notes WHERE id = ? AND project_id = ?', [noteId, projectId]);
+
+    // Fetch updated call notes using numeric project ID
     const [notes] = await db.query(`
       SELECT cn.*, u.name as created_by_name
       FROM project_client_call_notes cn
       LEFT JOIN users u ON cn.created_by = u.id
       WHERE cn.project_id = ?
       ORDER BY cn.call_date DESC
-    `, [id]);
+    `, [projectId]);
+
     res.json({ data: notes });
   } catch (error) {
+    logger.error('Error deleting call note:', error);
     res.status(500).json({ error: error.message });
   }
 });

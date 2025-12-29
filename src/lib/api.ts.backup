@@ -1,6 +1,0 @@
-// This file maintains backward compatibility
-// It re-exports from the old api.ts structure
-// Gradually migrate to feature-based APIs in features/*/api.ts
-
-export * from './api';
-

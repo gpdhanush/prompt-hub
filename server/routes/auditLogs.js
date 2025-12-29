@@ -394,7 +394,6 @@ router.post(
         Bugs: "bugs",
         Leaves: "leaves",
         Reimbursements: "reimbursements",
-        Prompts: "prompts",
       };
 
       const tableName = tableMap[module];

@@ -1194,7 +1194,14 @@ router.post('/', async (req, res) => {
     emergency_contact_relation = validation.data.emergency_contact_relation || emergency_contact_relation;
     teams_id = validation.data.teams_id || teams_id;
     
-    const dbRoleName = role || 'Developer';
+    // Validate that role is provided
+    if (!role || role.trim() === '') {
+      return res.status(400).json({ error: 'Role is required. Please select a role.' });
+    }
+    
+    const dbRoleName = role.trim();
+    
+    logger.debug('Employee creation - Role received:', dbRoleName);
     
     // Get position_id if provided - validate position hierarchy
     let positionId = null;
@@ -1220,11 +1227,32 @@ router.post('/', async (req, res) => {
     }
     
     // Get roleId early for validation (since positions are display-only, we validate based on role level)
+    // Try exact match first, then case-insensitive match
     let roleId = null;
+    let roleData = null;
     if (dbRoleName) {
-      const [roles] = await db.query('SELECT id FROM roles WHERE name = ?', [dbRoleName]);
+      // First try exact match
+      const [roles] = await db.query('SELECT id, name, level FROM roles WHERE name = ?', [dbRoleName]);
       if (roles.length > 0) {
         roleId = roles[0].id;
+        roleData = roles[0];
+        logger.debug('Role found (exact match):', { id: roleId, name: roles[0].name, level: roles[0].level });
+      } else {
+        // Try case-insensitive match
+        const [rolesCaseInsensitive] = await db.query('SELECT id, name, level FROM roles WHERE LOWER(name) = LOWER(?)', [dbRoleName]);
+        if (rolesCaseInsensitive.length > 0) {
+          roleId = rolesCaseInsensitive[0].id;
+          roleData = rolesCaseInsensitive[0];
+          logger.debug('Role found (case-insensitive match):', { id: roleId, name: rolesCaseInsensitive[0].name, level: rolesCaseInsensitive[0].level });
+        } else {
+          logger.error('Role not found in database:', dbRoleName);
+          // Get list of available roles for better error message
+          const [allRoles] = await db.query('SELECT name FROM roles ORDER BY name');
+          const availableRoles = allRoles.map(r => r.name).join(', ');
+          return res.status(400).json({ 
+            error: `Role "${dbRoleName}" not found. Please select a valid role. Available roles: ${availableRoles || 'None found'}` 
+          });
+        }
       }
     }
     
@@ -1326,44 +1354,103 @@ router.post('/', async (req, res) => {
     const currentUserId = req.user?.id;
     const isUserSuperAdmin = currentUserId ? await isSuperAdmin(currentUserId) : false;
     
-    // Super Admin restriction: Can only create Level 1 roles (and Developer as exception)
+    // Super Admin can create Level 1 and Level 2 roles
     // This uses the level from the roles table (set in Roles & Positions page)
     if (isUserSuperAdmin || currentUserRole === 'Super Admin') {
-      if (roleId) {
-        // Get role level from database
-        const [roleData] = await db.query('SELECT name, level FROM roles WHERE id = ?', [roleId]);
-        if (roleData.length > 0) {
-          const roleLevel = roleData[0].level;
-          const roleName = roleData[0].name;
+      if (roleData && roleData.level !== undefined) {
+        // Use roleData we already fetched
+        const roleLevel = roleData.level;
+        const roleName = roleData.name;
+        
+        // Super Admin can create Level 1 and Level 2 roles
+        if (roleLevel !== 1 && roleLevel !== 2) {
+          logger.warn(`Super Admin attempted to create employee with Level ${roleLevel} role: ${roleName}`);
+          return res.status(403).json({ 
+            error: `Super Admin can only create employees with Level 1 or Level 2 roles. Selected role "${roleName}" has level ${roleLevel || 'NULL'}.` 
+          });
+        }
+      } else if (roleId) {
+        // Fallback: Get role level from database if roleData not available
+        const [roleDataFromDb] = await db.query('SELECT name, level FROM roles WHERE id = ?', [roleId]);
+        if (roleDataFromDb.length > 0) {
+          const roleLevel = roleDataFromDb[0].level;
+          const roleName = roleDataFromDb[0].name;
           
-          // Super Admin can create:
-          // 1. Level 1 roles (Managers/Admins)
-          // 2. Developer role (Level 2 exception)
-          const isLevel1 = roleLevel === 1;
-          const isDeveloper = roleName === 'Developer';
-          
-          if (!isLevel1 && !isDeveloper) {
+          // Super Admin can create Level 1 and Level 2 roles
+          if (roleLevel !== 1 && roleLevel !== 2) {
+            logger.warn(`Super Admin attempted to create employee with Level ${roleLevel} role: ${roleName}`);
             return res.status(403).json({ 
-              error: `Super Admin can only create employees with Level 1 roles (Managers/Admins) or Developer. Selected role "${roleName}" has level ${roleLevel || 'NULL'}.` 
+              error: `Super Admin can only create employees with Level 1 or Level 2 roles. Selected role "${roleName}" has level ${roleLevel || 'NULL'}.` 
             });
           }
         }
+      } else {
+        return res.status(400).json({ 
+          error: `Role "${dbRoleName}" not found. Please select a valid role.` 
+        });
       }
     }
     
-    // Get manager roles and check if current user is a manager (Level 1)
-    const managerRoles = await getManagerRoles();
-    const isManager = managerRoles.includes(currentUserRole);
-    
-    if (isManager && currentUserId && !isUserSuperAdmin) {
-      // Get roles that Level 2 users typically have (employee roles)
-      const level2Roles = await getRolesByLevel(2);
+    // Get current user's level (role_level or position_level, with role_level taking priority)
+    let currentUserLevel = 2; // default
+    if (currentUserId && !isUserSuperAdmin) {
+      const [currentUserData] = await db.query(`
+        SELECT 
+          r.level as role_level,
+          p.level as position_level
+        FROM users u
+        LEFT JOIN roles r ON u.role_id = r.id
+        LEFT JOIN positions p ON u.position_id = p.id
+        WHERE u.id = ?
+      `, [currentUserId]);
       
-      // If the role being created is not a Level 2 role, check if it's allowed
-      // Level 1 managers can typically only create Level 2 employees
-      if (level2Roles.length > 0 && !level2Roles.includes(dbRoleName)) {
-        return res.status(403).json({ 
-          error: `${currentUserRole} can only create employees with roles: ${level2Roles.join(', ')}` 
+      if (currentUserData.length > 0) {
+        const roleLevel = currentUserData[0].role_level;
+        const positionLevel = currentUserData[0].position_level;
+        currentUserLevel = roleLevel !== null && roleLevel !== undefined
+          ? roleLevel
+          : (positionLevel !== null && positionLevel !== undefined
+            ? positionLevel
+            : 2);
+      }
+    }
+    
+    // Level 1 users can only create Level 2 employees
+    if (currentUserLevel === 1 && currentUserId && !isUserSuperAdmin) {
+      if (roleData && roleData.level !== undefined) {
+        // Use roleData we already fetched
+        const targetRoleLevel = roleData.level;
+        const roleName = roleData.name;
+        
+        // Level 1 users can only create Level 2 roles
+        if (targetRoleLevel !== 2) {
+          logger.warn(`Level 1 user attempted to create employee with Level ${targetRoleLevel} role: ${roleName}`);
+          return res.status(403).json({ 
+            error: `Level 1 users can only create employees with Level 2 roles. Selected role "${roleName}" has level ${targetRoleLevel || 'NULL'}.` 
+          });
+        }
+      } else if (roleId) {
+        // Fallback: Get role level from database if roleData not available
+        const [roleDataFromDb] = await db.query('SELECT name, level FROM roles WHERE id = ?', [roleId]);
+        if (roleDataFromDb.length > 0) {
+          const targetRoleLevel = roleDataFromDb[0].level;
+          const roleName = roleDataFromDb[0].name;
+          
+          // Level 1 users can only create Level 2 roles
+          if (targetRoleLevel !== 2) {
+            logger.warn(`Level 1 user attempted to create employee with Level ${targetRoleLevel} role: ${roleName}`);
+            return res.status(403).json({ 
+              error: `Level 1 users can only create employees with Level 2 roles. Selected role "${roleName}" has level ${targetRoleLevel || 'NULL'}.` 
+            });
+          }
+        } else {
+          return res.status(400).json({ 
+            error: `Role "${dbRoleName}" not found. Please select a valid role.` 
+          });
+        }
+      } else {
+        return res.status(400).json({ 
+          error: `Role "${dbRoleName}" not found. Please select a valid role.` 
         });
       }
     }
@@ -1391,9 +1478,38 @@ router.post('/', async (req, res) => {
     }
     
     // Get role details (roleId already fetched above for validation, but get reporting_person_role_id here)
-    const [roleDetails] = await db.query('SELECT id, reporting_person_role_id FROM roles WHERE name = ?', [dbRoleName]);
-    const finalRoleId = roleId || roleDetails[0]?.id || 4; // Use roleId from validation or default to Developer
-    const reportingPersonRoleId = roleDetails[0]?.reporting_person_role_id || null;
+    // Use roleId we already have, or try to get it again if somehow missing
+    let finalRoleId = roleId;
+    let reportingPersonRoleId = null;
+    
+    if (!finalRoleId) {
+      // Fallback: try to get role by name again
+      const [roleDetails] = await db.query('SELECT id, reporting_person_role_id FROM roles WHERE name = ? OR LOWER(name) = LOWER(?)', [dbRoleName, dbRoleName]);
+      if (roleDetails.length > 0) {
+        finalRoleId = roleDetails[0].id;
+        reportingPersonRoleId = roleDetails[0].reporting_person_role_id || null;
+      } else {
+        logger.error('Role lookup failed - role not found:', dbRoleName);
+        return res.status(400).json({ 
+          error: `Role "${dbRoleName}" not found in database. Please select a valid role.` 
+        });
+      }
+    } else {
+      // Get reporting_person_role_id using the roleId we already have
+      const [roleDetails] = await db.query('SELECT reporting_person_role_id FROM roles WHERE id = ?', [finalRoleId]);
+      if (roleDetails.length > 0) {
+        reportingPersonRoleId = roleDetails[0].reporting_person_role_id || null;
+      }
+    }
+    
+    if (!finalRoleId) {
+      logger.error('Final roleId is still null after all lookups:', dbRoleName);
+      return res.status(400).json({ 
+        error: `Failed to resolve role "${dbRoleName}". Please contact administrator.` 
+      });
+    }
+    
+    logger.debug('Final role ID resolved:', { roleId: finalRoleId, roleName: dbRoleName, reportingPersonRoleId });
     
     // Auto-set teamLeadId based on role hierarchy if not provided
     if ((!teamLeadId || teamLeadId === '' || teamLeadId === 'none') && reportingPersonRoleId) {

@@ -41,8 +41,6 @@ const Tasks = lazy(() => import("./features/tasks/pages/Tasks"));
 const TaskCreate = lazy(() => import("./features/tasks/pages/TaskCreate"));
 const TaskEdit = lazy(() => import("./features/tasks/pages/TaskEdit"));
 const TaskView = lazy(() => import("./features/tasks/pages/TaskView"));
-const Kanban = lazy(() => import("./features/kanban/pages/Kanban"));
-const KanbanBoardDetail = lazy(() => import("./features/kanban/pages/KanbanBoardDetail"));
 const Bugs = lazy(() => import("./features/bugs/pages/Bugs"));
 const Leaves = lazy(() => import("./features/leaves/pages/Leaves"));
 const Holidays = lazy(() => import("./features/holidays/pages/Holidays"));
@@ -309,22 +307,6 @@ const AppContent = () => {
                 element={
                   <ProtectedRoute requiredPermission="tasks.edit">
                     <LazyRoute><TaskEdit /></LazyRoute>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/kanban"
-                element={
-                  <ProtectedRoute requiredPermission="tasks.view">
-                    <LazyRoute><Kanban /></LazyRoute>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/kanban/:id"
-                element={
-                  <ProtectedRoute requiredPermission="tasks.view">
-                    <LazyRoute><KanbanBoardDetail /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />
@@ -726,14 +708,6 @@ const AppContent = () => {
                 element={
                   <ProtectedRoute allowedRoles={['CLIENT']}>
                     <LazyRoute><BugDetail /></LazyRoute>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/client/kanban" 
-                element={
-                  <ProtectedRoute allowedRoles={['CLIENT']}>
-                    <LazyRoute><Kanban /></LazyRoute>
                   </ProtectedRoute>
                 } 
               />

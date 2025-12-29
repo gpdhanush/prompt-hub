@@ -30,8 +30,10 @@ export const useProjectMutations = () => {
 
   const deleteMutation = useMutation({
     mutationFn: projectsApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    onSuccess: async () => {
+      // Invalidate and refetch to immediately show changes
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+      await queryClient.refetchQueries({ queryKey: ['projects'] });
       toast({ title: "Success", description: "Project deleted successfully." });
     },
     onError: (error: any) => {

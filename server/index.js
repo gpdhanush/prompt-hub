@@ -21,7 +21,6 @@ import bugsRoutes from "./routes/bugs.js";
 import leavesRoutes from "./routes/leaves.js";
 import reimbursementsRoutes from "./routes/reimbursements.js";
 import authRoutes from "./routes/auth.js";
-import promptsRoutes from "./routes/prompts.js";
 import auditLogsRoutes from "./routes/auditLogs.js";
 import notificationsRoutes from "./routes/notifications.js";
 import reportsRoutes from "./routes/reports.js";
@@ -37,7 +36,6 @@ import assetsRoutes from "./routes/assets.js";
 import remindersRoutes from "./routes/reminders.js";
 import webhooksRoutes from "./routes/webhooks.js";
 import documentRequestsRoutes from "./routes/documentRequests.js";
-import kanbanRoutes from "./routes/kanban.js";
 import holidaysRoutes from "./routes/holidays.js";
 import { performHealthCheck } from "./utils/dbHealthCheck.js";
 import { initializeFirebase } from "./utils/fcmService.js";
@@ -311,7 +309,6 @@ app.use("/api/role-positions", rolePositionsRoutes);
 app.use("/api/permissions", permissionsRoutes);
 app.use("/api/leaves", leavesRoutes);
 app.use("/api/reimbursements", reimbursementsRoutes);
-app.use("/api/prompts", promptsRoutes);
 app.use("/api/audit-logs", auditLogsRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/fcm", fcmRoutes);
@@ -323,7 +320,6 @@ app.use("/api/search", searchRoutes);
 app.use("/api/assets", assetsRoutes);
 app.use("/api/reminders", remindersRoutes);
 app.use("/api/document-requests", documentRequestsRoutes);
-app.use("/api/kanban", kanbanRoutes);
 app.use("/api/holidays", holidaysRoutes);
 
 // Error handling middleware
@@ -395,59 +391,6 @@ app.use((req, res) => {
   // Initialize Socket.IO
   initializeSocketIO(server);
 
-  // Listen on all interfaces (0.0.0.0) for cPanel compatibility
-  // cPanel will automatically set the PORT environment variable
-  // server.listen(PORT, "0.0.0.0", async () => {
-  //   const protocol = useHttps && server !== app ? "https" : "http";
-  //   const publicApiUrl =
-  //     process.env.API_BASE_URL || `${protocol}://localhost:${PORT}/api`;
-
-  //   logger.info(`🌐 Public Backend API URL: ${publicApiUrl}`);
-  //   logger.info(`❤️ Health Check: ${publicApiUrl}/health`);
-  //   logger.info(`✅ Server running on ${protocol}://0.0.0.0:${PORT}`);
-  //   logger.info(`✅ Health check : ${protocol}://0.0.0.0:${PORT}/health`);
-
-  //   // Perform database health check on startup
-  //   try {
-  //     await performHealthCheck();
-
-  //     // Initialize refresh token cleanup job (run every 24 hours)
-  //     const { cleanupExpiredTokens } = await import(
-  //       "./utils/refreshTokenService.js"
-  //     );
-  //     setInterval(async () => {
-  //       try {
-  //         const deleted = await cleanupExpiredTokens();
-  //         if (deleted > 0) {
-  //           logger.info(`🧹 Cleaned up ${deleted} expired refresh tokens`);
-  //         }
-  //       } catch (error) {
-  //         logger.error("Error cleaning up expired tokens:", error);
-  //       }
-  //     }, 24 * 60 * 60 * 1000); // 24 hours
-
-  //     // Run cleanup once on startup
-  //     try {
-  //       const deleted = await cleanupExpiredTokens();
-  //       if (deleted > 0) {
-  //         logger.info(
-  //           `🧹 Cleaned up ${deleted} expired refresh tokens on startup`
-  //         );
-  //       }
-  //     } catch (error) {
-  //       logger.error("Error cleaning up expired tokens on startup:", error);
-  //     }
-
-  //     // Initialize reminder scheduler
-  //     initializeReminderScheduler();
-
-  //     // Initialize ticket escalation scheduler
-  //     initializeTicketEscalationScheduler();
-  //   } catch (error) {
-  //     logger.error("❌ Health check failed:", error);
-  //     logger.error("⚠️  Server started but database may have issues");
-  //   }
-  // });
   const port = process.env.PORT || 3000;
 
   server.listen(port, async () => {

@@ -29,7 +29,7 @@ export const projectsApi = {
     return response.data;
   },
 
-  update: async (id: number, data: any) => {
+  update: async (id: number | string, data: any) => {
     const response = await apiClient.put<{ data: any }>(`/projects/${id}`, data);
     return response.data;
   },
@@ -83,6 +83,16 @@ export const projectsApi = {
 
   getCallNotes: async (id: number) => {
     const response = await apiClient.get<{ data: any[] }>(`/projects/${id}/call-notes`);
+    return response.data;
+  },
+
+  updateCallNote: async (id: number, noteId: number, data: any) => {
+    const response = await apiClient.put<{ data: any[] }>(`/projects/${id}/call-notes/${noteId}`, data);
+    return response.data;
+  },
+
+  deleteCallNote: async (id: number, noteId: number) => {
+    const response = await apiClient.delete<{ data: any[] }>(`/projects/${id}/call-notes/${noteId}`);
     return response.data;
   },
 

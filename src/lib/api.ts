@@ -241,9 +241,6 @@ export { reportsApi } from '@/features/reports/api';
 // TODO: Update all imports to use '@/features/notifications/api' directly
 export { notificationsApi } from '@/features/notifications/api';
 
-// Prompts API - Re-exported from feature-based API for backward compatibility
-// TODO: Update all imports to use '@/features/prompts/api' directly
-export { promptsApi } from '@/features/prompts/api';
 
 // Audit Logs API - Re-exported from feature-based API for backward compatibility
 // TODO: Update all imports to use '@/features/audit-logs/api' directly

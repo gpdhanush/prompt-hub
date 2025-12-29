@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X, GitCommit, GitBranch, GitPullRequest, GitMerge, MoreHorizontal, Eye } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X, GitCommit, GitBranch, GitPullRequest, GitMerge, MoreHorizontal, Eye, EyeOff, Key, Pencil, Trash, Calendar as CalendarIcon } from "lucide-react";
 import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -316,6 +316,20 @@ export default function ProjectDetail() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  const { data: callNotesData } = useQuery({
+    queryKey: ['project-call-notes', numericProjectId],
+    queryFn: () => {
+      if (!numericProjectId) {
+        throw new Error('Project ID not available');
+      }
+      return projectsApi.getCallNotes(numericProjectId);
+    },
+    enabled: !!numericProjectId && !!projectData?.data,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 
   // Fetch project activities (GitHub/Bitbucket commits, PRs, etc.)
   const { data: activitiesData, isLoading: activitiesLoading, error: activitiesError } = useQuery({
@@ -335,12 +349,28 @@ export default function ProjectDetail() {
     refetchOnReconnect: false,
   });
 
-
+  // Fetch project credentials
+  const { data: credentialsData } = useQuery({
+    queryKey: ['project-credentials', numericProjectId],
+    queryFn: () => {
+      if (!numericProjectId) {
+        throw new Error('Project ID not available');
+      }
+      return projectsApi.getCredentials(numericProjectId);
+    },
+    enabled: !!numericProjectId && !!projectData?.data,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 
   const project = projectData?.data;
   const allUsers = usersData?.data || [];
   const allEmployees = employeesData?.data || [];
   const files = filesData?.data || [];
+  const callNotes = callNotesData?.data || [];
+  const credentials = credentialsData?.data || [];
   const workedTime = workedTimeData?.data 
     ? {
         total_hours: typeof workedTimeData.data.total_hours === 'number' 
@@ -387,6 +417,9 @@ export default function ProjectDetail() {
         throw new Error('Project ID not available');
       }
       await projectsApi.delete(numericProjectId);
+      // Invalidate and refetch all project queries to immediately reflect changes
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+      await queryClient.refetchQueries({ queryKey: ['projects'] });
       toast({
         title: "Success",
         description: "Project deleted successfully.",
@@ -716,8 +749,8 @@ export default function ProjectDetail() {
             </Card>
           )}
 
-          {/* Repository Activity - Only visible to Super Admin */}
-          {currentUser?.role === 'Super Admin' && (
+          {/* Repository Activity */}
+          {numericProjectId && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -934,6 +967,125 @@ export default function ProjectDetail() {
               )}
             </CardContent>
           </Card>
+          )}
+
+          {/* Credentials Section */}
+          {numericProjectId && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Key className="h-5 w-5" />
+                  Credentials ({credentials.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {credentials.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No credentials stored</p>
+                ) : (
+                  <div className="space-y-3">
+                    {credentials.map((cred: any) => (
+                      <Card key={cred.id}>
+                        <CardContent className="pt-6">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <div className="font-semibold text-base mb-1">{cred.service_name}</div>
+                              <div className="text-sm text-muted-foreground mb-2">
+                                <StatusBadge variant="neutral" className="text-xs">{cred.credential_type}</StatusBadge>
+                              </div>
+                              {cred.url && (
+                                <div className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
+                                  <LinkIcon className="h-3 w-3" />
+                                  <a href={cred.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                    {cred.url}
+                                  </a>
+                                </div>
+                              )}
+                              {cred.username && (
+                                <div className="text-sm mb-1">
+                                  <span className="font-medium">Username: </span>
+                                  <span className="text-muted-foreground">{cred.username}</span>
+                                </div>
+                              )}
+                              {cred.notes && (
+                                <div className="text-sm mt-2 p-2 bg-muted rounded">
+                                  <span className="font-medium">Notes: </span>
+                                  <span className="text-muted-foreground">{cred.notes}</span>
+                                </div>
+                              )}
+                            </div>
+                            <StatusBadge variant={cred.is_active ? 'success' : 'neutral'}>
+                              {cred.is_active ? 'Active' : 'Inactive'}
+                            </StatusBadge>
+                          </div>
+                          {cred.created_by_name && (
+                            <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
+                              Created by: {cred.created_by_name}
+                              {cred.created_at && ` on ${formatDate(cred.created_at)}`}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Call Notes */}
+          {numericProjectId && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Phone className="h-5 w-5" />
+                  Client Call Notes ({callNotes.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {callNotes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No call notes recorded</p>
+                ) : (
+                  <div className="space-y-4">
+                    {callNotes.map((note: any) => (
+                      <Card key={note.id}>
+                        <CardContent className="pt-6">
+                          <div className="mb-3">
+                            <div className="text-base font-semibold">
+                              {note.call_date ? new Date(note.call_date).toLocaleString() : 'No date'}
+                            </div>
+                            {note.participants && (
+                              <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                                <User className="h-3 w-3" />
+                                Participants: {note.participants}
+                              </div>
+                            )}
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                              <CalendarIcon className="h-3 w-3" />
+                              {note.follow_up_required ? (
+                                note.follow_up_date ? (
+                                  `Follow-up Date: ${new Date(note.follow_up_date).toLocaleDateString()}`
+                                ) : (
+                                  "Follow-up required"
+                                )
+                              ) : (
+                                "Follow-up: No need"
+                              )}
+                            </div>
+                          </div>
+                          {note.notes && <p className="text-sm mb-2">{note.notes}</p>}
+                          {note.action_items && (
+                            <div className="text-sm">
+                              <span className="font-medium">Action Items: </span>
+                              {note.action_items}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
 
           {/* Comments Section - Conversation Format */}

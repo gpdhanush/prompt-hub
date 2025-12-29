@@ -22,7 +22,6 @@ import { projectsApi } from "@/features/projects/api";
 import { employeesApi } from "@/features/employees/api";
 import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
-import { TaskStatusDropdown } from "@/features/kanban/components/TaskStatusDropdown";
 
 interface TaskFormData {
   project_id: string;
@@ -62,7 +61,7 @@ export function TaskForm({
   const { securityAlertProps } = useSecurityValidation();
 
   // Fetch projects and users
-  const { data: projectsData } = useQuery({
+  const { data: projectsData, isLoading: isLoadingProjects, error: projectsError } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.getAll({ page: 1, limit: 100 }),
     staleTime: 1000 * 60 * 10, // 10 minutes
@@ -95,6 +94,11 @@ export function TaskForm({
   const projects = projectsData?.data || [];
   const allUsers = assignableUsersData?.data || [];
   const allEmployees = employeesData?.data || [];
+
+  // Debug: Log projects data if empty
+  if (!isLoadingProjects && projects.length === 0 && projectsData) {
+    console.log('Projects query result:', projectsData);
+  }
 
   // Filter team leaders only for "Assigned To" field
   const teamLeads = useMemo(() => 
@@ -205,19 +209,30 @@ export function TaskForm({
             <div className="grid gap-2">
               <Label htmlFor="project_id" className="text-red-500">Project *</Label>
               <Select
-                value={formData.project_id || "none"}
+                value={formData.project_id && formData.project_id !== "none" ? formData.project_id : undefined}
                 onValueChange={(value) => handleInputChange("project_id", value)}
                 required
+                disabled={isLoadingProjects}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select Project" />
+                  <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Select Project"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {projects.map((project: any) => (
-                    <SelectItem key={project.id} value={project.id.toString()}>
-                      {project.name}
+                  {isLoadingProjects ? (
+                    <SelectItem value="__loading__" disabled>
+                      Loading projects...
                     </SelectItem>
-                  ))}
+                  ) : projects.length > 0 ? (
+                    projects.map((project: any) => (
+                      <SelectItem key={project.id} value={project.id.toString()}>
+                        {project.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="__no_projects__" disabled>
+                      No project found
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -289,10 +304,23 @@ export function TaskForm({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="status" className="text-red-500">Status *</Label>
-              <TaskStatusDropdown
-                currentStatus={formData.status || "New"}
-                onStatusChange={(value) => handleInputChange("status", value)}
-              />
+              <Select
+                value={formData.status || "Open"}
+                onValueChange={(value) => handleInputChange("status", value)}
+                required
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Open">Open</SelectItem>
+                  <SelectItem value="In Progress">In Progress</SelectItem>
+                  <SelectItem value="Review">Review</SelectItem>
+                  <SelectItem value="Testing">Testing</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                  <SelectItem value="Closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardContent>

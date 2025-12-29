@@ -1,17 +1,20 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, X, MessageSquare, Save, Upload, FileText, Edit, Download } from "lucide-react";
+import { ArrowLeft, Plus, X, MessageSquare, Save, Upload, FileText, Edit, Download, Phone, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SecureInput } from "@/components/ui/secure-input";
 import { Label } from "@/components/ui/label";
 import { SecureTextarea } from "@/components/ui/secure-textarea";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useSecurityValidation } from "@/hooks/useSecurityValidation";
 import { SecurityAlertDialog } from "@/components/SecurityAlertDialog";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Separator } from "@/components/ui/separator";
 import { projectsApi } from "@/features/projects/api";
 import { employeesApi } from "@/features/employees/api";
@@ -319,6 +322,19 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [showCommentForm, setShowCommentForm] = useState(false);
   const [commentForm, setCommentForm] = useState({ comment: '', comment_type: 'General', is_internal: false });
+  const [showCallNoteForm, setShowCallNoteForm] = useState(false);
+  const [editingCallNoteId, setEditingCallNoteId] = useState<number | null>(null);
+  const [showDeleteCallNoteDialog, setShowDeleteCallNoteDialog] = useState(false);
+  const [callNoteToDelete, setCallNoteToDelete] = useState<number | null>(null);
+  const [callNoteForm, setCallNoteForm] = useState({
+    call_date: new Date().toISOString().slice(0, 16),
+    call_duration_minutes: '',
+    participants: '',
+    notes: '',
+    action_items: '',
+    follow_up_required: false,
+    follow_up_date: '',
+  });
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -370,6 +386,61 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+  });
+
+  // Fetch client call notes for edit mode
+  const { data: callNotesData } = useQuery({
+    queryKey: ['project-call-notes', numericProjectId],
+    queryFn: () => projectsApi.getCallNotes(numericProjectId as any),
+    enabled: mode === 'edit' && !!numericProjectId && Number(numericProjectId) > 0,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  // Update call note mutation
+  const updateCallNoteMutation = useMutation({
+    mutationFn: async ({ noteId, data }: { noteId: number; data: any }) => {
+      return await projectsApi.updateCallNote(numericProjectId as any, noteId, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project-call-notes', numericProjectId] });
+      toast({ title: "Success", description: "Call note updated successfully." });
+      setShowCallNoteForm(false);
+      setEditingCallNoteId(null);
+      // Format current date/time as YYYY-MM-DDTHH:mm for DateTimePicker
+      const now = new Date();
+      const formattedDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      setCallNoteForm({
+        call_date: formattedDateTime,
+        call_duration_minutes: '',
+        participants: '',
+        notes: '',
+        action_items: '',
+        follow_up_required: false,
+        follow_up_date: '',
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update call note.", variant: "destructive" });
+    },
+  });
+
+  // Delete call note mutation
+  const deleteCallNoteMutation = useMutation({
+    mutationFn: async (noteId: number) => {
+      return await projectsApi.deleteCallNote(numericProjectId as any, noteId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project-call-notes', numericProjectId] });
+      toast({ title: "Success", description: "Call note deleted successfully." });
+      setShowDeleteCallNoteDialog(false);
+      setCallNoteToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete call note.", variant: "destructive" });
+    },
   });
 
   const allUsers = usersData?.data || [];
@@ -507,18 +578,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
       newErrors.name = "Project name is required";
     }
 
-    // Client fields are required for both create and update (if not internal project)
-    if (!formData.is_internal) {
-      if (!formData.client_name.trim()) {
-        newErrors.client_name = "Client name is required";
-      }
-      if (!formData.client_contact_person.trim()) {
-        newErrors.client_contact_person = "Client contact person is required";
-      }
-      if (!formData.client_email.trim()) {
-        newErrors.client_email = "Client email is required";
-      }
-    }
+    // Client fields are optional (no longer required)
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -528,8 +588,10 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     mutationFn: async (data: any) => {
       return await projectsApi.create(data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    onSuccess: async () => {
+      // Invalidate and refetch all project queries
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+      await queryClient.refetchQueries({ queryKey: ['projects'] });
       toast({ title: "Success", description: "Project created successfully." });
       navigate('/projects');
     },
@@ -543,15 +605,18 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+    mutationFn: async ({ id, data }: { id: number | string; data: any }) => {
       return await projectsApi.update(id, data);
     },
     onSuccess: async (response) => {
       // Invalidate all project-related queries first
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['project-activities', projectId] });
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+      await queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
+      await queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
+      await queryClient.invalidateQueries({ queryKey: ['project-activities', projectId] });
+      
+      // Refetch projects list to immediately show changes
+      await queryClient.refetchQueries({ queryKey: ['projects'] });
       
       // Fetch the complete updated project data (includes members, milestones, files)
       // Wait for the API call to complete before navigating
@@ -567,7 +632,8 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
         logger.debug('Cache updated with new project data');
         
         // Invalidate to ensure any other queries refetch
-        queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+        await queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+        await queryClient.refetchQueries({ queryKey: ['project', projectId] });
         
         // Wait a moment to ensure cache update is processed
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -740,15 +806,21 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => navigate('/projects')}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => navigate("/projects")}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <h1 className="text-3xl font-bold">
-              {mode === 'create' ? 'Create New Project' : 'Edit Project'}
+              {mode === "create" ? "Create New Project" : "Edit Project"}
             </h1>
             <p className="text-muted-foreground">
-              {mode === 'create' ? 'Fill in all project details' : 'Update project information'}
+              {mode === "create"
+                ? "Fill in all project details"
+                : "Update project information"}
             </p>
           </div>
         </div>
@@ -759,7 +831,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
         <Card>
           <CardHeader>
             <CardTitle>Project Details</CardTitle>
-            <CardDescription>Project information, timeline, technologies, description, and logo</CardDescription>
+            <CardDescription>
+              Project information, timeline, technologies, description, and logo
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* First Row: Project Name, Priority, Project Status, Risk Level (4 columns) */}
@@ -780,7 +854,10 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   }}
                   onBlur={() => {
                     if (!formData.name.trim()) {
-                      setErrors({ ...errors, name: "Project name is required" });
+                      setErrors({
+                        ...errors,
+                        name: "Project name is required",
+                      });
                     }
                   }}
                   placeholder="Enter project name"
@@ -794,7 +871,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 <Label htmlFor="priority">Priority</Label>
                 <Select
                   value={formData.priority}
-                  onValueChange={(value) => setFormData({ ...formData, priority: value })}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, priority: value })
+                  }
                 >
                   <SelectTrigger id="priority">
                     <SelectValue placeholder="Select priority" />
@@ -811,7 +890,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 <Label htmlFor="status">Project Status</Label>
                 <Select
                   value={formData.status}
-                  onValueChange={(value) => setFormData({ ...formData, status: value })}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, status: value })
+                  }
                 >
                   <SelectTrigger id="status">
                     <SelectValue />
@@ -833,7 +914,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 <Label htmlFor="risk_level">Risk Level</Label>
                 <Select
                   value={formData.risk_level}
-                  onValueChange={(value) => setFormData({ ...formData, risk_level: value })}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, risk_level: value })
+                  }
                 >
                   <SelectTrigger id="risk_level">
                     <SelectValue placeholder="Select risk level" />
@@ -854,7 +937,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 <DatePicker
                   id="start_date"
                   value={formData.start_date}
-                  onChange={(date) => setFormData({ ...formData, start_date: date })}
+                  onChange={(date) =>
+                    setFormData({ ...formData, start_date: date })
+                  }
                   placeholder="Select start date"
                 />
               </div>
@@ -863,7 +948,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 <DatePicker
                   id="end_date"
                   value={formData.end_date}
-                  onChange={(date) => setFormData({ ...formData, end_date: date })}
+                  onChange={(date) =>
+                    setFormData({ ...formData, end_date: date })
+                  }
                   placeholder="Select target end date"
                 />
               </div>
@@ -877,13 +964,22 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   fieldName="Technologies Used"
                   placeholder="Enter technology (press Enter to add)"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    if (e.key === "Enter") {
                       e.preventDefault();
                       const input = e.target as HTMLInputElement;
                       const value = input.value.trim();
-                      if (value && !formData.technologies_used.includes(value)) {
-                        setFormData({ ...formData, technologies_used: [...formData.technologies_used, value] });
-                        input.value = '';
+                      if (
+                        value &&
+                        !formData.technologies_used.includes(value)
+                      ) {
+                        setFormData({
+                          ...formData,
+                          technologies_used: [
+                            ...formData.technologies_used,
+                            value,
+                          ],
+                        });
+                        input.value = "";
                       }
                     }
                   }}
@@ -892,11 +988,22 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
               {formData.technologies_used.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-2">
                   {formData.technologies_used.map((tech) => (
-                    <span key={tech} className="px-2 py-1 bg-primary/10 text-primary rounded text-sm flex items-center gap-1">
+                    <span
+                      key={tech}
+                      className="px-2 py-1 bg-primary/10 text-primary rounded text-sm flex items-center gap-1"
+                    >
                       {tech}
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, technologies_used: formData.technologies_used.filter(t => t !== tech) })}
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            technologies_used:
+                              formData.technologies_used.filter(
+                                (t) => t !== tech
+                              ),
+                          })
+                        }
                         className="ml-1 hover:text-destructive"
                       >
                         <X className="h-3 w-3" />
@@ -912,7 +1019,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
               <Label htmlFor="description">Description</Label>
               <MarkdownEditor
                 value={formData.description}
-                onChange={(value) => setFormData({ ...formData, description: value })}
+                onChange={(value) =>
+                  setFormData({ ...formData, description: value })
+                }
                 placeholder="Enter project description. You can use markdown formatting: headings, lists, code blocks, and images."
                 rows={6}
               />
@@ -934,12 +1043,8 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              {!formData.is_internal ? (
-                <MandatoryLabel htmlFor="client_name">Client Name</MandatoryLabel>
-              ) : (
+              <div className="grid gap-2">
                 <Label htmlFor="client_name">Client Name</Label>
-              )}
                 <SecureInput
                   id="client_name"
                   fieldName="Client Name"
@@ -952,56 +1057,49 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                       setErrors(newErrors);
                     }
                   }}
-                  onBlur={() => {
-                    if (!formData.client_name.trim() && !formData.is_internal) {
-                      setErrors({ ...errors, client_name: "Client name is required" });
-                    }
-                  }}
                   placeholder="Enter client name"
                   className={errors.client_name ? "border-destructive" : ""}
                 />
                 {errors.client_name && (
-                  <p className="text-sm text-destructive">{errors.client_name}</p>
+                  <p className="text-sm text-destructive">
+                    {errors.client_name}
+                  </p>
                 )}
               </div>
               <div className="grid gap-2">
-                {!formData.is_internal ? (
-                  <MandatoryLabel htmlFor="client_contact_person">Client Contact Person</MandatoryLabel>
-                ) : (
-                  <Label htmlFor="client_contact_person">Client Contact Person</Label>
-                )}
+                <Label htmlFor="client_contact_person">
+                  Client Contact Person
+                </Label>
                 <SecureInput
                   id="client_contact_person"
                   fieldName="Client Contact Person"
                   value={formData.client_contact_person}
                   onChange={(e) => {
-                    setFormData({ ...formData, client_contact_person: e.target.value });
+                    setFormData({
+                      ...formData,
+                      client_contact_person: e.target.value,
+                    });
                     if (errors.client_contact_person) {
                       const newErrors = { ...errors };
                       delete newErrors.client_contact_person;
                       setErrors(newErrors);
                     }
                   }}
-                  onBlur={() => {
-                    if (!formData.client_contact_person.trim() && !formData.is_internal) {
-                      setErrors({ ...errors, client_contact_person: "Client contact person is required" });
-                    }
-                  }}
                   placeholder="Enter contact person name"
-                  className={errors.client_contact_person ? "border-destructive" : ""}
+                  className={
+                    errors.client_contact_person ? "border-destructive" : ""
+                  }
                 />
                 {errors.client_contact_person && (
-                  <p className="text-sm text-destructive">{errors.client_contact_person}</p>
+                  <p className="text-sm text-destructive">
+                    {errors.client_contact_person}
+                  </p>
                 )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                {!formData.is_internal ? (
-                  <MandatoryLabel htmlFor="client_email">Client Email</MandatoryLabel>
-                ) : (
-                  <Label htmlFor="client_email">Client Email</Label>
-                )}
+                <Label htmlFor="client_email">Client Email</Label>
                 <SecureInput
                   id="client_email"
                   fieldName="Client Email"
@@ -1015,16 +1113,13 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                       setErrors(newErrors);
                     }
                   }}
-                  onBlur={() => {
-                    if (!formData.client_email.trim() && !formData.is_internal) {
-                      setErrors({ ...errors, client_email: "Client email is required" });
-                    }
-                  }}
                   placeholder="client@example.com"
                   className={errors.client_email ? "border-destructive" : ""}
                 />
                 {errors.client_email && (
-                  <p className="text-sm text-destructive">{errors.client_email}</p>
+                  <p className="text-sm text-destructive">
+                    {errors.client_email}
+                  </p>
                 )}
               </div>
               <div className="grid gap-2">
@@ -1033,7 +1128,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   id="client_phone"
                   fieldName="Client Phone"
                   value={formData.client_phone}
-                  onChange={(e) => setFormData({ ...formData, client_phone: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, client_phone: e.target.value })
+                  }
                   placeholder="+1 (555) 000-0000"
                 />
               </div>
@@ -1057,7 +1154,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
           </CardHeader>
           <CardContent className="space-y-4">
             {formData.milestones.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No milestones added yet</p>
+              <p className="text-sm text-muted-foreground">
+                No milestones added yet
+              </p>
             ) : (
               formData.milestones.map((milestone, index) => (
                 <Card key={index} className="p-4">
@@ -1078,7 +1177,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                       <SecureInput
                         fieldName="Milestone Name"
                         value={milestone.name}
-                        onChange={(e) => updateMilestone(index, 'name', e.target.value)}
+                        onChange={(e) =>
+                          updateMilestone(index, "name", e.target.value)
+                        }
                         placeholder="Enter milestone name"
                       />
                     </div>
@@ -1087,7 +1188,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                         <Label>Start Date</Label>
                         <DatePicker
                           value={milestone.start_date}
-                          onChange={(date) => updateMilestone(index, 'start_date', date)}
+                          onChange={(date) =>
+                            updateMilestone(index, "start_date", date)
+                          }
                           placeholder="Select start date"
                         />
                       </div>
@@ -1095,7 +1198,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                         <Label>End Date</Label>
                         <DatePicker
                           value={milestone.end_date}
-                          onChange={(date) => updateMilestone(index, 'end_date', date)}
+                          onChange={(date) =>
+                            updateMilestone(index, "end_date", date)
+                          }
                           placeholder="Select end date"
                         />
                       </div>
@@ -1104,14 +1209,20 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                       <Label>Status</Label>
                       <Select
                         value={milestone.status}
-                        onValueChange={(value) => updateMilestone(index, 'status', value)}
+                        onValueChange={(value) =>
+                          updateMilestone(index, "status", value)
+                        }
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Not Started">Not Started</SelectItem>
-                          <SelectItem value="In Progress">In Progress</SelectItem>
+                          <SelectItem value="Not Started">
+                            Not Started
+                          </SelectItem>
+                          <SelectItem value="In Progress">
+                            In Progress
+                          </SelectItem>
                           <SelectItem value="Completed">Completed</SelectItem>
                           <SelectItem value="Delayed">Delayed</SelectItem>
                           <SelectItem value="Cancelled">Cancelled</SelectItem>
@@ -1136,11 +1247,11 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
               <Select
                 value={formData.team_lead_id}
                 onValueChange={(value) => {
-                  setFormData({ 
-                    ...formData, 
+                  setFormData({
+                    ...formData,
                     team_lead_id: value,
                     member_ids: [],
-                    member_roles: {}
+                    member_roles: {},
                   });
                 }}
               >
@@ -1159,7 +1270,8 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
             <div className="grid gap-2">
               <Label>Assigned Members (Optional)</Label>
               <p className="text-xs text-muted-foreground mb-2">
-                Select employees and clients to assign to this project. Clients will have read-only access.
+                Select employees and clients to assign to this project. Clients
+                will have read-only access.
               </p>
               <div className="border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
                 {assignableUsers.length === 0 ? (
@@ -1170,57 +1282,95 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                           No employees are currently assigned to this team lead.
                         </p>
                         <p className="text-xs text-muted-foreground italic">
-                          You can proceed without assigning members now. Members can be added later.
+                          You can proceed without assigning members now. Members
+                          can be added later.
                         </p>
                         <p className="text-xs text-muted-foreground mt-2">
-                          Note: Make sure employees have their "Reports To" field set to this team lead in their employee profile.
+                          Note: Make sure employees have their "Reports To"
+                          field set to this team lead in their employee profile.
                         </p>
                       </div>
                     ) : (
                       <p className="text-muted-foreground">
-                        Select a team lead to see available employees, or CLIENT users will appear automatically.
+                        Select a team lead to see available employees, or CLIENT
+                        users will appear automatically.
                       </p>
                     )}
                   </div>
                 ) : (
                   assignableUsers.map((user: any) => {
-                    const isSelected = formData.member_ids.includes(user.id.toString());
+                    const isSelected = formData.member_ids.includes(
+                      user.id.toString()
+                    );
                     const roleMap: Record<string, string> = {
-                      'Team Lead': 'TL',
-                      'Developer': 'Developer',
-                      'Tester': 'QA',
-                      'Designer': 'Designer',
-                      'CLIENT': 'Client',
-                      'Client': 'Client',
+                      "Team Lead": "TL",
+                      Developer: "Developer",
+                      Tester: "QA",
+                      Designer: "Designer",
+                      CLIENT: "Client",
+                      Client: "Client",
                     };
                     const displayRole = roleMap[user.role] || user.role;
-                    const isClient = user.is_client || user.role === 'CLIENT' || user.role === 'Client';
+                    const isClient =
+                      user.is_client ||
+                      user.role === "CLIENT" ||
+                      user.role === "Client";
                     return (
-                      <div 
-                        key={user.id} 
+                      <div
+                        key={user.id}
                         className={`flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${
-                          isSelected ? 'bg-primary/10 border border-primary' : 'hover:bg-muted border border-transparent'
-                        } ${isClient ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
-                        onClick={() => toggleMember(user.id.toString(), user.role)}
+                          isSelected
+                            ? "bg-primary/10 border border-primary"
+                            : "hover:bg-muted border border-transparent"
+                        } ${
+                          isClient ? "bg-blue-50/50 dark:bg-blue-900/10" : ""
+                        }`}
+                        onClick={() =>
+                          toggleMember(user.id.toString(), user.role)
+                        }
                       >
                         <div className="flex items-center space-x-2">
-                          <div className={`h-4 w-4 rounded border-2 flex items-center justify-center ${
-                            isSelected ? 'bg-primary border-primary' : 'border-muted-foreground'
-                          }`}>
+                          <div
+                            className={`h-4 w-4 rounded border-2 flex items-center justify-center ${
+                              isSelected
+                                ? "bg-primary border-primary"
+                                : "border-muted-foreground"
+                            }`}
+                          >
                             {isSelected && (
-                              <svg className="h-3 w-3 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              <svg
+                                className="h-3 w-3 text-primary-foreground"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                  clipRule="evenodd"
+                                />
                               </svg>
                             )}
                           </div>
                           <div>
-                            <span className="text-sm font-medium">{user.name}</span>
-                            <span className="text-xs text-muted-foreground ml-2">({user.email})</span>
-                            <span className={`text-xs ml-2 ${isClient ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-muted-foreground'}`}>
+                            <span className="text-sm font-medium">
+                              {user.name}
+                            </span>
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({user.email})
+                            </span>
+                            <span
+                              className={`text-xs ml-2 ${
+                                isClient
+                                  ? "text-blue-600 dark:text-blue-400 font-medium"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
                               • {displayRole}
                             </span>
                             {isClient && (
-                              <span className="text-xs text-blue-600 dark:text-blue-400 ml-1">(Read-only)</span>
+                              <span className="text-xs text-blue-600 dark:text-blue-400 ml-1">
+                                (Read-only)
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1234,14 +1384,16 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
         </Card>
 
         {/* Documents Upload */}
-        {mode === 'edit' && projectId && (
+        {mode === "edit" && projectId && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
                 Project Documents
               </CardTitle>
-              <CardDescription>Upload and manage project documents</CardDescription>
+              <CardDescription>
+                Upload and manage project documents
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-4">
@@ -1264,7 +1416,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                         const files = Array.from(e.target.files);
                         setPendingFiles(files);
                         setShowUploadDialog(true);
-                        e.target.value = '';
+                        e.target.value = "";
                       }
                     }}
                   />
@@ -1274,23 +1426,39 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                     <Label>Uploaded Documents</Label>
                     <div className="border rounded-md divide-y">
                       {uploadedFiles.map((file: any) => {
-                        const extension = file.file_name.split('.').pop()?.toLowerCase() || '';
-                        const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico'].includes(extension);
-                        const fileUrl = getImageUrl(file.file_url) || file.file_url;
-                        
+                        const extension =
+                          file.file_name.split(".").pop()?.toLowerCase() || "";
+                        const isImage = [
+                          "jpg",
+                          "jpeg",
+                          "png",
+                          "gif",
+                          "bmp",
+                          "svg",
+                          "webp",
+                          "ico",
+                        ].includes(extension);
+                        const fileUrl =
+                          getImageUrl(file.file_url) || file.file_url;
+
                         return (
-                          <div key={file.id} className="p-3 flex items-center justify-between">
+                          <div
+                            key={file.id}
+                            className="p-3 flex items-center justify-between"
+                          >
                             <div className="flex items-center gap-2">
                               {isImage && fileUrl ? (
-                                <img 
-                                  src={fileUrl} 
+                                <img
+                                  src={fileUrl}
                                   alt={file.file_name}
                                   className="h-8 w-8 rounded object-cover border"
                                   onError={(e) => {
                                     // Fallback to icon if image fails
-                                    const parent = e.currentTarget.parentElement;
+                                    const parent =
+                                      e.currentTarget.parentElement;
                                     if (parent) {
-                                      parent.innerHTML = '<FileText className="h-4 w-4 text-muted-foreground" />';
+                                      parent.innerHTML =
+                                        '<FileText className="h-4 w-4 text-muted-foreground" />';
                                     }
                                   }}
                                 />
@@ -1299,13 +1467,23 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                               )}
                               <span className="text-sm">{file.file_name}</span>
                               {file.description && (
-                                <span className="text-xs text-muted-foreground">- {file.description}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  - {file.description}
+                                </span>
                               )}
                             </div>
                             <div className="flex items-center gap-2">
                               {fileUrl && (
-                                <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-                                  <Button type="button" variant="ghost" size="icon">
+                                <a
+                                  href={fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                  >
                                     <Download className="h-4 w-4" />
                                   </Button>
                                 </a>
@@ -1316,18 +1494,25 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                                 size="icon"
                                 onClick={async () => {
                                   try {
-                                    const resolvedId = (numericProjectId ?? fetchId) as any;
-                                    await projectsApi.deleteFile(resolvedId, file.id);
+                                    const resolvedId = (numericProjectId ??
+                                      fetchId) as any;
+                                    await projectsApi.deleteFile(
+                                      resolvedId,
+                                      file.id
+                                    );
                                     toast({
                                       title: "Success",
                                       description: "File deleted successfully",
                                     });
-                                    const filesData = await projectsApi.getFiles(resolvedId);
+                                    const filesData =
+                                      await projectsApi.getFiles(resolvedId);
                                     setUploadedFiles(filesData.data || []);
                                   } catch (error: any) {
                                     toast({
                                       title: "Error",
-                                      description: error.message || "Failed to delete file",
+                                      description:
+                                        error.message ||
+                                        "Failed to delete file",
                                       variant: "destructive",
                                     });
                                   }
@@ -1347,37 +1532,489 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
           </Card>
         )}
 
+        {/* Client Call Notes - Only show in edit mode */}
+        {mode === "edit" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="h-5 w-5" />
+                Client Call Notes ({callNotesData?.data?.length || 0})
+              </CardTitle>
+              <CardDescription>
+                Manage client call notes and meeting records
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {callNotesData?.data && callNotesData.data.length > 0 && (
+                <div className="space-y-2">
+                  {callNotesData.data.map((note: any, index: number) => (
+                    <div key={note.id || index} className="p-3 border rounded">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="font-semibold">
+                            {note.call_date
+                              ? new Date(note.call_date).toLocaleString()
+                              : "No date"}
+                          </div>
+                          {note.call_duration_minutes && (
+                            <div className="text-sm text-muted-foreground">
+                              Duration: {note.call_duration_minutes} minutes
+                            </div>
+                          )}
+                          {note.created_by_name && (
+                            <div className="text-xs text-muted-foreground">
+                              Recorded by: {note.created_by_name}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="icon"
+                            type="button" 
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingCallNoteId(note.id);
+                              // Convert call_date to YYYY-MM-DDTHH:mm format for DateTimePicker
+                              let callDateTime = "";
+                              if (note.call_date) {
+                                const date = new Date(note.call_date);
+                                if (!isNaN(date.getTime())) {
+                                  callDateTime = `${date.getFullYear()}-${String(
+                                    date.getMonth() + 1
+                                  ).padStart(2, "0")}-${String(
+                                    date.getDate()
+                                  ).padStart(2, "0")}T${String(
+                                    date.getHours()
+                                  ).padStart(2, "0")}:${String(
+                                    date.getMinutes()
+                                  ).padStart(2, "0")}`;
+                                }
+                              }
+                              if (!callDateTime) {
+                                const now = new Date();
+                                callDateTime = `${now.getFullYear()}-${String(
+                                  now.getMonth() + 1
+                                ).padStart(2, "0")}-${String(
+                                  now.getDate()
+                                ).padStart(2, "0")}T${String(
+                                  now.getHours()
+                                ).padStart(2, "0")}:${String(
+                                  now.getMinutes()
+                                ).padStart(2, "0")}`;
+                              }
+                              // Convert follow_up_date to YYYY-MM-DD format for DatePicker
+                              let followUpDate = "";
+                              if (note.follow_up_date) {
+                                const date = new Date(note.follow_up_date);
+                                if (!isNaN(date.getTime())) {
+                                  followUpDate = date
+                                    .toISOString()
+                                    .split("T")[0];
+                                }
+                              }
+                              setCallNoteForm({
+                                call_date: callDateTime,
+                                call_duration_minutes:
+                                  note.call_duration_minutes?.toString() || "",
+                                participants: note.participants || "",
+                                notes: note.notes || "",
+                                action_items: note.action_items || "",
+                                follow_up_required:
+                                  note.follow_up_required || false,
+                                follow_up_date: followUpDate,
+                              });
+                              setShowCallNoteForm(true);
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            title="Delete Call Note"
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setCallNoteToDelete(note.id);
+                              setShowDeleteCallNoteDialog(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                      {note.participants && (
+                        <div className="text-sm mb-2">
+                          <span className="font-medium">Participants: </span>
+                          {note.participants}
+                        </div>
+                      )}
+                      <p className="text-sm mb-2">{note.notes}</p>
+                      {note.action_items && (
+                        <div className="text-sm mb-2">
+                          <span className="font-medium">Action Items: </span>
+                          {note.action_items}
+                        </div>
+                      )}
+                      <div className="text-sm text-muted-foreground">
+                        {note.follow_up_required ? (
+                          note.follow_up_date ? (
+                            `Follow-up Date: ${new Date(note.follow_up_date).toLocaleDateString()}`
+                          ) : (
+                            "Follow-up required"
+                          )
+                        ) : (
+                          "Follow-up: No need"
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!showCallNoteForm ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingCallNoteId(null);
+                    // Format current date/time as YYYY-MM-DDTHH:mm for DateTimePicker
+                    const now = new Date();
+                    const formattedDateTime = `${now.getFullYear()}-${String(
+                      now.getMonth() + 1
+                    ).padStart(2, "0")}-${String(now.getDate()).padStart(
+                      2,
+                      "0"
+                    )}T${String(now.getHours()).padStart(2, "0")}:${String(
+                      now.getMinutes()
+                    ).padStart(2, "0")}`;
+                    setCallNoteForm({
+                      call_date: formattedDateTime,
+                      call_duration_minutes: "",
+                      participants: "",
+                      notes: "",
+                      action_items: "",
+                      follow_up_required: false,
+                      follow_up_date: "",
+                    });
+                    setShowCallNoteForm(true);
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Call Note
+                </Button>
+              ) : (
+                <div className="grid gap-4 border-t pt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <MandatoryLabel htmlFor="call_date">
+                        Call Date & Time
+                      </MandatoryLabel>
+                      <DateTimePicker
+                        id="call_date"
+                        value={callNoteForm.call_date}
+                        onChange={(datetime) =>
+                          setCallNoteForm({
+                            ...callNoteForm,
+                            call_date: datetime,
+                          })
+                        }
+                        placeholder="Select call date and time"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="call_duration_minutes">
+                        Duration (Minutes)
+                      </Label>
+                      <Input
+                        id="call_duration_minutes"
+                        type="number"
+                        value={callNoteForm.call_duration_minutes}
+                        onChange={(e) =>
+                          setCallNoteForm({
+                            ...callNoteForm,
+                            call_duration_minutes: e.target.value,
+                          })
+                        }
+                        placeholder="e.g., 30"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="participants">Participants</Label>
+                    <Input
+                      id="participants"
+                      value={callNoteForm.participants}
+                      onChange={(e) =>
+                        setCallNoteForm({
+                          ...callNoteForm,
+                          participants: e.target.value,
+                        })
+                      }
+                      placeholder="Comma-separated list of participants"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <MandatoryLabel htmlFor="notes">Notes</MandatoryLabel>
+                    <SecureTextarea
+                      fieldName="Call Notes"
+                      value={callNoteForm.notes}
+                      onChange={(e) =>
+                        setCallNoteForm({
+                          ...callNoteForm,
+                          notes: e.target.value,
+                        })
+                      }
+                      rows={4}
+                      placeholder="Enter call notes..."
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="action_items">Action Items</Label>
+                    <SecureTextarea
+                      fieldName="Action Items"
+                      value={callNoteForm.action_items}
+                      onChange={(e) =>
+                        setCallNoteForm({
+                          ...callNoteForm,
+                          action_items: e.target.value,
+                        })
+                      }
+                      rows={2}
+                      placeholder="Enter action items..."
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="follow_up_required"
+                      checked={callNoteForm.follow_up_required}
+                      onChange={(e) =>
+                        setCallNoteForm({
+                          ...callNoteForm,
+                          follow_up_required: e.target.checked,
+                          follow_up_date: e.target.checked
+                            ? callNoteForm.follow_up_date
+                            : "",
+                        })
+                      }
+                      className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                    />
+                    <Label htmlFor="follow_up_required">
+                      Follow-up Required
+                    </Label>
+                  </div>
+                  {callNoteForm.follow_up_required && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="follow_up_date">Follow-up Date</Label>
+                      <DatePicker
+                        id="follow_up_date"
+                        value={callNoteForm.follow_up_date}
+                        onChange={(date) =>
+                          setCallNoteForm({
+                            ...callNoteForm,
+                            follow_up_date: date,
+                          })
+                        }
+                        placeholder="Select follow-up date"
+                      />
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowCallNoteForm(false);
+                        setEditingCallNoteId(null);
+                        // Format current date/time as YYYY-MM-DDTHH:mm for DateTimePicker
+                        const now = new Date();
+                        const formattedDateTime = `${now.getFullYear()}-${String(
+                          now.getMonth() + 1
+                        ).padStart(2, "0")}-${String(now.getDate()).padStart(
+                          2,
+                          "0"
+                        )}T${String(now.getHours()).padStart(2, "0")}:${String(
+                          now.getMinutes()
+                        ).padStart(2, "0")}`;
+                        setCallNoteForm({
+                          call_date: formattedDateTime,
+                          call_duration_minutes: "",
+                          participants: "",
+                          notes: "",
+                          action_items: "",
+                          follow_up_required: false,
+                          follow_up_date: "",
+                        });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        if (
+                          !callNoteForm.call_date ||
+                          !callNoteForm.notes.trim()
+                        ) {
+                          toast({
+                            title: "Validation Error",
+                            description: "Call date and notes are required.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        if (numericProjectId) {
+                          // Convert call_date from YYYY-MM-DDTHH:mm to ISO string
+                          let callDateISO = "";
+                          if (callNoteForm.call_date) {
+                            try {
+                              const dateTime = new Date(callNoteForm.call_date);
+                              if (!isNaN(dateTime.getTime())) {
+                                callDateISO = dateTime.toISOString();
+                              }
+                            } catch (e) {
+                              // Invalid date, will be caught by validation
+                            }
+                          }
+
+                          // Convert follow_up_date from YYYY-MM-DD to ISO string if follow_up_required is true
+                          let followUpDateISO = null;
+                          if (
+                            callNoteForm.follow_up_required &&
+                            callNoteForm.follow_up_date
+                          ) {
+                            try {
+                              const date = new Date(
+                                callNoteForm.follow_up_date + "T00:00:00"
+                              );
+                              if (!isNaN(date.getTime())) {
+                                followUpDateISO = date.toISOString();
+                              }
+                            } catch (e) {
+                              // Invalid date, keep as null
+                            }
+                          }
+
+                          const payload = {
+                            call_date: callDateISO,
+                            call_duration_minutes:
+                              callNoteForm.call_duration_minutes
+                                ? parseInt(callNoteForm.call_duration_minutes)
+                                : null,
+                            participants: callNoteForm.participants || null,
+                            notes: callNoteForm.notes,
+                            action_items: callNoteForm.action_items || null,
+                            follow_up_required: callNoteForm.follow_up_required,
+                            follow_up_date: followUpDateISO,
+                          };
+                          if (editingCallNoteId) {
+                            updateCallNoteMutation.mutate({
+                              noteId: editingCallNoteId,
+                              data: payload,
+                            });
+                          } else {
+                            try {
+                              await projectsApi.createCallNote(
+                                numericProjectId,
+                                payload
+                              );
+                              toast({
+                                title: "Success",
+                                description: "Call note added successfully.",
+                              });
+                              // Format current date/time as YYYY-MM-DDTHH:mm for DateTimePicker
+                              const now = new Date();
+                              const formattedDateTime = `${now.getFullYear()}-${String(
+                                now.getMonth() + 1
+                              ).padStart(2, "0")}-${String(
+                                now.getDate()
+                              ).padStart(2, "0")}T${String(
+                                now.getHours()
+                              ).padStart(2, "0")}:${String(
+                                now.getMinutes()
+                              ).padStart(2, "0")}`;
+                              setCallNoteForm({
+                                call_date: formattedDateTime,
+                                call_duration_minutes: "",
+                                participants: "",
+                                notes: "",
+                                action_items: "",
+                                follow_up_required: false,
+                                follow_up_date: "",
+                              });
+                              setShowCallNoteForm(false);
+                              queryClient.invalidateQueries({
+                                queryKey: [
+                                  "project-call-notes",
+                                  numericProjectId,
+                                ],
+                              });
+                            } catch (error: any) {
+                              toast({
+                                title: "Error",
+                                description:
+                                  error.message || "Failed to add call note.",
+                                variant: "destructive",
+                              });
+                            }
+                          }
+                        }
+                      }}
+                      disabled={updateCallNoteMutation.isPending}
+                    >
+                      <Save className="mr-2 h-4 w-4" />
+                      {updateCallNoteMutation.isPending
+                        ? "Saving..."
+                        : editingCallNoteId
+                        ? "Update Call Note"
+                        : "Add Call Note"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Comments */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
-              Comments ({mode === 'edit' ? (commentsData?.data?.length || 0) : formData.comments.length})
+              Comments (
+              {mode === "edit"
+                ? commentsData?.data?.length || 0
+                : formData.comments.length}
+              )
             </CardTitle>
             <CardDescription>Add project comments</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {mode === 'edit' && commentsData?.data && commentsData.data.length > 0 && (
-              <div className="space-y-2">
-                {commentsData.data.map((comment: any, index: number) => (
-                  <CommentItemEdit 
-                    key={comment.id || index} 
-                    comment={comment} 
-                    projectId={numericProjectId!} 
-                    queryClient={queryClient}
-                  />
-                ))}
-              </div>
-            )}
-            {mode === 'create' && formData.comments.length > 0 && (
+            {mode === "edit" &&
+              commentsData?.data &&
+              commentsData.data.length > 0 && (
+                <div className="space-y-2">
+                  {commentsData.data.map((comment: any, index: number) => (
+                    <CommentItemEdit
+                      key={comment.id || index}
+                      comment={comment}
+                      projectId={numericProjectId!}
+                      queryClient={queryClient}
+                    />
+                  ))}
+                </div>
+              )}
+            {mode === "create" && formData.comments.length > 0 && (
               <div className="space-y-2">
                 {formData.comments.map((comment, index) => (
                   <div key={index} className="p-3 border rounded">
                     <div className="flex items-center justify-between mb-2">
                       <div>
-                        <div className="font-medium">{comment.comment_type}</div>
+                        <div className="font-medium">
+                          {comment.comment_type}
+                        </div>
                         <div className="text-xs text-muted-foreground">
-                          {comment.is_internal ? 'Internal' : 'Client Visible'}
+                          {comment.is_internal ? "Internal" : "Client Visible"}
                         </div>
                       </div>
                       <Button
@@ -1398,7 +2035,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 ))}
               </div>
             )}
-            
+
             {!showCommentForm ? (
               <Button
                 type="button"
@@ -1414,7 +2051,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   <Label>Comment Type</Label>
                   <Select
                     value={commentForm.comment_type}
-                    onValueChange={(value) => setCommentForm({ ...commentForm, comment_type: value })}
+                    onValueChange={(value) =>
+                      setCommentForm({ ...commentForm, comment_type: value })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1434,7 +2073,12 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   <SecureTextarea
                     fieldName="Comment"
                     value={commentForm.comment}
-                    onChange={(e) => setCommentForm({ ...commentForm, comment: e.target.value })}
+                    onChange={(e) =>
+                      setCommentForm({
+                        ...commentForm,
+                        comment: e.target.value,
+                      })
+                    }
                     rows={4}
                     placeholder="Enter comment..."
                   />
@@ -1445,7 +2089,11 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                     variant="outline"
                     onClick={() => {
                       setShowCommentForm(false);
-                      setCommentForm({ comment: '', comment_type: 'General', is_internal: false });
+                      setCommentForm({
+                        comment: "",
+                        comment_type: "General",
+                        is_internal: false,
+                      });
                     }}
                   >
                     Cancel
@@ -1455,23 +2103,33 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                     onClick={async () => {
                       if (commentForm.comment.trim() && projectId) {
                         try {
-                          await projectsApi.createComment(numericProjectId as any, {
-                            comment: commentForm.comment,
-                            comment_type: commentForm.comment_type,
-                            is_internal: commentForm.is_internal
-                          });
+                          await projectsApi.createComment(
+                            numericProjectId as any,
+                            {
+                              comment: commentForm.comment,
+                              comment_type: commentForm.comment_type,
+                              is_internal: commentForm.is_internal,
+                            }
+                          );
                           toast({
                             title: "Success",
                             description: "Comment added successfully.",
                           });
-                          setCommentForm({ comment: '', comment_type: 'General', is_internal: false });
+                          setCommentForm({
+                            comment: "",
+                            comment_type: "General",
+                            is_internal: false,
+                          });
                           setShowCommentForm(false);
                           // Refresh comments to show new comment
-                          queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
+                          queryClient.invalidateQueries({
+                            queryKey: ["project-comments", projectId],
+                          });
                         } catch (error: any) {
                           toast({
                             title: "Error",
-                            description: error.message || "Failed to add comment.",
+                            description:
+                              error.message || "Failed to add comment.",
                             variant: "destructive",
                           });
                         }
@@ -1479,9 +2137,13 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                         // For create mode, add to form data
                         setFormData({
                           ...formData,
-                          comments: [...formData.comments, { ...commentForm }]
+                          comments: [...formData.comments, { ...commentForm }],
                         });
-                        setCommentForm({ comment: '', comment_type: 'General', is_internal: false });
+                        setCommentForm({
+                          comment: "",
+                          comment_type: "General",
+                          is_internal: false,
+                        });
                         setShowCommentForm(false);
                       }
                     }}
@@ -1495,7 +2157,6 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
           </CardContent>
         </Card>
 
-
         {/* Integrations */}
         <Card>
           <CardHeader>
@@ -1508,17 +2169,26 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 id="github_repo_url"
                 fieldName="GitHub Repo URL"
                 value={formData.github_repo_url}
-                onChange={(e) => setFormData({ ...formData, github_repo_url: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, github_repo_url: e.target.value })
+                }
                 placeholder="https://github.com/username/repo or https://bitbucket.org/username/repo"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="bitbucket_repo_url">Code Repo URL (Backend)</Label>
+              <Label htmlFor="bitbucket_repo_url">
+                Code Repo URL (Backend)
+              </Label>
               <SecureInput
                 id="bitbucket_repo_url"
                 fieldName="Bitbucket Repo URL"
                 value={formData.bitbucket_repo_url}
-                onChange={(e) => setFormData({ ...formData, bitbucket_repo_url: e.target.value })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    bitbucket_repo_url: e.target.value,
+                  })
+                }
                 placeholder="https://github.com/username/repo or https://bitbucket.org/username/repo"
               />
             </div>
@@ -1527,25 +2197,36 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
 
         {/* Form Actions */}
         <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => navigate('/projects')}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("/projects")}
+          >
             Cancel
           </Button>
-          <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-            {createMutation.isPending || updateMutation.isPending 
-              ? (mode === 'create' ? "Creating..." : "Saving...") 
-              : (mode === 'create' ? "Create Project" : "Save Changes")}
+          <Button
+            type="submit"
+            disabled={createMutation.isPending || updateMutation.isPending}
+          >
+            {createMutation.isPending || updateMutation.isPending
+              ? mode === "create"
+                ? "Creating..."
+                : "Saving..."
+              : mode === "create"
+              ? "Create Project"
+              : "Save Changes"}
           </Button>
         </div>
       </form>
 
       {/* Upload Confirmation Dialog */}
-      {mode === 'edit' && projectId && (
+      {mode === "edit" && projectId && (
         <AlertDialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Upload Documents</AlertDialogTitle>
               <AlertDialogDescription>
-                {pendingFiles.length === 1 
+                {pendingFiles.length === 1
                   ? `Are you sure you want to upload "${pendingFiles[0].name}"?`
                   : `Are you sure you want to upload ${pendingFiles.length} files?`}
                 <div className="mt-2 space-y-1">
@@ -1558,10 +2239,12 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => {
-                setShowUploadDialog(false);
-                setPendingFiles([]);
-              }}>
+              <AlertDialogCancel
+                onClick={() => {
+                  setShowUploadDialog(false);
+                  setPendingFiles([]);
+                }}
+              >
                 Cancel
               </AlertDialogCancel>
               <AlertDialogAction
@@ -1569,21 +2252,24 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   try {
                     for (const file of pendingFiles) {
                       const formData = new FormData();
-                      formData.append('file', file);
-                      formData.append('file_type', 'Other');
-                      formData.append('file_category', 'project_document');
-                      
+                      formData.append("file", file);
+                      formData.append("file_type", "Other");
+                      formData.append("file_category", "project_document");
+
                       const resolvedId = (numericProjectId ?? fetchId) as any;
                       await projectsApi.uploadFile(resolvedId, formData);
                     }
                     toast({
                       title: "Success",
-                      description: pendingFiles.length === 1 
-                        ? `${pendingFiles[0].name} uploaded successfully`
-                        : `${pendingFiles.length} files uploaded successfully`,
+                      description:
+                        pendingFiles.length === 1
+                          ? `${pendingFiles[0].name} uploaded successfully`
+                          : `${pendingFiles.length} files uploaded successfully`,
                     });
                     // Refresh files list
-                    const filesData = await projectsApi.getFiles((numericProjectId ?? fetchId) as any);
+                    const filesData = await projectsApi.getFiles(
+                      (numericProjectId ?? fetchId) as any
+                    );
                     setUploadedFiles(filesData.data || []);
                     setShowUploadDialog(false);
                     setPendingFiles([]);
@@ -1602,6 +2288,33 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
           </AlertDialogContent>
         </AlertDialog>
       )}
+      <AlertDialog
+        open={showDeleteCallNoteDialog}
+        onOpenChange={setShowDeleteCallNoteDialog}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Call Note</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this call note? This action cannot
+              be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (callNoteToDelete && numericProjectId) {
+                  deleteCallNoteMutation.mutate(callNoteToDelete);
+                }
+              }}
+              disabled={deleteCallNoteMutation.isPending}
+            >
+              {deleteCallNoteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <SecurityAlertDialog {...securityAlertProps} />
     </div>
   );

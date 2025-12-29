@@ -6,6 +6,7 @@ import { notifyTaskAssigned, notifyTaskComment } from '../utils/notificationServ
 import { logger } from '../utils/logger.js';
 import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
 import { columnExists } from '../utils/dbHealthCheck.js';
+import { canTransitionTaskStatus } from '../utils/statusPermissions.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';

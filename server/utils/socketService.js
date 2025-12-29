@@ -83,43 +83,6 @@ export function initializeSocketIO(server) {
   io.on('connection', (socket) => {
     logger.info(`Socket connected: User ${socket.userId} (${socket.userName})`);
 
-    // Join board room
-    socket.on('kanban:join_board', async (boardId) => {
-      try {
-        // Verify user has access to board
-        const [members] = await db.query(
-          'SELECT * FROM kanban_board_members WHERE board_id = ? AND user_id = ?',
-          [boardId, socket.userId]
-        );
-
-        // Allow if user is admin/super admin
-        if (socket.userRole === 'Super Admin' || socket.userRole === 'Admin') {
-          socket.join(`board:${boardId}`);
-          logger.debug(`User ${socket.userId} joined board ${boardId} (admin)`);
-          return;
-        }
-
-        if (members.length === 0) {
-          logger.warn(`User ${socket.userId} attempted to join board ${boardId} without access`);
-          socket.emit('kanban:error', { message: 'Access denied to board' });
-          return;
-        }
-
-        socket.join(`board:${boardId}`);
-        logger.debug(`User ${socket.userId} joined board ${boardId}`);
-        socket.emit('kanban:joined_board', { boardId });
-      } catch (error) {
-        logger.error('Error joining board:', error);
-        socket.emit('kanban:error', { message: 'Failed to join board' });
-      }
-    });
-
-    // Leave board room
-    socket.on('kanban:leave_board', (boardId) => {
-      socket.leave(`board:${boardId}`);
-      logger.debug(`User ${socket.userId} left board ${boardId}`);
-    });
-
     // Periodic check for user deactivation (every 30 seconds)
     const deactivationCheck = setInterval(async () => {
       try {
@@ -165,21 +128,6 @@ export function getSocketIO() {
   return io;
 }
 
-/**
- * Emit event to board room
- * @param {number} boardId - Board ID
- * @param {string} event - Event name
- * @param {Object} data - Event data
- */
-export function emitToBoard(boardId, event, data) {
-  if (!io) {
-    logger.warn('Socket.IO not initialized, cannot emit event');
-    return;
-  }
-
-  io.to(`board:${boardId}`).emit(event, data);
-  logger.debug(`Emitted ${event} to board ${boardId}`);
-}
 
 /**
  * Emit event to all connected clients

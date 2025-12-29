@@ -242,21 +242,17 @@ export async function validateUserCreation(creatorUserId, newUserRoleId, newUser
     
     // Validation Rules
     if (creatorLevel === 0) {
-      // Super Admin (Level 0) can only create Level 1 users
-      // Exception: Developer role (Level 2) is allowed for Super Admin
+      // Super Admin (Level 0) can create Level 1 and Level 2 users
       // Note: This uses the level from roles table (set in Roles & Positions page)
-      const allowedLevel2ForSuperAdmin = ['Developer'];
-      const isAllowedException = allowedLevel2ForSuperAdmin.includes(newUserRole.name);
-      
-      if (newUserLevel !== 1 && !isAllowedException) {
+      if (newUserLevel !== 1 && newUserLevel !== 2) {
         const superAdminRole = await getSuperAdminRole();
         const roleName = superAdminRole ? superAdminRole.name : 'Super Admin';
         return {
           valid: false,
-          error: `${roleName} can only create Level 1 users (Managers/Admins) or Developer. Selected role "${newUserRole.name}" has level ${newUserLevel || 'NULL'} which is not allowed.`
+          error: `${roleName} can only create Level 1 or Level 2 users. Selected role "${newUserRole.name}" has level ${newUserLevel || 'NULL'} which is not allowed.`
         };
       }
-      logger.debug(`✅ Super Admin can create ${isAllowedException ? 'Developer (Level 2 exception)' : 'Level 1 user'} - Role: ${newUserRole.name}, Level: ${newUserLevel}`);
+      logger.debug(`✅ Super Admin can create Level ${newUserLevel} user - Role: ${newUserRole.name}, Level: ${newUserLevel}`);
     } else if (creatorLevel === 1) {
       // Level 1 users can only create Level 2 users (their employees)
       if (newUserLevel !== 2) {

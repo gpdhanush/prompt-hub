@@ -27,3 +27,7 @@ server/config/firebase*.json
 *.njsproj
 *.sln
 *.sw?
+
+# Database consolidation artifacts
+/database/_schema_extracted/
+/database/_reports/*.tmp

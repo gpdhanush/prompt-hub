@@ -80,8 +80,10 @@ export default function Tasks() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: tasksApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    onSuccess: async () => {
+      // Invalidate and refetch to immediately show changes
+      await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      await queryClient.refetchQueries({ queryKey: ['tasks'] });
       toast({ title: "Success", description: "Task deleted successfully." });
       setShowDeleteDialog(false);
       setSelectedTask(null);
