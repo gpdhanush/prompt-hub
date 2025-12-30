@@ -32,18 +32,17 @@ export const API_CONFIG = {
 /**
  * Static Assets Configuration
  * 
- * For separate hosting (CDN or static server):
- * - Set VITE_STATIC_URL to your static file server URL
- * - Example: VITE_STATIC_URL=https://cdn.example.com or https://static.example.com
+ * Always uses VITE_API_URL without /api suffix for displaying uploaded images.
  * 
- * For same server hosting:
- * - Leave VITE_STATIC_URL empty (uses SERVER_URL which is API_BASE_URL without /api)
- * - Example: API_BASE_URL=https://api.example.com/api -> Static URL=https://api.example.com
+ * Example:
+ * - VITE_API_URL=https://pms-api.prasowlabs.in/api
+ * - SERVER_URL=https://pms-api.prasowlabs.in (without /api)
+ * - Image URL: https://pms-api.prasowlabs.in/uploads/profile-photos/file.jpg
  * 
  * Display URLs will be: STATIC_CONFIG.BASE_URL + /uploads/PATH_URL
  */
 export const STATIC_CONFIG = {
-  BASE_URL: import.meta.env.VITE_STATIC_URL || API_CONFIG.SERVER_URL,
+  BASE_URL: API_CONFIG.SERVER_URL,
 } as const;
 
 /**

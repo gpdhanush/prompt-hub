@@ -30,72 +30,40 @@ This application handles file uploads (images, documents, etc.) with support for
 ### Environment Variables
 
 #### `VITE_API_URL` (Required)
-Base URL for API endpoints (includes `/api` suffix).
+Base URL for API endpoints (includes `/api` suffix). This is also used to construct image URLs by removing `/api`.
 
 ```env
 # Development
 VITE_API_URL=http://localhost:3001/api
 
 # Production
-VITE_API_URL=https://api.example.com/api
+VITE_API_URL=https://pms-api.prasowlabs.in/api
 ```
 
-#### `VITE_STATIC_URL` (Optional)
-Base URL for serving static files/uploads. If not set, uses `VITE_API_URL` without `/api`.
-
-```env
-# Option 1: Same server as API (default)
-# Leave empty or don't set - will use API_BASE_URL without /api
-
-# Option 2: Separate CDN/Static Server
-VITE_STATIC_URL=https://cdn.example.com
-
-# Option 3: Separate static server
-VITE_STATIC_URL=https://static.example.com
-```
+**Note**: Image URLs will automatically use `VITE_API_URL` without `/api` suffix.
+- API URL: `https://pms-api.prasowlabs.in/api`
+- Image URL: `https://pms-api.prasowlabs.in/uploads/profile-photos/file.jpg`
 
 ---
 
 ## Examples
 
-### Example 1: Same Server (Default)
+### Example: Production Setup
 
 **Configuration:**
 ```env
-VITE_API_URL=https://api.example.com/api
-# VITE_STATIC_URL not set
+VITE_API_URL=https://pms-api.prasowlabs.in/api
 ```
 
 **Result:**
-- Upload endpoint: `https://api.example.com/api/employees/upload-profile-photo`
+- Upload endpoint: `https://pms-api.prasowlabs.in/api/employees/upload-profile-photo`
 - File path stored: `/uploads/profile-photos/file.jpg`
-- Display URL: `https://api.example.com/uploads/profile-photos/file.jpg`
+- Display URL: `https://pms-api.prasowlabs.in/uploads/profile-photos/file.jpg`
 
-### Example 2: Separate CDN
-
-**Configuration:**
-```env
-VITE_API_URL=https://api.example.com/api
-VITE_STATIC_URL=https://cdn.example.com
-```
-
-**Result:**
-- Upload endpoint: `https://api.example.com/api/employees/upload-profile-photo`
-- File path stored: `/uploads/profile-photos/file.jpg`
-- Display URL: `https://cdn.example.com/uploads/profile-photos/file.jpg`
-
-### Example 3: Separate Static Server
-
-**Configuration:**
-```env
-VITE_API_URL=https://api.example.com/api
-VITE_STATIC_URL=https://static.example.com
-```
-
-**Result:**
-- Upload endpoint: `https://api.example.com/api/employees/upload-profile-photo`
-- File path stored: `/uploads/profile-photos/file.jpg`
-- Display URL: `https://static.example.com/uploads/profile-photos/file.jpg`
+**How it works:**
+- `VITE_API_URL` includes `/api` suffix for API calls
+- Image URLs automatically use `VITE_API_URL` without `/api` suffix
+- No additional configuration needed
 
 ---
 
@@ -121,21 +89,21 @@ const fullUrl = getImageUrl(data.filePath);
 **Image URL Utility** (`src/lib/imageUtils.ts`):
 ```typescript
 export function getImageUrl(imagePath: string | null | undefined): string | undefined {
-  // Uses STATIC_CONFIG.BASE_URL (VITE_STATIC_URL or API_BASE_URL without /api)
+  // Uses STATIC_CONFIG.BASE_URL (VITE_API_URL without /api)
   const baseUrl = getStaticBaseUrl();
-  return `${baseUrl}${imagePath}`; // e.g., https://api.example.com/uploads/...
+  return `${baseUrl}${imagePath}`; // e.g., https://pms-api.prasowlabs.in/uploads/...
 }
 ```
 
 **Configuration** (`src/lib/config.ts`):
 ```typescript
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_URL, // https://api.example.com/api
-  SERVER_URL: API_BASE_URL.replace('/api', ''), // https://api.example.com
+  BASE_URL: import.meta.env.VITE_API_URL, // https://pms-api.prasowlabs.in/api
+  SERVER_URL: API_BASE_URL.replace('/api', ''), // https://pms-api.prasowlabs.in
 };
 
 export const STATIC_CONFIG = {
-  BASE_URL: import.meta.env.VITE_STATIC_URL || API_CONFIG.SERVER_URL,
+  BASE_URL: API_CONFIG.SERVER_URL, // Always uses VITE_API_URL without /api
 };
 ```
 
@@ -190,15 +158,17 @@ The `getImageUrl()` utility already handles this automatically:
 ### Issue: Images not displaying
 
 **Check:**
-1. Verify `VITE_STATIC_URL` is set correctly (or leave empty for same server)
+1. Verify `VITE_API_URL` is set correctly (e.g., `https://pms-api.prasowlabs.in/api`)
 2. Check browser console for 404 errors
 3. Verify file path in database doesn't include `/api`
 4. Check that static files are served from `/uploads/` directory
+5. Ensure `VITE_API_URL` without `/api` is accessible (e.g., `https://pms-api.prasowlabs.in`)
 
 ### Issue: Upload works but wrong display URL
 
 **Solution:**
-- Set `VITE_STATIC_URL` to your static file server URL
+- Verify `VITE_API_URL` is correct (should include `/api` suffix)
+- Image URLs will automatically use `VITE_API_URL` without `/api`
 - Rebuild the application: `npm run build`
 - Clear browser cache
 
@@ -220,15 +190,15 @@ The `getImageUrl()` utility already handles this automatically:
 
 2. **Store relative paths in database**
    - Store: `/uploads/profile-photos/file.jpg`
-   - Don't store: `https://api.example.com/api/uploads/...`
+   - Don't store: `https://pms-api.prasowlabs.in/api/uploads/...`
 
-3. **Set `VITE_STATIC_URL` for production**
-   - Use CDN for better performance
-   - Reduces load on API server
+3. **Set `VITE_API_URL` correctly**
+   - Must include `/api` suffix: `https://pms-api.prasowlabs.in/api`
+   - Image URLs will automatically use the same domain without `/api`
 
 4. **Test after configuration changes**
    - Upload a test file
-   - Verify display URL is correct
+   - Verify display URL is correct (should be `VITE_API_URL` without `/api`)
    - Check browser network tab for actual URL used
 
 ---

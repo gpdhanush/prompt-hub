@@ -8,7 +8,7 @@ import { logger } from './logger';
 
 /**
  * Get the base URL for static assets/uploads
- * Uses environment variable VITE_STATIC_URL if set, otherwise constructs from API URL
+ * Uses VITE_API_URL without /api suffix
  */
 export function getStaticBaseUrl(): string {
   return STATIC_CONFIG.BASE_URL;
