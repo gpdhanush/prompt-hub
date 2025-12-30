@@ -81,11 +81,7 @@ export default function TaskView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleBack}
-          >
+          <Button variant="outline" size="icon" onClick={handleBack}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -124,12 +120,58 @@ export default function TaskView() {
                 <div>
                   <CardTitle className="text-2xl">{task.title}</CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {task.task_code ? `Task #${task.task_code}` : `Task #${task.id}`}
+                    {task.task_code
+                      ? `Task #${task.task_code}`
+                      : `Task #${task.id}`}
                   </p>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Task Details */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pb-4 border-b">
+                {/* Priority */}
+                <div>
+                  <Label className="text-muted-foreground text-sm">
+                    Priority
+                  </Label>
+                  <div className="mt-1">
+                    <div className="text-sm font-medium mt-1">
+                      {getPriorityLabel(task.priority)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stage */}
+                <div>
+                  <Label className="text-muted-foreground text-sm">Stage</Label>
+                  <div className="text-sm font-medium mt-1">
+                    {task.stage || "Analysis"}
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <Label className="text-muted-foreground text-sm">
+                    Status
+                  </Label>
+                  <div className="text-sm font-medium mt-1">
+                    {task.status || "Open"}
+                  </div>
+                </div>
+
+                {/* Deadline */}
+                <div>
+                  <Label className="text-muted-foreground text-sm flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Deadline
+                  </Label>
+                  <div className="text-sm font-medium mt-1">
+                    {formatDate(task.deadline)}
+                  </div>
+                </div>
+              </div>
+
               {/* Description */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Description</Label>
@@ -138,7 +180,9 @@ export default function TaskView() {
                     <MarkdownRenderer content={task.description} />
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No description provided</p>
+                  <p className="text-sm text-muted-foreground">
+                    No description provided
+                  </p>
                 )}
               </div>
 
@@ -203,54 +247,6 @@ export default function TaskView() {
 
         {/* Right Column - Sidebar */}
         <div className="space-y-6">
-          {/* Task Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckSquare className="h-5 w-5" />
-                Task Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Priority */}
-              <div>
-                <Label className="text-muted-foreground text-sm">Priority</Label>
-                <div className="mt-1">
-                  <StatusBadge variant={taskPriorityMap[getPriorityLabel(task.priority)]} className="text-xs">
-                    {getPriorityLabel(task.priority)}
-                  </StatusBadge>
-                </div>
-              </div>
-
-              {/* Stage */}
-              <div>
-                <Label className="text-muted-foreground text-sm">Stage</Label>
-                <div className="mt-1">
-                  <StatusBadge variant={taskStageMap[task.stage || 'Analysis']} className="text-xs">
-                    {task.stage || 'Analysis'}
-                  </StatusBadge>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div>
-                <Label className="text-muted-foreground text-sm">Status</Label>
-                <div className="text-sm font-medium mt-1">{task.status || 'Open'}</div>
-              </div>
-
-              {/* Deadline */}
-              <div>
-                <Label className="text-muted-foreground text-sm flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Deadline
-                </Label>
-                <div className="text-sm font-medium mt-1">
-                  {formatDate(task.deadline)}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Team Assignment */}
           <Card>
             <CardHeader>
@@ -263,27 +259,41 @@ export default function TaskView() {
               {/* Assigned To */}
               {task.assigned_to_name && (
                 <div>
-                  <Label className="text-muted-foreground text-sm">Assigned To</Label>
-                  <div className="text-sm font-medium mt-1">{task.assigned_to_name}</div>
+                  <Label className="text-muted-foreground text-sm">
+                    Assigned To
+                  </Label>
+                  <div className="text-sm font-medium mt-1">
+                    {task.assigned_to_name}
+                  </div>
                 </div>
               )}
 
               {/* Developer */}
               <div>
-                <Label className="text-muted-foreground text-sm">Developer</Label>
-                <div className="text-sm font-medium mt-1">{task.developer_name || 'Not assigned'}</div>
+                <Label className="text-muted-foreground text-sm">
+                  Developer
+                </Label>
+                <div className="text-sm font-medium mt-1">
+                  {task.developer_name || "Not assigned"}
+                </div>
               </div>
 
               {/* Designer */}
               <div>
-                <Label className="text-muted-foreground text-sm">Designer</Label>
-                <div className="text-sm font-medium mt-1">{task.designer_name || 'Not assigned'}</div>
+                <Label className="text-muted-foreground text-sm">
+                  Designer
+                </Label>
+                <div className="text-sm font-medium mt-1">
+                  {task.designer_name || "Not assigned"}
+                </div>
               </div>
 
               {/* Tester */}
               <div>
                 <Label className="text-muted-foreground text-sm">Tester</Label>
-                <div className="text-sm font-medium mt-1">{task.tester_name || 'Not assigned'}</div>
+                <div className="text-sm font-medium mt-1">
+                  {task.tester_name || "Not assigned"}
+                </div>
               </div>
             </CardContent>
           </Card>

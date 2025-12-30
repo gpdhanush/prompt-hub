@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { ArrowLeft, Loader2, Laptop, Calendar, DollarSign, Building2, MapPin, FileText, User, Clock, CheckCircle, AlertCircle, XCircle, Package, Edit, Save, X } from "lucide-react";
@@ -21,7 +21,9 @@ export default function MyDeviceView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [searchParams] = useSearchParams();
+  const editParam = searchParams.get('edit');
+  const [isEditMode, setIsEditMode] = useState(editParam === 'true');
 
   // Fetch asset - optimized query
   const { data, isLoading, error } = useQuery({

@@ -1907,11 +1907,13 @@ router.post('/', requireAdmin, async (req, res) => {
   }
 });
 
-// Update asset (Admin only)
-router.put('/:id', requireAdmin, async (req, res) => {
+// Update asset (Admin only, or Level 2 employees can update their own assigned assets)
+router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
+    const userRole = req.user?.role || '';
+    const isAdmin = userRole === 'Admin' || userRole === 'Super Admin';
     
     // Check if asset exists
     const [assets] = await db.query('SELECT * FROM assets WHERE id = ?', [id]);
@@ -1920,6 +1922,46 @@ router.put('/:id', requireAdmin, async (req, res) => {
     }
     
     const oldAsset = assets[0];
+    
+    // If not admin, check if user is a level 2 employee assigned to this asset
+    if (!isAdmin) {
+      // Get user's employee record and role level
+      const [employees] = await db.query(`
+        SELECT e.id, r.level
+        FROM employees e
+        LEFT JOIN users u ON e.user_id = u.id
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE e.user_id = ?
+      `, [userId]);
+      
+      if (employees.length === 0) {
+        return res.status(403).json({ 
+          error: 'Access denied. Required role: Admin or Super Admin. Your role: ' + userRole 
+        });
+      }
+      
+      const employee = employees[0];
+      const roleLevel = employee.level;
+      
+      // Check if user is level 2 employee
+      if (roleLevel !== 2) {
+        return res.status(403).json({ 
+          error: 'Access denied. Required role: Admin or Super Admin. Your role: ' + userRole 
+        });
+      }
+      
+      // Check if asset is assigned to this employee
+      const [assignments] = await db.query(
+        'SELECT * FROM asset_assignments WHERE asset_id = ? AND employee_id = ? AND status = "active"',
+        [id, employee.id]
+      );
+      
+      if (assignments.length === 0) {
+        return res.status(403).json({ 
+          error: 'Access denied. You can only update assets assigned to you.' 
+        });
+      }
+    }
     
     const {
       brand,

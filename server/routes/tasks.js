@@ -570,6 +570,7 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
         'Failed': 'Reopen',
         'Closed': 'Completed',
         'TBD': 'New',
+        'Review': 'Code Review',
       };
       const oldStatus = statusMap[beforeData.status] || beforeData.status;
       const newStatus = statusMap[status] || status;
@@ -578,6 +579,19 @@ router.put('/:id', requirePermission('tasks.edit'), async (req, res) => {
         return res.status(403).json({ 
           error: `You do not have permission to change status from "${beforeData.status}" to "${status}"` 
         });
+      }
+      
+      // Map frontend status values to database ENUM values
+      const dbStatusMap = {
+        'Review': 'Ready for Testing',
+        'Code Review': 'Ready for Testing',
+        'New': 'Open',
+        'Reopen': 'Failed',
+        'Completed': 'Closed',
+      };
+      // Update status to database-compatible value if needed
+      if (dbStatusMap[status]) {
+        status = dbStatusMap[status];
       }
     }
     

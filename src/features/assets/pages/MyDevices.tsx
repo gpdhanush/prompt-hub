@@ -302,6 +302,11 @@ export default function MyDevices() {
     navigate(`/my-devices/${assetId}`);
   }, [navigate]);
 
+  const handleEditDevice = useCallback((assetId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/my-devices/${assetId}?edit=true`);
+  }, [navigate]);
+
   const handleRowClick = useCallback((assetId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     handleViewDevice(assetId);
@@ -681,8 +686,7 @@ export default function MyDevices() {
                     <TableHead>Category</TableHead>
                     <TableHead>Device</TableHead>
                     <TableHead>Serial Number</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                    <TableHead className="text-right w-[120px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -694,40 +698,44 @@ export default function MyDevices() {
                     >
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
-                          {getStatusIcon(asset.status)}
+                          {/* {getStatusIcon(asset.status)} */}
                           <span className="font-mono text-sm">{asset.asset_code}</span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{asset.category_name}</Badge>
+                        {asset.category_name}
+                        {/* <Badge variant="outline"></Badge> */}
                       </TableCell>
                       <TableCell>
                         <div>
                           <div className="font-medium">{asset.brand} {asset.model}</div>
-                          {asset.serial_number && (
+                          {/* {asset.serial_number && (
                             <div className="text-sm text-muted-foreground">SN: {asset.serial_number}</div>
-                          )}
+                          )} */}
                         </div>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">{asset.serial_number || "-"}</span>
                       </TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          variant={asset.status === "assigned" ? "info" : "warning"}
-                        >
-                          {asset.status}
-                        </StatusBadge>
-                      </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleViewDevice(asset.id)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => handleEditDevice(asset.id, e)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => handleViewDevice(asset.id)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

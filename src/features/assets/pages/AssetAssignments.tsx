@@ -171,111 +171,172 @@ export default function AssetAssignments() {
           </DialogHeader>
           {selectedAssignment && (
             <div className="space-y-4">
-              <div className="border-2 border-dashed border-border rounded-lg p-6 bg-card">
-                <div className="space-y-3">
-                  <div className="text-lg font-semibold">
-                    {selectedAssignment.category_name} - {selectedAssignment.brand} {selectedAssignment.model}
+              <div className="border-2 border-dashed border-border rounded-lg p-2 bg-card">
+                <div className="space-y-2">
+                  <div className="text-lg font-semibold text-primary">
+                    {selectedAssignment.asset_code} -{" "}
+                    {selectedAssignment.category_name} -{" "}
+                    {selectedAssignment.brand} {selectedAssignment.model}
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    Company: {import.meta.env.VITE_COMPANY_NAME || 'Naethra Technologies Pvt Ltd'}
+                  <div className="text-sm text-dark">
+                    Company:{" "}
+                    {import.meta.env.VITE_COMPANY_NAME ||
+                      "Naethra Technologies Pvt Ltd"}
                   </div>
-                  <div className="text-sm font-medium">
-                    Tag: {selectedAssignment.asset_code}
+                  <div className="text-sm text-dark">
+                    Serial Number: {selectedAssignment.serial_number || "N/A"}
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    Serial Number: {selectedAssignment.serial_number || 'N/A'}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Assigned To: {selectedAssignment.employee_name} ({selectedAssignment.emp_code})
+                  <div className="text-sm text-dark">
+                    Assigned To: {selectedAssignment.employee_name} (
+                    {selectedAssignment.emp_code})
                   </div>
                 </div>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPrintDialogOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setPrintDialogOpen(false)}>
               Cancel
             </Button>
             <Button
               onClick={() => {
                 if (selectedAssignment) {
-                  const printWindow = window.open('', '_blank');
+                  const printWindow = window.open("", "_blank");
                   if (printWindow) {
                     printWindow.document.write(`
-                      <!DOCTYPE html>
-                      <html>
-                        <head>
-                          <title>Asset Sticker - ${selectedAssignment.asset_code}</title>
-                          <style>
-                            @media print {
-                              @page {
-                                size: 3in 2in;
-                                margin: 0.1in;
-                              }
-                              body {
-                                margin: 0;
-                                padding: 0;
-                                font-family: Arial, sans-serif;
-                                font-size: 10pt;
-                              }
-                            }
-                            body {
-                              margin: 0;
-                              padding: 10px;
-                              font-family: Arial, sans-serif;
-                              font-size: 10pt;
-                            }
-                            .sticker {
-                              border: 2px solid #000;
-                              padding: 8px;
-                              width: 2.8in;
-                              height: 1.8in;
-                              display: flex;
-                              flex-direction: column;
-                              justify-content: space-between;
-                            }
-                            .sticker-header {
-                              font-weight: bold;
-                              font-size: 11pt;
-                              margin-bottom: 4px;
-                            }
-                            .sticker-company {
-                              font-size: 9pt;
-                              color: #666;
-                              margin-bottom: 2px;
-                            }
-                            .sticker-tag {
-                              font-weight: bold;
-                              font-size: 12pt;
-                              margin: 4px 0;
-                            }
-                            .sticker-details {
-                              font-size: 8pt;
-                              line-height: 1.4;
-                            }
-                            .sticker-assigned {
-                              font-size: 8pt;
-                              margin-top: 4px;
-                            }
-                          </style>
-                        </head>
-                        <body>
-                          <div class="sticker">
-                            <div>
-                              <div class="sticker-header">${selectedAssignment.category_name} - ${selectedAssignment.brand} ${selectedAssignment.model}</div>
-                                  <div class="sticker-company">Company: ${import.meta.env.VITE_COMPANY_NAME || 'Naethra Technologies Pvt Ltd'}</div>
-                              <div class="sticker-tag">Tag: ${selectedAssignment.asset_code}</div>
-                              <div class="sticker-details">
-                                <div>Serial Number: ${selectedAssignment.serial_number || 'N/A'}</div>
-                                <div class="sticker-assigned">Assigned To: ${selectedAssignment.employee_name} (${selectedAssignment.emp_code})</div>
-                              </div>
-                            </div>
-                          </div>
-                        </body>
-                      </html>
+                     <!DOCTYPE html>
+<html>
+  <head>
+    <title>Asset Sticker - ${selectedAssignment.asset_code}</title>
+
+    <style>
+      @media print {
+        @page {
+          size: 3.2in 2.2in;
+          margin: 0;
+        }
+        body {
+          margin: 0;
+          padding: 0;
+          -webkit-print-color-adjust: exact;
+          color-adjust: exact;
+        }
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        background: #fff;
+        color: #000;
+      }
+
+      .sticker {
+        width: 3.05in;
+        height: 2.05in;
+        margin: 0.05in;
+        padding: 0.16in;
+        box-sizing: border-box;
+
+        border: 2px dashed #000;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      /* Header */
+      .asset-code {
+        font-size: 12pt;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 0.04in;
+      }
+
+      .category {
+        font-size: 9pt;
+        margin-bottom: 0.1in;
+      }
+
+      /* Uniform details */
+      .details {
+        font-size: 9.5pt;
+        line-height: 1.45;
+      }
+
+      .row {
+        display: flex;
+        gap: 4px;
+      }
+
+      .label {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .value {
+        font-weight: 700;
+        word-break: break-word;
+      }
+
+      /* Footer */
+      .footer {
+        margin-top: 0.1in;
+        padding-top: 0.08in;
+        border-top: 1px dashed #000;
+        font-size: 9pt;
+      }
+
+      .company {
+        font-weight: 600;
+      }
+
+      .assigned {
+        margin-top: 0.04in;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="sticker">
+      <div>
+        <div class="asset-code">
+          ${selectedAssignment.asset_code}
+        </div>
+        <div class="category">
+          ${selectedAssignment.category_name}
+        </div>
+
+        <div class="details">
+          <div class="row">
+            <div class="label">Brand :</div>
+            <div class="value">${selectedAssignment.brand || "N/A"}</div>
+          </div>
+          <div class="row">
+            <div class="label">Model :</div>
+            <div class="value">${selectedAssignment.model || "N/A"}</div>
+          </div>
+          <div class="row">
+            <div class="label">Serial   &nbsp;:</div>
+            <div class="value">
+              ${selectedAssignment.serial_number || "N/A"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="company">
+          ${import.meta.env.VITE_COMPANY_NAME || "Naethra Technologies Pvt Ltd"}
+        </div>
+        <div class="assigned">
+          Assigned To: ${selectedAssignment.employee_name}
+          (${selectedAssignment.emp_code})
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
                     `);
                     printWindow.document.close();
                     printWindow.focus();

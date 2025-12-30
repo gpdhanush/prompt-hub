@@ -17,6 +17,7 @@ import { API_CONFIG } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import ConfirmationDialog from "@/shared/components/ConfirmationDialog";
 import { formatFullDate } from "../utils/utils";
+import { getPriorityLabel } from "@/features/tasks/utils/utils";
 
 export default function BugDetail() {
   const navigate = useNavigate();
@@ -231,11 +232,118 @@ export default function BugDetail() {
           {bug.title && (
             <Card>
               <CardHeader>
-                <CardTitle>Bug Title</CardTitle>
+                <CardTitle>{bug.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-lg font-semibold">
-                  {bug.title}
+
+                {/* Status & Classification */}
+                <div className="space-y-4">
+                  {/* First Row: Project, Task */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Project */}
+                    {bug.project_id && (
+                      <div>
+                        <Label className="text-muted-foreground text-sm">
+                          Project
+                        </Label>
+
+                        <div className="mt-1">
+                          <Button
+                            variant="link"
+                            className="p-0 h-auto text-sm font-medium"
+                            onClick={() => {
+                              const projectIdentifier =
+                                bug.project_uuid || bug.project_id;
+                              const currentUser = getCurrentUser();
+                              const userRole = currentUser?.role || "";
+                              const isClient =
+                                userRole === "CLIENT" || userRole === "Client";
+                              const basePath = isClient
+                                ? "/client/projects"
+                                : "/projects";
+                              navigate(`${basePath}/${projectIdentifier}`);
+                            }}
+                          >
+                            {bug.project_name || `Project #${bug.project_id}`}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Task */}
+                    {bug.task_id && (
+                      <div>
+                        <Label className="text-muted-foreground text-sm">
+                          Task
+                        </Label>
+                        <div className="mt-1">
+                          <Button
+                            variant="link"
+                            className="p-0 h-auto text-sm font-medium"
+                            onClick={() =>
+                              navigate(`/tasks?task=${bug.task_id}`)
+                            }
+                          >
+                            {bug.task_title || `Task #${bug.task_id}`}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Divider */}
+                  <Separator />
+                  {/* Status, Priority, Bug Type */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Status */}
+                    <div>
+                      <Label className="text-muted-foreground text-sm">
+                        Status
+                      </Label>
+                      <div className="mt-1">
+                        <div className="text-sm font-medium mt-1">
+                          {bug.status || "Open"}
+                        </div>
+                        {/* <StatusBadge
+                          variant={
+                            bugStatusMap[
+                              bug.status as keyof typeof bugStatusMap
+                            ] || "neutral"
+                          }
+                          className="text-xs px-2.5 py-0.5 w-fit"
+                        >
+                          {bug.status || "Open"}
+                        </StatusBadge> */}
+                      </div>
+                    </div>
+
+                    {/* Priority */}
+                    <div>
+                      <Label className="text-muted-foreground text-sm">
+                        Priority
+                      </Label>
+                      <div className="mt-1">
+                        <div className="text-sm font-medium mt-1">
+                          {getPriorityLabel(bug.severity)}
+                        </div>
+                        {/* <StatusBadge
+                          variant={getSeverityVariant(bug.severity)}
+                          className="text-xs px-2.5 py-0.5 w-fit"
+                        >
+                          {bug.severity || "Low"}
+                        </StatusBadge> */}
+                      </div>
+                    </div>
+
+                    {/* Bug Type */}
+                    <div>
+                      <Label className="text-muted-foreground text-sm">
+                        Bug Type
+                      </Label>
+                      <div className="text-sm font-medium mt-1">
+                        {bug.bug_type || "-"}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -246,13 +354,15 @@ export default function BugDetail() {
             <CardHeader>
               <CardTitle>Description</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
               {bug.description ? (
                 <div className="text-sm p-4 bg-muted/30 rounded-md border max-h-[600px] overflow-y-auto">
                   <MarkdownRenderer content={bug.description} />
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">No Description</div>
+                <div className="text-sm text-muted-foreground">
+                  No Description
+                </div>
               )}
             </CardContent>
           </Card>
@@ -264,7 +374,9 @@ export default function BugDetail() {
                 <CardTitle>Steps to Reproduce</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-sm whitespace-pre-wrap">{toTitleCase(bug.steps_to_reproduce)}</div>
+                <div className="text-sm whitespace-pre-wrap">
+                  {toTitleCase(bug.steps_to_reproduce)}
+                </div>
               </CardContent>
             </Card>
           )}
@@ -276,7 +388,13 @@ export default function BugDetail() {
             </CardHeader>
             <CardContent>
               <div className="text-sm whitespace-pre-wrap">
-                {bug.actual_behavior ? toTitleCase(bug.actual_behavior) : <span className="text-muted-foreground italic">No Actual Behavior Specified</span>}
+                {bug.actual_behavior ? (
+                  toTitleCase(bug.actual_behavior)
+                ) : (
+                  <span className="text-muted-foreground italic">
+                    No Actual Behavior Specified
+                  </span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -288,13 +406,23 @@ export default function BugDetail() {
             </CardHeader>
             <CardContent>
               <div className="text-sm whitespace-pre-wrap">
-                {bug.expected_behavior ? toTitleCase(bug.expected_behavior) : <span className="text-muted-foreground italic">No Expected Behavior Specified</span>}
+                {bug.expected_behavior ? (
+                  toTitleCase(bug.expected_behavior)
+                ) : (
+                  <span className="text-muted-foreground italic">
+                    No Expected Behavior Specified
+                  </span>
+                )}
               </div>
             </CardContent>
           </Card>
 
           {/* Environment Details */}
-          {(bug.browser || bug.device || bug.os || bug.app_version || bug.api_endpoint) && (
+          {(bug.browser ||
+            bug.device ||
+            bug.os ||
+            bug.app_version ||
+            bug.api_endpoint) && (
             <Card>
               <CardHeader>
                 <CardTitle>Environment Details</CardTitle>
@@ -302,13 +430,17 @@ export default function BugDetail() {
               <CardContent className="space-y-2">
                 {bug.browser && (
                   <div className="grid grid-cols-2 gap-2">
-                    <span className="text-sm text-muted-foreground">Browser:</span>
+                    <span className="text-sm text-muted-foreground">
+                      Browser:
+                    </span>
                     <span className="text-sm">{bug.browser}</span>
                   </div>
                 )}
                 {bug.device && (
                   <div className="grid grid-cols-2 gap-2">
-                    <span className="text-sm text-muted-foreground">Device:</span>
+                    <span className="text-sm text-muted-foreground">
+                      Device:
+                    </span>
                     <span className="text-sm">{bug.device}</span>
                   </div>
                 )}
@@ -320,14 +452,20 @@ export default function BugDetail() {
                 )}
                 {bug.app_version && (
                   <div className="grid grid-cols-2 gap-2">
-                    <span className="text-sm text-muted-foreground">App Version:</span>
+                    <span className="text-sm text-muted-foreground">
+                      App Version:
+                    </span>
                     <span className="text-sm">{bug.app_version}</span>
                   </div>
                 )}
                 {bug.api_endpoint && (
                   <div className="grid grid-cols-2 gap-2">
-                    <span className="text-sm text-muted-foreground">API Endpoint:</span>
-                    <span className="text-sm font-mono">{bug.api_endpoint}</span>
+                    <span className="text-sm text-muted-foreground">
+                      API Endpoint:
+                    </span>
+                    <span className="text-sm font-mono">
+                      {bug.api_endpoint}
+                    </span>
                   </div>
                 )}
               </CardContent>
@@ -373,53 +511,23 @@ export default function BugDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Comments Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Comments
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <BugComments bugId={Number(id)} />
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right Column - Sidebar */}
         <div className="space-y-6">
-          {/* Status & Classification */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-center">Status & Classification</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm text-muted-foreground">Status</Label>
-                <div>
-                  <StatusBadge 
-                    variant={bugStatusMap[bug.status as keyof typeof bugStatusMap] || 'neutral'}
-                    className="text-xs px-2.5 py-0.5 w-fit"
-                  >
-                    {bug.status || 'Open'}
-                  </StatusBadge>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm text-muted-foreground">Priority</Label>
-                <div>
-                  <StatusBadge 
-                    variant={getSeverityVariant(bug.severity)}
-                    className="text-xs px-2.5 py-0.5 w-fit"
-                  >
-                    {bug.severity || 'Low'}
-                  </StatusBadge>
-                </div>
-              </div>
-              {bug.bug_type && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm text-muted-foreground">Bug Type</Label>
-                  <div className="text-sm">{bug.bug_type}</div>
-                </div>
-              )}
-              {bug.resolution_type && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm text-muted-foreground">Resolution Type</Label>
-                  <div className="text-sm">{bug.resolution_type}</div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Assignment */}
           <Card>
             <CardHeader>
@@ -428,17 +536,23 @@ export default function BugDetail() {
             <CardContent className="space-y-4">
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Reported By</Label>
-                <div className="text-sm">{bug.reported_by_name || '-'}</div>
+                <div className="text-sm">{bug.reported_by_name || "-"}</div>
                 {bug.reported_by_email && (
-                  <div className="text-xs text-muted-foreground">{bug.reported_by_email}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {bug.reported_by_email}
+                  </div>
                 )}
               </div>
               <Separator />
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Assigned To</Label>
-                <div className="text-sm">{bug.assigned_to_name || 'Unassigned'}</div>
+                <div className="text-sm">
+                  {bug.assigned_to_name || "Unassigned"}
+                </div>
                 {bug.assigned_to_email && (
-                  <div className="text-xs text-muted-foreground">{bug.assigned_to_email}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {bug.assigned_to_email}
+                  </div>
                 )}
               </div>
               {bug.team_lead_name && (
@@ -448,66 +562,15 @@ export default function BugDetail() {
                     <Label className="text-muted-foreground">Team Lead</Label>
                     <div className="text-sm">{bug.team_lead_name}</div>
                     {bug.team_lead_email && (
-                      <div className="text-xs text-muted-foreground">{bug.team_lead_email}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {bug.team_lead_email}
+                      </div>
                     )}
                   </div>
                 </>
               )}
             </CardContent>
           </Card>
-
-          {/* Project & Task Information */}
-          {(bug.project_id || bug.task_id) && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Project & Task</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {bug.project_id && (
-                  <div className="text-sm">
-                    <Label className="text-muted-foreground">Project:</Label>
-                    <Button
-                      variant="link"
-                      className="p-0 h-auto ml-2"
-                      onClick={() => {
-                        // Use UUID if available, otherwise use numeric ID
-                        const projectIdentifier = bug.project_uuid || bug.project_id;
-                        const currentUser = getCurrentUser();
-                        const userRole = currentUser?.role || '';
-                        const isClient = userRole === 'CLIENT' || userRole === 'Client';
-                        const basePath = isClient ? '/client/projects' : '/projects';
-                        navigate(`${basePath}/${projectIdentifier}`);
-                      }}
-                    >
-                      {bug.project_name || `Project #${bug.project_id}`}
-                    </Button>
-                  </div>
-                )}
-                {bug.task_id && (
-                  <div className="text-sm">
-                    <Label className="text-muted-foreground">Task:</Label>
-                    <Button
-                      variant="link"
-                      className="p-0 h-auto ml-2"
-                      onClick={() => navigate(`/tasks?task=${bug.task_id}`)}
-                    >
-                      {bug.task_title || `Task #${bug.task_id}`}
-                    </Button>
-                  </div>
-                )}
-                {bug.task_developer_name && (
-                  <div className="text-xs text-muted-foreground mt-2">
-                    Developer: {bug.task_developer_name}
-                  </div>
-                )}
-                {bug.task_tester_name && (
-                  <div className="text-xs text-muted-foreground">
-                    Tester: {bug.task_tester_name}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
 
           {/* Timeline & Dates */}
           <Card>
@@ -527,7 +590,9 @@ export default function BugDetail() {
                 <>
                   <Separator />
                   <div className="grid gap-2">
-                    <Label className="text-muted-foreground">Updated Date</Label>
+                    <Label className="text-muted-foreground">
+                      Updated Date
+                    </Label>
                     <div className="text-xs text-muted-foreground">
                       {formatFullDate(bug.updated_at)}
                     </div>
@@ -538,7 +603,9 @@ export default function BugDetail() {
                 <>
                   <Separator />
                   <div className="grid gap-2">
-                    <Label className="text-muted-foreground">Target Fix Date</Label>
+                    <Label className="text-muted-foreground">
+                      Target Fix Date
+                    </Label>
                     <div className="text-xs text-muted-foreground">
                       {new Date(bug.target_fix_date).toLocaleDateString()}
                     </div>
@@ -549,7 +616,9 @@ export default function BugDetail() {
                 <>
                   <Separator />
                   <div className="grid gap-2">
-                    <Label className="text-muted-foreground">Actual Fix Date</Label>
+                    <Label className="text-muted-foreground">
+                      Actual Fix Date
+                    </Label>
                     <div className="text-xs text-muted-foreground">
                       {new Date(bug.actual_fix_date).toLocaleDateString()}
                     </div>
@@ -560,8 +629,12 @@ export default function BugDetail() {
                 <>
                   <Separator />
                   <div className="grid gap-2">
-                    <Label className="text-muted-foreground">Reopened Count</Label>
-                    <div className="text-sm font-semibold">{bug.reopened_count}</div>
+                    <Label className="text-muted-foreground">
+                      Reopened Count
+                    </Label>
+                    <div className="text-sm font-semibold">
+                      {bug.reopened_count}
+                    </div>
                   </div>
                 </>
               )}
@@ -570,25 +643,14 @@ export default function BugDetail() {
         </div>
       </div>
 
-      {/* Comments Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5" />
-            Comments
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BugComments bugId={Number(id)} />
-        </CardContent>
-      </Card>
-
       {/* Delete Confirmation Dialog */}
       <ConfirmationDialog
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         title="Are you sure?"
-        description={`This action cannot be undone. This will permanently delete the bug ${bug.bug_code || `BG-${bug.id}`}.`}
+        description={`This action cannot be undone. This will permanently delete the bug ${
+          bug.bug_code || `BG-${bug.id}`
+        }.`}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         variant="destructive"

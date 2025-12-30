@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
-import { rolesApi } from "@/lib/api";
+import { rolesApi, permissionsApi } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
 
 // Permission modules mapping
@@ -41,6 +41,42 @@ export default function RolesPermissions() {
   const [editingPermissions, setEditingPermissions] = useState<Record<number, boolean>>({});
   const [localPermissions, setLocalPermissions] = useState<Record<number, Record<number, boolean>>>({});
 
+  // Fetch all permissions to create the normalization template
+  const { data: allPermissionsData } = useQuery({
+    queryKey: ['all-permissions'],
+    queryFn: () => permissionsApi.getAll(),
+    enabled: isSuperAdmin,
+    staleTime: 1000 * 60 * 30, // 30 minutes (permissions rarely change)
+    gcTime: 1000 * 60 * 60, // 60 minutes
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  // Create normalized permissions map: permission_id -> allowed (default false)
+  const normalizePermissions = useCallback((apiPermissions: any[]) => {
+    const normalized: Record<number, boolean> = {};
+
+    // Initialize all permissions to false if we have the master list
+    if (allPermissionsData?.data) {
+      allPermissionsData.data.forEach((perm: any) => {
+        normalized[perm.id] = false;
+      });
+    } else {
+      // If master list not loaded yet, at least initialize with API permissions
+      // This ensures we don't lose existing permissions
+      apiPermissions.forEach((perm: any) => {
+        normalized[perm.id] = perm.allowed;
+      });
+    }
+
+    // Override with actual API values where they exist
+    apiPermissions.forEach((perm: any) => {
+      normalized[perm.id] = perm.allowed;
+    });
+
+    return normalized;
+  }, [allPermissionsData]);
+
   // Check if user can access roles (permission-based or Super Admin)
   const canAccessRoles = hasPermission('roles_permissions.view') || isSuperAdmin;
 
@@ -73,55 +109,70 @@ export default function RolesPermissions() {
   });
 
   useEffect(() => {
-    if (permissionsData?.data && selectedRole) {
-      const currentPermissions = permissionsData.data;
-      setRolePermissions(prev => ({
-        ...prev,
-        [selectedRole]: currentPermissions
-      }));
-      
-      // Always initialize/update local permissions state
-      // If in edit mode, preserve existing changes; otherwise initialize from server
-      setLocalPermissions(prev => {
-        const existing = prev[selectedRole] || {};
-        const updated: Record<number, boolean> = {};
-        
-        // First, set all permissions from server (this handles new permissions)
-        currentPermissions.forEach((perm: any) => {
-          // If user has already changed this permission, keep their change
-          // Otherwise, use the server value
-          updated[perm.id] = existing[perm.id] !== undefined ? existing[perm.id] : perm.allowed;
-      });
-        
+    if (permissionsData?.data && selectedRole && allPermissionsData?.data) {
+      const apiPermissions = permissionsData.data;
+
+      // Create complete rolePermissions array with all permissions
+      const completePermissions = allPermissionsData.data.map((perm: any) => {
+        const apiPerm = apiPermissions.find((p: any) => p.id === perm.id);
         return {
-        ...prev,
-          [selectedRole]: updated
+          ...perm,
+          allowed: apiPerm ? apiPerm.allowed : false
         };
       });
+
+      setRolePermissions(prev => ({
+        ...prev,
+        [selectedRole]: completePermissions
+      }));
+
+      // Only update local permissions if we're not in edit mode
+      // In edit mode, preserve user's changes
+      const isEditing = editingPermissions[selectedRole];
+      if (!isEditing) {
+        setLocalPermissions(prev => ({
+          ...prev,
+          [selectedRole]: normalizePermissions(apiPermissions)
+        }));
+      }
     }
-  }, [permissionsData, selectedRole]);
+  }, [permissionsData, selectedRole, editingPermissions, normalizePermissions, allPermissionsData]);
+
+  // Re-normalize permissions when allPermissionsData becomes available
+  useEffect(() => {
+    if (allPermissionsData?.data && selectedRole && !editingPermissions[selectedRole]) {
+      // Extract API permissions from complete rolePermissions
+      const apiPermissions = rolePermissions[selectedRole]?.filter((p: any) => p.allowed) || [];
+      setLocalPermissions(prev => ({
+        ...prev,
+        [selectedRole]: normalizePermissions(apiPermissions)
+      }));
+    }
+  }, [allPermissionsData, selectedRole, rolePermissions, editingPermissions, normalizePermissions]);
 
   // Update permissions mutation
   const updatePermissionsMutation = useMutation({
     mutationFn: ({ roleId, permissions }: { roleId: number; permissions: Array<{ permission_id: number; allowed: boolean }> }) =>
       rolesApi.updatePermissions(roleId, permissions),
     onSuccess: (data, variables) => {
-      // Update the rolePermissions state with the response data immediately
-      if (data?.data) {
-        setRolePermissions(prev => ({
-          ...prev,
-          [variables.roleId]: data.data
-        }));
-        // Update localPermissions to match the saved state
-        const permissionsMap: Record<number, boolean> = {};
-        data.data.forEach((perm: any) => {
-          permissionsMap[perm.id] = perm.allowed;
-        });
-        setLocalPermissions(prev => ({
-          ...prev,
-          [variables.roleId]: permissionsMap
-        }));
-      }
+      // Create complete rolePermissions array with all permissions
+      const localPerms = localPermissions[variables.roleId] || {};
+      const completePermissions = allPermissionsData?.data?.map((perm: any) => ({
+        ...perm,
+        allowed: localPerms[perm.id] || false
+      })) || [];
+
+      setRolePermissions(prev => ({
+        ...prev,
+        [variables.roleId]: completePermissions
+      }));
+
+      // Keep localPermissions as normalized state
+      setLocalPermissions(prev => ({
+        ...prev,
+        [variables.roleId]: { ...localPerms }
+      }));
+
       // Invalidate and refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: ['role-permissions', variables.roleId] });
       toast({ title: "Success", description: "Permissions updated successfully." });
@@ -137,39 +188,23 @@ export default function RolesPermissions() {
   });
 
   const handleStartEdit = useCallback((roleId: number) => {
-    // Ensure localPermissions is fully initialized before entering edit mode
-    const permissions = rolePermissions[roleId] || [];
-    const currentLocalPerms = localPermissions[roleId] || {};
-    
-    // Initialize all permissions in local state if not already present
-    const initializedPerms: Record<number, boolean> = {};
-    permissions.forEach((perm: any) => {
-      initializedPerms[perm.id] = currentLocalPerms[perm.id] !== undefined 
-        ? currentLocalPerms[perm.id] 
-        : perm.allowed;
-    });
-    
-    setLocalPermissions(prev => ({
-      ...prev,
-      [roleId]: initializedPerms
-    }));
+    // Simply enter edit mode - localPermissions should already be properly set
+    // from when the role was selected
     setEditingPermissions(prev => ({ ...prev, [roleId]: true }));
-  }, [rolePermissions, localPermissions]);
+  }, []);
 
   const handleCancelEdit = useCallback((roleId: number) => {
     setEditingPermissions(prev => ({ ...prev, [roleId]: false }));
-    // Reset local permissions to original
+    // Reset local permissions to original normalized state
     if (rolePermissions[roleId]) {
-      const permissionsMap: Record<number, boolean> = {};
-      rolePermissions[roleId].forEach((perm: any) => {
-        permissionsMap[perm.id] = perm.allowed;
-      });
+      // Extract only the true permissions to simulate API response
+      const apiPermissions = rolePermissions[roleId].filter((p: any) => p.allowed);
       setLocalPermissions(prev => ({
         ...prev,
-        [roleId]: permissionsMap
+        [roleId]: normalizePermissions(apiPermissions)
       }));
     }
-  }, [rolePermissions]);
+  }, [rolePermissions, normalizePermissions]);
 
   const handlePermissionToggle = useCallback((roleId: number, permissionId: number, checked: boolean) => {
     setLocalPermissions(prev => ({
@@ -341,17 +376,16 @@ export default function RolesPermissions() {
   }, [rolePermissions, localPermissions]);
 
   const handleSavePermissions = useCallback((roleId: number) => {
-    const permissions = rolePermissions[roleId] || [];
     const localPerms = localPermissions[roleId] || {};
-    
-    // Use localPerms if it exists (user changed it), otherwise use the original allowed value
-    const permissionsToUpdate = permissions.map((perm: any) => ({
-      permission_id: perm.id,
-      allowed: localPerms[perm.id] !== undefined ? localPerms[perm.id] : perm.allowed
+
+    // Send ALL permissions from localPermissions, not just the original API response
+    const permissionsToUpdate = Object.entries(localPerms).map(([permId, allowed]) => ({
+      permission_id: parseInt(permId),
+      allowed: allowed
     }));
 
     updatePermissionsMutation.mutate({ roleId, permissions: permissionsToUpdate });
-  }, [rolePermissions, localPermissions, updatePermissionsMutation]);
+  }, [localPermissions, updatePermissionsMutation]);
 
   // Memoized handler for role selection
   const handleRoleSelect = useCallback((roleId: number) => {
@@ -677,7 +711,7 @@ export default function RolesPermissions() {
                                         {perms.map((perm: any) => {
                                           const permCode = perm.code.split('.').pop() || perm.code;
                                           const permName = permCode.charAt(0).toUpperCase() + permCode.slice(1);
-                                          const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
+                                          const isChecked = isEditing ? (localPerms[perm.id] === true) : (perm.allowed === true);
                                           
                                           return (
                                             <div 
@@ -768,7 +802,7 @@ export default function RolesPermissions() {
                                     {perms.map((perm: any) => {
                                       const permCode = perm.code.split('.').pop() || perm.code;
                                       const permName = permCode.charAt(0).toUpperCase() + permCode.slice(1);
-                                      const isChecked = isEditing ? (localPerms[perm.id] || false) : perm.allowed;
+                                      const isChecked = isEditing ? (localPerms[perm.id] === true) : (perm.allowed === true);
                                       
                                       return (
                                         <div 
