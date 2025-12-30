@@ -21,6 +21,28 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const envPath = path.join(rootDir, '.env');
+const envProdPath = path.join(rootDir, '.env.production');
+
+// Helper function to update version in an env file
+function updateVersionInFile(filePath, version) {
+  if (!fs.existsSync(filePath)) {
+    return false;
+  }
+  
+  let content = fs.readFileSync(filePath, 'utf8');
+  
+  if (content.includes('VITE_APP_VERSION=')) {
+    content = content.replace(
+      /^VITE_APP_VERSION=.*$/m,
+      `VITE_APP_VERSION=${version}`
+    );
+  } else {
+    content += `\nVITE_APP_VERSION=${version}\n`;
+  }
+  
+  fs.writeFileSync(filePath, content, 'utf8');
+  return true;
+}
 
 // Get version from command line argument
 const version = process.argv[2];
@@ -41,33 +63,27 @@ if (!versionRegex.test(version)) {
   process.exit(1);
 }
 
-// Check if .env file exists
-if (!fs.existsSync(envPath)) {
-  console.error('❌ Error: .env file not found');
-  console.log('Please create a .env file first');
+// Check if at least one env file exists
+if (!fs.existsSync(envPath) && !fs.existsSync(envProdPath)) {
+  console.error('❌ Error: Neither .env nor .env.production file found');
+  console.log('Please create at least one .env file first');
   process.exit(1);
 }
 
-// Read .env file
-let envContent = fs.readFileSync(envPath, 'utf8');
-
-// Update or add VITE_APP_VERSION
-if (envContent.includes('VITE_APP_VERSION=')) {
-  // Update existing version
-  envContent = envContent.replace(
-    /^VITE_APP_VERSION=.*$/m,
-    `VITE_APP_VERSION=${version}`
-  );
-  console.log(`✅ Updated VITE_APP_VERSION to ${version}`);
-} else {
-  // Add new version line at the end
-  envContent += `\nVITE_APP_VERSION=${version}\n`;
-  console.log(`✅ Added VITE_APP_VERSION=${version}`);
+// Update both .env and .env.production files
+const updatedFiles = [];
+if (fs.existsSync(envPath)) {
+  updateVersionInFile(envPath, version);
+  updatedFiles.push('.env');
 }
 
-// Write back to .env file
-fs.writeFileSync(envPath, envContent, 'utf8');
+if (fs.existsSync(envProdPath)) {
+  updateVersionInFile(envProdPath, version);
+  updatedFiles.push('.env.production');
+}
 
+console.log(`\n✅ Updated VITE_APP_VERSION to ${version}`);
+console.log(`   Updated files: ${updatedFiles.join(', ')}`);
 console.log(`\n🎉 Version updated successfully to ${version}`);
 console.log('💡 Remember to rebuild the app for changes to take effect:');
 console.log('   npm run build');

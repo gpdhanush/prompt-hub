@@ -16,21 +16,31 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const envPath = path.join(rootDir, '.env');
+const envProdPath = path.join(rootDir, '.env.production');
 const swPath = path.join(rootDir, 'public', 'sw.js');
 
-// Read .env file to get version
-if (!fs.existsSync(envPath)) {
-  console.error('❌ Error: .env file not found');
+// Read version from .env or .env.production (prefer .env.production for production builds)
+let envContent = '';
+let envFileUsed = '';
+
+// Check .env.production first (for production builds)
+if (fs.existsSync(envProdPath)) {
+  envContent = fs.readFileSync(envProdPath, 'utf8');
+  envFileUsed = '.env.production';
+} else if (fs.existsSync(envPath)) {
+  envContent = fs.readFileSync(envPath, 'utf8');
+  envFileUsed = '.env';
+} else {
+  console.error('❌ Error: Neither .env nor .env.production file found');
   console.log('Please create a .env file with VITE_APP_VERSION');
   process.exit(1);
 }
 
-const envContent = fs.readFileSync(envPath, 'utf8');
 const versionMatch = envContent.match(/^VITE_APP_VERSION=(.+)$/m);
 
 if (!versionMatch) {
-  console.error('❌ Error: VITE_APP_VERSION not found in .env file');
-  console.log('Please add VITE_APP_VERSION=1.0.0 to your .env file');
+  console.error(`❌ Error: VITE_APP_VERSION not found in ${envFileUsed} file`);
+  console.log(`Please add VITE_APP_VERSION=1.0.0 to your ${envFileUsed} file`);
   process.exit(1);
 }
 

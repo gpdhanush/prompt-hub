@@ -18,6 +18,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const envPath = path.join(rootDir, '.env');
+const envProdPath = path.join(rootDir, '.env.production');
+
+// Helper function to update version in an env file
+function updateVersionInFile(filePath, newVersion) {
+  if (!fs.existsSync(filePath)) {
+    return false;
+  }
+  
+  let content = fs.readFileSync(filePath, 'utf8');
+  const versionMatch = content.match(/^VITE_APP_VERSION=(.+)$/m);
+  
+  if (versionMatch) {
+    content = content.replace(
+      /^VITE_APP_VERSION=.*$/m,
+      `VITE_APP_VERSION=${newVersion}`
+    );
+  } else {
+    content += `\nVITE_APP_VERSION=${newVersion}\n`;
+  }
+  
+  fs.writeFileSync(filePath, content, 'utf8');
+  return true;
+}
 
 // Get bump type from command line
 const bumpType = process.argv[2]?.toLowerCase();
@@ -31,15 +54,22 @@ if (!bumpType || !['patch', 'minor', 'major'].includes(bumpType)) {
   process.exit(1);
 }
 
-// Check if .env file exists
-if (!fs.existsSync(envPath)) {
-  console.error('❌ Error: .env file not found');
-  console.log('Please create a .env file first');
+// Check if at least one env file exists
+if (!fs.existsSync(envPath) && !fs.existsSync(envProdPath)) {
+  console.error('❌ Error: Neither .env nor .env.production file found');
+  console.log('Please create at least one .env file first');
   process.exit(1);
 }
 
-// Read .env file
-let envContent = fs.readFileSync(envPath, 'utf8');
+// Read .env file (prefer .env, fallback to .env.production)
+let envContent = '';
+let envPathToRead = envPath;
+if (fs.existsSync(envPath)) {
+  envContent = fs.readFileSync(envPath, 'utf8');
+} else if (fs.existsSync(envProdPath)) {
+  envContent = fs.readFileSync(envProdPath, 'utf8');
+  envPathToRead = envProdPath;
+}
 
 // Get current version
 let currentVersion = '1.0.0';
@@ -84,23 +114,24 @@ if (newPrerelease) {
   newVersion += `-${newPrerelease}`;
 }
 
-// Update .env file
-if (versionMatch) {
-  envContent = envContent.replace(
-    /^VITE_APP_VERSION=.*$/m,
-    `VITE_APP_VERSION=${newVersion}`
-  );
-} else {
-  envContent += `\nVITE_APP_VERSION=${newVersion}\n`;
+// Update both .env and .env.production files
+const updatedFiles = [];
+if (fs.existsSync(envPath)) {
+  updateVersionInFile(envPath, newVersion);
+  updatedFiles.push('.env');
 }
 
-// Write back to .env file
-fs.writeFileSync(envPath, envContent, 'utf8');
+if (fs.existsSync(envProdPath)) {
+  updateVersionInFile(envProdPath, newVersion);
+  updatedFiles.push('.env.production');
+}
 
 console.log(`\n✅ Version bumped: ${currentVersion} -> ${newVersion}`);
 console.log(`   Type: ${bumpType}`);
+console.log(`   Updated files: ${updatedFiles.join(', ')}`);
 console.log('\n💡 Next steps:');
 console.log('   1. Review changes');
-console.log('   2. Commit: git add .env && git commit -m "Bump version to ' + newVersion + '"');
+const filesToCommit = updatedFiles.join(' ');
+console.log(`   2. Commit: git add ${filesToCommit} && git commit -m "Bump version to ${newVersion}"`);
 console.log('   3. Build: npm run build');
 console.log('   4. Deploy to production');
