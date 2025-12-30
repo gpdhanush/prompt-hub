@@ -21,7 +21,8 @@ EXCLUDE_PATTERNS = ("remove_",)
 EXCLUDED_TABLES = {
     "prompts", "prompt_logs",
     "asset_settings",
-    "project_activities", "project_change_requests", "project_credentials",
+    # Removed features: project_activities (Repository Activity), project_credentials (Credentials)
+    "project_change_requests", 
     "kanban_boards", "kanban_columns", "kanban_tasks", "kanban_integrations",
     "kanban_task_history", "kanban_board_members", "kanban_time_logs",
 }

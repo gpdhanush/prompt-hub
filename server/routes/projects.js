@@ -1345,81 +1345,6 @@ router.delete('/:id/call-notes/:noteId', requirePermission('projects.edit'), asy
 });
 
 // ============================================
-// CREDENTIALS ROUTES
-// ============================================
-
-// Create credential
-router.post('/:id/credentials', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { credential_type, service_name, username, password, url, api_key, notes } = req.body;
-    const created_by = req.user.id;
-    
-    // In production, encrypt password and api_key here
-    const [result] = await db.query(`
-      INSERT INTO project_credentials (project_id, credential_type, service_name, username, password, url, api_key, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, credential_type, service_name, username || null, password || null, url || null, api_key || null, notes || null, created_by]);
-    
-    const [newCred] = await db.query('SELECT * FROM project_credentials WHERE id = ?', [result.insertId]);
-    res.status(201).json({ data: newCred[0] });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get credentials
-// Get project credentials - check for projects.view permission
-router.get('/:id/credentials', requirePermission('projects.view'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const [creds] = await db.query(`
-      SELECT c.*, u.name as created_by_name
-      FROM project_credentials c
-      LEFT JOIN users u ON c.created_by = u.id
-      WHERE c.project_id = ?
-      ORDER BY c.created_at DESC
-    `, [id]);
-    res.json({ data: creds });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Update credential
-router.put('/:id/credentials/:credId', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
-  try {
-    const { credId } = req.params;
-    const { service_name, username, password, url, api_key, notes, is_active } = req.body;
-    
-    const updateFields = [];
-    const updateValues = [];
-    
-    if (service_name !== undefined) { updateFields.push('service_name = ?'); updateValues.push(service_name); }
-    if (username !== undefined) { updateFields.push('username = ?'); updateValues.push(username); }
-    if (password !== undefined) { updateFields.push('password = ?'); updateValues.push(password); }
-    if (url !== undefined) { updateFields.push('url = ?'); updateValues.push(url); }
-    if (api_key !== undefined) { updateFields.push('api_key = ?'); updateValues.push(api_key); }
-    if (notes !== undefined) { updateFields.push('notes = ?'); updateValues.push(notes); }
-    if (is_active !== undefined) { updateFields.push('is_active = ?'); updateValues.push(is_active); }
-    
-    updateFields.push('updated_at = CURRENT_TIMESTAMP');
-    updateValues.push(credId);
-    
-    await db.query(`
-      UPDATE project_credentials 
-      SET ${updateFields.join(', ')}
-      WHERE id = ?
-    `, updateValues);
-    
-    const [updated] = await db.query('SELECT * FROM project_credentials WHERE id = ?', [credId]);
-    res.json({ data: updated[0] });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ============================================
 // DAILY STATUS ROUTES
 // ============================================
 
@@ -1598,37 +1523,6 @@ router.post('/:id/comments', requireProjectAccess, async (req, res) => {
     
     res.status(201).json({ data: newComment[0] });
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get comments
-// Get project activities (commits, PRs, issues from GitHub/Bitbucket)
-// Get project activities - check for projects.view permission
-router.get('/:id/activities', requirePermission('projects.view'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { activity_type, limit = 50 } = req.query;
-    
-    let query = `
-      SELECT * FROM project_activities 
-      WHERE project_id = ?
-    `;
-    const params = [id];
-    
-    if (activity_type) {
-      query += ' AND activity_type = ?';
-      params.push(activity_type);
-    }
-    
-    query += ' ORDER BY created_at DESC LIMIT ?';
-    params.push(parseInt(limit));
-    
-    const [activities] = await db.query(query, params);
-    
-    res.json({ data: activities || [] });
-  } catch (error) {
-    logger.error('Error fetching project activities:', error);
     res.status(500).json({ error: error.message });
   }
 });

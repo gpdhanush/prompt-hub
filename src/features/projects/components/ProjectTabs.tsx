@@ -172,11 +172,6 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
     queryFn: () => projectsApi.getCallNotes(projectId),
   });
 
-  const { data: credentialsData } = useQuery({
-    queryKey: ['project-credentials', projectId],
-    queryFn: () => projectsApi.getCredentials(projectId),
-  });
-
   const { data: dailyStatusData } = useQuery({
     queryKey: ['project-daily-status', projectId],
     queryFn: () => projectsApi.getDailyStatus(projectId),
@@ -195,7 +190,6 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
   const files = filesData?.data || [];
   const changeRequests = changeRequestsData?.data || [];
   const callNotes = callNotesData?.data || [];
-  const credentials = credentialsData?.data || [];
   const dailyStatus = dailyStatusData?.data || [];
   const comments = commentsData?.data || [];
   const workedTime = workedTimeData?.data 
@@ -315,31 +309,6 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
     },
   });
 
-  // Credential form
-  const [showCredentialPassword, setShowCredentialPassword] = useState(false);
-  const [showCredentialApiKey, setShowCredentialApiKey] = useState(false);
-  const [credentialForm, setCredentialForm] = useState({
-    credential_type: "Login",
-    service_name: "",
-    username: "",
-    password: "",
-    url: "",
-    api_key: "",
-    notes: "",
-  });
-
-  const createCredentialMutation = useMutation({
-    mutationFn: (data: any) => projectsApi.createCredential(projectId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project-credentials', projectId] });
-      toast({ title: "Success", description: "Credential added successfully." });
-      setCredentialForm({ credential_type: "Login", service_name: "", username: "", password: "", url: "", api_key: "", notes: "" });
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to add credential.", variant: "destructive" });
-    },
-  });
-
   // Comment form
   const [commentForm, setCommentForm] = useState({
     comment: "",
@@ -361,12 +330,11 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-7 bg-muted/50">
+      <TabsList className="grid w-full grid-cols-6 bg-muted/50">
         <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
         <TabsTrigger value="files" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Files</TabsTrigger>
         <TabsTrigger value="change-requests" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Change Requests</TabsTrigger>
         <TabsTrigger value="calls" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Client Calls</TabsTrigger>
-        <TabsTrigger value="credentials" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Credentials</TabsTrigger>
         <TabsTrigger value="status" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Daily Status</TabsTrigger>
         <TabsTrigger value="comments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Comments</TabsTrigger>
       </TabsList>
@@ -714,153 +682,6 @@ export function ProjectTabs({ projectId, project, canEdit }: ProjectTabsProps) {
                       )}
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="credentials" className="space-y-6 mt-6">
-        {canEdit && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Credential</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Credential Type</Label>
-                  <Select
-                    value={credentialForm.credential_type}
-                    onValueChange={(value) => setCredentialForm({ ...credentialForm, credential_type: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Login">Login</SelectItem>
-                      <SelectItem value="API Key">API Key</SelectItem>
-                      <SelectItem value="Database">Database</SelectItem>
-                      <SelectItem value="Server">Server</SelectItem>
-                      <SelectItem value="Third-party Service">Third-party Service</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Service Name *</Label>
-                  <Input
-                    value={credentialForm.service_name}
-                    onChange={(e) => setCredentialForm({ ...credentialForm, service_name: e.target.value })}
-                    placeholder="Enter service name"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Username</Label>
-                  <Input
-                    value={credentialForm.username}
-                    onChange={(e) => setCredentialForm({ ...credentialForm, username: e.target.value })}
-                    placeholder="Enter username"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Password</Label>
-                  <div className="relative">
-                    <Input
-                      type={showCredentialPassword ? "text" : "password"}
-                      value={credentialForm.password}
-                      onChange={(e) => setCredentialForm({ ...credentialForm, password: e.target.value })}
-                      placeholder="Enter password"
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCredentialPassword(!showCredentialPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showCredentialPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>URL</Label>
-                <Input
-                  value={credentialForm.url}
-                  onChange={(e) => setCredentialForm({ ...credentialForm, url: e.target.value })}
-                  placeholder="https://example.com"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>API Key</Label>
-                <div className="relative">
-                  <Input
-                    type={showCredentialApiKey ? "text" : "password"}
-                    value={credentialForm.api_key}
-                    onChange={(e) => setCredentialForm({ ...credentialForm, api_key: e.target.value })}
-                    placeholder="Enter API key"
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCredentialApiKey(!showCredentialApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showCredentialApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Notes</Label>
-                <Textarea
-                  value={credentialForm.notes}
-                  onChange={(e) => setCredentialForm({ ...credentialForm, notes: e.target.value })}
-                  rows={2}
-                  placeholder="Additional notes..."
-                />
-              </div>
-              <Button 
-                onClick={() => {
-                  if (!credentialForm.service_name.trim()) {
-                    toast({ title: "Validation Error", description: "Service name is required", variant: "destructive" });
-                    return;
-                  }
-                  createCredentialMutation.mutate(credentialForm);
-                }} 
-                disabled={createCredentialMutation.isPending}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                {createCredentialMutation.isPending ? "Adding..." : "Add Credential"}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Credentials ({credentials.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {credentials.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No credentials stored</p>
-            ) : (
-              <div className="space-y-2">
-                {credentials.map((cred: any) => (
-                  <div key={cred.id} className="p-3 border rounded">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{cred.service_name}</div>
-                        <div className="text-sm text-muted-foreground">{cred.credential_type}</div>
-                        {cred.url && <div className="text-xs text-muted-foreground">{cred.url}</div>}
-                      </div>
-                      <StatusBadge variant={cred.is_active ? 'success' : 'neutral'}>
-                        {cred.is_active ? 'Active' : 'Inactive'}
-                      </StatusBadge>
-                    </div>
-                  </div>
                 ))}
               </div>
             )}

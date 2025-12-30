@@ -1,12 +1,18 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { SERVER_CONFIG } from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Get PORT from environment or use default
 const PORT = process.env.PORT || 3001;
+
+// Get production URL from environment or use default
+const PRODUCTION_URL = SERVER_CONFIG.API_BASE_URL 
+  ? SERVER_CONFIG.API_BASE_URL.replace('/api', '') // Remove /api suffix if present
+  : 'https://api.example.com';
 
 const options = {
   definition: {
@@ -31,8 +37,8 @@ const options = {
         '3. Authorize: Click the "Authorize" button and enter: Bearer <your-token>\n' +
         '4. Explore: Browse endpoints by category using the tags below\n\n' +
         '## Base URL\n\n' +
-        '- Development: http://localhost:3001\n' +
-        '- Production: https://api.example.com\n\n' +
+        '- Development: http://localhost:' + PORT + '\n' +
+        '- Production: ' + PRODUCTION_URL + '\n\n' +
         '## Support\n\n' +
         'For API support, please contact: support@example.com',
       contact: {
@@ -50,7 +56,7 @@ const options = {
         description: 'Development server',
       },
       {
-        url: 'https://api.example.com',
+        url: PRODUCTION_URL,
         description: 'Production server',
       },
     ],

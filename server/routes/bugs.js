@@ -15,6 +15,52 @@ const router = express.Router();
 // Apply authentication to all routes
 router.use(authenticate);
 
+/**
+ * @swagger
+ * /api/bugs:
+ *   get:
+ *     summary: Get all bugs
+ *     tags: [Bugs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Items per page
+ *       - in: query
+ *         name: my_bugs
+ *         schema:
+ *           type: string
+ *         description: Filter to show only bugs assigned to or reported by current user
+ *     responses:
+ *       200:
+ *         description: List of bugs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Bug'
+ *                 pagination:
+ *                   $ref: '#/components/schemas/PaginatedResponse/properties/pagination'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
+
 // Configure multer for file uploads
 const uploadDir = path.join(process.cwd(), 'uploads', 'bugs');
 if (!fs.existsSync(uploadDir)) {
@@ -201,6 +247,38 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/bugs/{id}:
+ *   get:
+ *     summary: Get bug by ID
+ *     tags: [Bugs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Bug ID
+ *     responses:
+ *       200:
+ *         description: Bug details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   $ref: '#/components/schemas/Bug'
+ *       404:
+ *         description: Bug not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id', async (req, res) => {
   try {
     // Check if tasks table has role-specific columns
@@ -268,6 +346,82 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/bugs:
+ *   post:
+ *     summary: Create a new bug
+ *     tags: [Bugs]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *             properties:
+ *               project_id:
+ *                 type: integer
+ *                 description: Project ID
+ *               task_id:
+ *                 type: integer
+ *                 description: Task ID
+ *               title:
+ *                 type: string
+ *                 description: Bug title
+ *               description:
+ *                 type: string
+ *                 description: Bug description
+ *               bug_type:
+ *                 type: string
+ *                 enum: [Functional, UI/UX, Performance, Security, Other]
+ *               severity:
+ *                 type: string
+ *                 enum: [Critical, High, Medium, Low]
+ *               priority:
+ *                 type: string
+ *                 enum: [High, Medium, Low]
+ *               status:
+ *                 type: string
+ *                 enum: [Open, In Progress, Fixed, Rejected, Won't Fix, Duplicate]
+ *               assigned_to:
+ *                 type: integer
+ *                 description: User ID to assign bug to
+ *               steps_to_reproduce:
+ *                 type: string
+ *               expected_behavior:
+ *                 type: string
+ *               actual_behavior:
+ *                 type: string
+ *               attachments:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *     responses:
+ *       201:
+ *         description: Bug created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   $ref: '#/components/schemas/Bug'
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 // Create bug - Tester, Admin, Team Leader, Developer, Designer, and Super Admin
 router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), upload.array('attachments', 10), async (req, res) => {
   try {
@@ -512,6 +666,68 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
 });
 
 // Update bug - Tester, Admin, Team Leader, Developer, Designer, and Super Admin
+/**
+ * @swagger
+ * /api/bugs/{id}:
+ *   put:
+ *     summary: Update a bug
+ *     tags: [Bugs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Bug ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [Open, In Progress, Fixed, Rejected, Won't Fix, Duplicate]
+ *               severity:
+ *                 type: string
+ *                 enum: [Critical, High, Medium, Low]
+ *               priority:
+ *                 type: string
+ *                 enum: [High, Medium, Low]
+ *               assigned_to:
+ *                 type: integer
+ *               resolution_type:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Bug updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   $ref: '#/components/schemas/Bug'
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Bug not found
+ *       500:
+ *         description: Server error
+ */
 router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -1057,6 +1273,40 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
   }
 });
 
+/**
+ * @swagger
+ * /api/bugs/{id}:
+ *   delete:
+ *     summary: Delete a bug
+ *     tags: [Bugs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Bug ID
+ *     responses:
+ *       200:
+ *         description: Bug deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Only Team Leaders and Super Admins can delete bugs
+ *       404:
+ *         description: Bug not found
+ *       500:
+ *         description: Server error
+ */
 // Delete bug - only Team Leader and Super Admin
 router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {

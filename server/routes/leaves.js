@@ -10,6 +10,46 @@ const router = express.Router();
 // Apply authentication to all routes
 router.use(authenticate);
 
+/**
+ * @swagger
+ * /api/leaves:
+ *   get:
+ *     summary: Get all leaves
+ *     tags: [Leaves]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Items per page
+ *     responses:
+ *       200:
+ *         description: List of leaves
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 pagination:
+ *                   $ref: '#/components/schemas/PaginatedResponse/properties/pagination'
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // Get leaves - role-based filtering
 router.get('/', async (req, res) => {
   try {
@@ -149,6 +189,38 @@ router.get('/', async (req, res) => {
 });
 
 // Get single leave by ID
+/**
+ * @swagger
+ * /api/leaves/{id}:
+ *   get:
+ *     summary: Get leave by ID
+ *     tags: [Leaves]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Leave ID
+ *     responses:
+ *       200:
+ *         description: Leave details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *       404:
+ *         description: Leave not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id', async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -234,6 +306,55 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create leave - all users can create their own leave
+/**
+ * @swagger
+ * /api/leaves:
+ *   post:
+ *     summary: Create a new leave request
+ *     tags: [Leaves]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - leave_type
+ *               - start_date
+ *               - end_date
+ *             properties:
+ *               leave_type:
+ *                 type: string
+ *                 enum: [Annual, Sick, Casual, Emergency, Other]
+ *               start_date:
+ *                 type: string
+ *                 format: date
+ *               end_date:
+ *                 type: string
+ *                 format: date
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Leave request created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/', async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -356,6 +477,64 @@ router.post('/', async (req, res) => {
 });
 
 // Update leave - users can update their own, admins can update any
+/**
+ * @swagger
+ * /api/leaves/{id}:
+ *   put:
+ *     summary: Update a leave request
+ *     tags: [Leaves]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Leave ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [Pending, Approved, Rejected, Cancelled]
+ *               review_notes:
+ *                 type: string
+ *               leave_type:
+ *                 type: string
+ *               start_date:
+ *                 type: string
+ *                 format: date
+ *               end_date:
+ *                 type: string
+ *                 format: date
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Leave updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Leave not found
+ *       500:
+ *         description: Server error
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -665,6 +844,40 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete leave - users can delete their own, admins can delete any
+/**
+ * @swagger
+ * /api/leaves/{id}:
+ *   delete:
+ *     summary: Delete a leave request
+ *     tags: [Leaves]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Leave ID
+ *     responses:
+ *       200:
+ *         description: Leave deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Can only delete own leaves or pending leaves
+ *       404:
+ *         description: Leave not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const userId = req.user?.id;

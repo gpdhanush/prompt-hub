@@ -149,6 +149,10 @@ export default function EmployeeProfile() {
 
   const employee = data?.data;
   const documents = documentsData?.data || [];
+  
+  // Check if employee is Level 2 (not Level 1 roles)
+  const level1Roles = ['Team Lead', 'Team Leader', 'Admin', 'Manager', 'HR Manager', 'Accounts Manager', 'Office Manager'];
+  const isLevel2Employee = employee && !level1Roles.includes(employee.role || '') && employee.role !== 'Super Admin';
 
   // Verify document mutation
   const verifyDocumentMutation = useMutation({
@@ -273,7 +277,13 @@ export default function EmployeeProfile() {
                 <Avatar className="h-16 w-16">
                   <AvatarImage src={getProfilePhotoUrl(employee.profile_photo_url || null)} />
                   <AvatarFallback className="text-lg">
-                    {employee.name ? employee.name.split(" ").map((n: string) => n[0]).join("") : "E"}
+                    {employee.name ? (() => {
+                      const parts = employee.name.trim().split(/\s+/);
+                      if (parts.length >= 2) {
+                        return (parts[0][0] + parts[1][0]).toUpperCase();
+                      }
+                      return parts[0].substring(0, 2).toUpperCase();
+                    })() : "E"}
                   </AvatarFallback>
                 </Avatar>
                 <div>
@@ -285,22 +295,11 @@ export default function EmployeeProfile() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* First Row: Name, Status, Role, Position in 4 columns */}
+              {/* First Row: Emp Name, Role, Position, Date of Joining */}
               <div className="grid grid-cols-4 gap-4">
                 <div>
-                  <Label className="text-muted-foreground text-sm">Employee Name</Label>
+                  <Label className="text-muted-foreground text-sm">Emp Name</Label>
                   <div className="text-sm font-medium mt-1">{employee.name || "N/A"}</div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-sm">Status</Label>
-                  <div className="mt-1">
-                    <StatusBadge 
-                      variant={(employee.employee_status || employee.status) === "Active" ? "success" : (employee.employee_status || employee.status) === "On Leave" ? "info" : "warning"}
-                      className="text-xs"
-                    >
-                      {employee.employee_status || employee.status || "Active"}
-                    </StatusBadge>
-                  </div>
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-sm">Role</Label>
@@ -310,61 +309,40 @@ export default function EmployeeProfile() {
                   <Label className="text-muted-foreground text-sm">Position</Label>
                   <div className="text-sm font-medium mt-1">{employee.position || "Not assigned"}</div>
                 </div>
-              </div>
-
-              {/* Second Row: Date of Joining, Date of Birth in 2 columns */}
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-muted-foreground text-sm">Date of Joining</Label>
                   <div className="text-sm font-medium mt-1">{formatDate(employee.date_of_joining)}</div>
                 </div>
+              </div>
+
+              {/* Second Row: Date of Birth, Gender, Mobile, WhatsApp */}
+              <div className="grid grid-cols-4 gap-4">
                 <div>
                   <Label className="text-muted-foreground text-sm">Date of Birth</Label>
                   <div className="text-sm font-medium mt-1">{formatDate(employee.date_of_birth)}</div>
                 </div>
-              </div>
-
-              {/* Contact Information */}
-              <div>
-                <Label className="text-muted-foreground text-sm">Contact Information</Label>
-                <div className="grid grid-cols-2 gap-4 mt-1">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Email</div>
-                    <div className="text-sm font-medium">{employee.email || "Not provided"}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Mobile</div>
-                    <div className="text-sm font-medium">{employee.mobile || "Not provided"}</div>
-                  </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Gender</Label>
+                  <div className="text-sm font-medium mt-1">{employee.gender || "Not provided"}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Mobile</Label>
+                  <div className="text-sm font-medium mt-1">{employee.mobile || "Not provided"}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">WhatsApp</Label>
+                  <div className="text-sm font-medium mt-1">{employee.whatsapp || "Not provided"}</div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Employment Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="h-5 w-5" />
-                Employment Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              {/* Third Row: Email & Status */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-muted-foreground text-sm">Role</Label>
-                  <div className="text-sm font-medium mt-1">{employee.role || "Not assigned"}</div>
+                  <Label className="text-muted-foreground text-sm">Email</Label>
+                  <div className="text-sm font-medium mt-1">{employee.email || "Not provided"}</div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground text-sm">Position</Label>
-                  <div className="text-sm font-medium mt-1">{employee.position || "Not assigned"}</div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-sm">Date of Joining</Label>
-                  <div className="text-sm font-medium mt-1">{formatDate(employee.date_of_joining)}</div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-sm">Employee Status</Label>
+                  <Label className="text-muted-foreground text-sm">Status</Label>
                   <div className="mt-1">
                     <StatusBadge 
                       variant={(employee.employee_status || employee.status) === "Active" ? "success" : (employee.employee_status || employee.status) === "On Leave" ? "info" : "warning"}
@@ -387,17 +365,19 @@ export default function EmployeeProfile() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label className="text-muted-foreground text-sm">Address Line 1</Label>
-                <div className="text-sm mt-1">{employee.address1 || "Not provided"}</div>
-              </div>
-              {employee.address2 && (
+              {/* First Row: Address Line 1 & Address Line 2 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Address Line 1</Label>
+                  <div className="text-sm mt-1">{employee.address1 || "Not provided"}</div>
+                </div>
                 <div>
                   <Label className="text-muted-foreground text-sm">Address Line 2</Label>
-                  <div className="text-sm mt-1">{employee.address2}</div>
+                  <div className="text-sm mt-1">{employee.address2 || "Not provided"}</div>
                 </div>
-              )}
-              <div className="grid grid-cols-3 gap-4">
+              </div>
+              {/* Second Row: State, District, Pincode, Landmark */}
+              <div className="grid grid-cols-4 gap-4">
                 <div>
                   <Label className="text-muted-foreground text-sm">State</Label>
                   <div className="text-sm mt-1">{employee.state || "Not provided"}</div>
@@ -410,13 +390,11 @@ export default function EmployeeProfile() {
                   <Label className="text-muted-foreground text-sm">Pincode</Label>
                   <div className="text-sm mt-1">{employee.pincode || "Not provided"}</div>
                 </div>
-              </div>
-              {employee.landmark && (
                 <div>
                   <Label className="text-muted-foreground text-sm">Landmark</Label>
-                  <div className="text-sm mt-1">{employee.landmark}</div>
+                  <div className="text-sm mt-1">{employee.landmark || "Not provided"}</div>
                 </div>
-              )}
+              </div>
             </CardContent>
           </Card>
 
@@ -569,44 +547,6 @@ export default function EmployeeProfile() {
 
         {/* Right Column - Sidebar */}
         <div className="space-y-6">
-          {/* Personal Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Personal Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label className="text-muted-foreground text-sm">Date of Birth</Label>
-                <div className="text-sm font-medium mt-1">{formatDate(employee.date_of_birth)}</div>
-              </div>
-              <div>
-                <Label className="text-muted-foreground text-sm">Gender</Label>
-                <div className="text-sm font-medium mt-1">{employee.gender || "Not provided"}</div>
-              </div>
-              {employee.district && (
-                <div>
-                  <Label className="text-muted-foreground text-sm">District</Label>
-                  <div className="text-sm font-medium mt-1">{employee.district}</div>
-                </div>
-              )}
-              {employee.teams_id && (
-                <div>
-                  <Label className="text-muted-foreground text-sm">Teams ID</Label>
-                  <div className="text-sm font-medium mt-1">{employee.teams_id}</div>
-                </div>
-              )}
-              {employee.whatsapp && (
-                <div>
-                  <Label className="text-muted-foreground text-sm">WhatsApp</Label>
-                  <div className="text-sm font-medium mt-1">{employee.whatsapp}</div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Team Lead */}
           <Card>
             <CardHeader>
@@ -634,8 +574,8 @@ export default function EmployeeProfile() {
             </CardContent>
           </Card>
 
-          {/* Team Members */}
-          <TeamMembersCard employeeId={employee.id} />
+          {/* Team Members - Hide for Level 2 employees */}
+          {!isLevel2Employee && <TeamMembersCard employeeId={employee.id} />}
 
           {/* Leave Balance */}
           <Card>

@@ -248,7 +248,9 @@ export default function BugDetail() {
             </CardHeader>
             <CardContent>
               {bug.description ? (
-                <MarkdownRenderer content={bug.description} className="text-sm" />
+                <div className="text-sm p-4 bg-muted/30 rounded-md border max-h-[600px] overflow-y-auto">
+                  <MarkdownRenderer content={bug.description} />
+                </div>
               ) : (
                 <div className="text-sm text-muted-foreground">No Description</div>
               )}

@@ -1735,7 +1735,7 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     let { 
-      name, email, mobile, password, empCode, teamLeadId, status, position,
+      name, email, mobile, password, empCode, teamLeadId, status, position, role,
       date_of_birth, gender, date_of_joining, employee_status,
       bank_name, bank_account_number, ifsc_code,
       address1, address2, landmark, state, district, pincode,
@@ -1891,10 +1891,12 @@ router.put('/:id', async (req, res) => {
       return value;
     };
     
-    // Update user if name/email/mobile/password/position provided
-    if (name || email || mobile || password || position) {
+    // Update user if name/email/mobile/password/position/role provided
+    if (name || email || mobile || password || position || role) {
       const updates = [];
       const params = [];
+      let newRoleId = null; // Store new role ID for position validation
+      
       if (name) { updates.push('name = ?'); params.push(toUpperCase(name)); }
       if (email) { updates.push('email = ?'); params.push(email); }
       if (mobile !== undefined) { 
@@ -1908,6 +1910,111 @@ router.put('/:id', async (req, res) => {
         updates.push('password_hash = ?');
         params.push(passwordHash);
       }
+      
+      // Handle role update
+      if (role) {
+        // Normalize role value (trim and lowercase)
+        const normalizedRole = String(role).trim().toLowerCase();
+        
+        // Map frontend role values to database role names
+        const roleMapping = {
+          'admin': 'Admin',
+          'team-lead': 'Team Leader',
+          'team-leader': 'Team Leader',
+          'team lead': 'Team Leader',
+          'developer': 'Developer',
+          'designer': 'Designer',
+          'tester': 'Tester',
+          'viewer': 'Viewer',
+          'super-admin': 'Super Admin',
+          'super admin': 'Super Admin'
+        };
+        
+        const dbRoleName = roleMapping[normalizedRole] || role;
+        
+        // Check if trying to update to Super Admin - only Super Admins can do this
+        if (dbRoleName === 'Super Admin' && currentUserRole !== 'Super Admin') {
+          return res.status(403).json({ 
+            error: 'Only Super Admins can assign Super Admin role to other users' 
+          });
+        }
+        
+        // Get current user's level for validation
+        const creatorUserId = req.user?.id;
+        let currentUserLevel = 2; // default
+        if (creatorUserId) {
+          const [currentUserData] = await db.query(`
+            SELECT 
+              r.level as role_level,
+              p.level as position_level
+            FROM users u
+            LEFT JOIN roles r ON u.role_id = r.id
+            LEFT JOIN positions p ON u.position_id = p.id
+            WHERE u.id = ?
+          `, [creatorUserId]);
+          
+          if (currentUserData.length > 0) {
+            const roleLevel = currentUserData[0].role_level;
+            const positionLevel = currentUserData[0].position_level;
+            currentUserLevel = roleLevel !== null && roleLevel !== undefined
+              ? roleLevel
+              : (positionLevel !== null && positionLevel !== undefined
+                ? positionLevel
+                : 2);
+          }
+        }
+        
+        // Level 1 users can only update to Level 2 roles
+        if (currentUserLevel === 1) {
+          // Get the new role's level
+          let [newRoleData] = await db.query('SELECT id, name, level FROM roles WHERE name = ?', [dbRoleName]);
+          if (newRoleData.length === 0) {
+            [newRoleData] = await db.query('SELECT id, name, level FROM roles WHERE LOWER(name) = LOWER(?)', [dbRoleName]);
+          }
+          
+          if (newRoleData.length === 0) {
+            const [allRoles] = await db.query('SELECT name FROM roles');
+            const availableRoles = allRoles.map(r => r.name).join(', ');
+            return res.status(400).json({ error: `Invalid role: "${role}". Available roles: ${availableRoles}` });
+          }
+          
+          const newRoleLevel = newRoleData[0].level;
+          // If role level is null, default to 2 (employee level)
+          const finalNewRoleLevel = newRoleLevel !== null && newRoleLevel !== undefined ? newRoleLevel : 2;
+          
+          if (finalNewRoleLevel !== 2) {
+            return res.status(403).json({ 
+              error: `You can only assign Level 2 roles (your employees). Selected role "${dbRoleName}" is Level ${finalNewRoleLevel}, which is not allowed.` 
+            });
+          }
+        }
+        
+        // Try exact match first, then case-insensitive
+        let [roles] = await db.query('SELECT id FROM roles WHERE name = ?', [dbRoleName]);
+        if (roles.length === 0) {
+          [roles] = await db.query('SELECT id FROM roles WHERE LOWER(name) = LOWER(?)', [dbRoleName]);
+        }
+        
+        if (roles.length === 0) {
+          const [allRoles] = await db.query('SELECT name FROM roles');
+          const availableRoles = allRoles.map(r => r.name).join(', ');
+          return res.status(400).json({ error: `Invalid role: "${role}". Available roles: ${availableRoles}` });
+        }
+        
+        newRoleId = roles[0].id;
+        
+        // Validate using validateUserCreation to ensure level restrictions
+        if (creatorUserId) {
+          const validation = await validateUserCreation(creatorUserId, newRoleId, null);
+          if (!validation.valid) {
+            return res.status(403).json({ error: validation.error });
+          }
+        }
+        
+        updates.push('role_id = ?');
+        params.push(newRoleId);
+      }
+      
       if (position) {
         // Get position_id from position name
         const [positions] = await db.query('SELECT id FROM positions WHERE name = ?', [position]);
@@ -1918,9 +2025,10 @@ router.put('/:id', async (req, res) => {
           // Get the current employee's role_id from the query result
           const creatorUserId = req.user?.id;
           if (creatorUserId && employees.length > 0) {
-            const currentRoleId = employees[0].role_id || null;
-            if (currentRoleId) {
-              const validation = await validateUserCreation(creatorUserId, currentRoleId, newPositionId);
+            // Use the new role_id if role is being updated, otherwise use current role_id
+            const roleIdToValidate = role ? newRoleId : employees[0].role_id;
+            if (roleIdToValidate) {
+              const validation = await validateUserCreation(creatorUserId, roleIdToValidate, newPositionId);
               if (!validation.valid) {
                 return res.status(403).json({ error: validation.error });
               }
@@ -1933,6 +2041,7 @@ router.put('/:id', async (req, res) => {
           return res.status(400).json({ error: `Position "${position}" not found. Please select a valid position.` });
         }
       }
+      
       if (updates.length > 0) {
         params.push(userId);
         await db.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);

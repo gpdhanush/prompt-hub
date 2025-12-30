@@ -613,7 +613,6 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
       await queryClient.invalidateQueries({ queryKey: ['projects'] });
       await queryClient.invalidateQueries({ queryKey: ['project-files', projectId] });
       await queryClient.invalidateQueries({ queryKey: ['project-comments', projectId] });
-      await queryClient.invalidateQueries({ queryKey: ['project-activities', projectId] });
       
       // Refetch projects list to immediately show changes
       await queryClient.refetchQueries({ queryKey: ['projects'] });

@@ -133,13 +133,13 @@ export default function TaskView() {
               {/* Description */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Description</Label>
-                <div className="p-4 bg-muted/30 rounded-md border">
-                  {task.description ? (
-                    <MarkdownRenderer content={task.description} className="text-sm" />
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No description provided</p>
-                  )}
-                </div>
+                {task.description ? (
+                  <div className="text-sm p-4 bg-muted/30 rounded-md border max-h-[600px] overflow-y-auto">
+                    <MarkdownRenderer content={task.description} />
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No description provided</p>
+                )}
               </div>
 
               {/* Attachments */}

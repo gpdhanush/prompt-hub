@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Flag, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X, GitCommit, GitBranch, GitPullRequest, GitMerge, MoreHorizontal, Eye, EyeOff, Key, Pencil, Trash, Calendar as CalendarIcon } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X, MoreHorizontal, Eye, EyeOff, Pencil, Trash, Calendar as CalendarIcon } from "lucide-react";
 import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import { StatusBadge, projectStatusMap } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -216,6 +217,7 @@ export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [activeDescriptionTab, setActiveDescriptionTab] = useState("description");
 
   // Get current user info
   const currentUser = getCurrentUser();
@@ -331,46 +333,11 @@ export default function ProjectDetail() {
     refetchOnReconnect: false,
   });
 
-  // Fetch project activities (GitHub/Bitbucket commits, PRs, etc.)
-  const { data: activitiesData, isLoading: activitiesLoading, error: activitiesError } = useQuery({
-    queryKey: ['project-activities', numericProjectId],
-    queryFn: async () => {
-      if (!numericProjectId) {
-        throw new Error('Project ID not available');
-      }
-      const result = await projectsApi.getActivities(numericProjectId, { limit: 20 });
-      logger.debug('Activities data received:', result);
-      return result;
-    },
-    enabled: !!numericProjectId && !!projectData?.data,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 10, // 10 minutes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
-
-  // Fetch project credentials
-  const { data: credentialsData } = useQuery({
-    queryKey: ['project-credentials', numericProjectId],
-    queryFn: () => {
-      if (!numericProjectId) {
-        throw new Error('Project ID not available');
-      }
-      return projectsApi.getCredentials(numericProjectId);
-    },
-    enabled: !!numericProjectId && !!projectData?.data,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 10, // 10 minutes
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
-
   const project = projectData?.data;
   const allUsers = usersData?.data || [];
   const allEmployees = employeesData?.data || [];
   const files = filesData?.data || [];
   const callNotes = callNotesData?.data || [];
-  const credentials = credentialsData?.data || [];
   const workedTime = workedTimeData?.data 
     ? {
         total_hours: typeof workedTimeData.data.total_hours === 'number' 
@@ -629,14 +596,6 @@ export default function ProjectDetail() {
                 </div>
               )}
 
-              {project.description && (
-                <div>
-                  <Label className="text-muted-foreground text-sm">Description</Label>
-                  <div className="text-sm mt-1 p-4 bg-muted/30 rounded-md border">
-                    <MarkdownRenderer content={project.description} />
-                  </div>
-                </div>
-              )}
               {project.estimated_delivery_plan && (
                 <div>
                   <Label className="text-muted-foreground text-sm">Estimated Delivery Plan</Label>
@@ -648,6 +607,120 @@ export default function ProjectDetail() {
             </CardContent>
           </Card>
 
+          {/* Description Section with Tabs */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Description</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-4 bg-muted/50">
+                  <TabsTrigger value="description" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                    Description
+                  </TabsTrigger>
+                  <TabsTrigger value="files" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                    Project Files ({files.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="call-notes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                    Client Call Notes ({callNotes.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="comments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                    Comments
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Description Tab */}
+                <TabsContent value="description" className="mt-4">
+                  {project.description ? (
+                    <div className="text-sm p-4 bg-muted/30 rounded-md border max-h-[600px] overflow-y-auto">
+                      <MarkdownRenderer content={project.description} />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No description provided</p>
+                  )}
+                </TabsContent>
+
+                {/* Project Files Tab */}
+                <TabsContent value="files" className="mt-4">
+                  {files.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No files uploaded yet</p>
+                  ) : (
+                    <AttachmentList
+                      attachments={files.map((file: any) => ({
+                        id: file.id,
+                        original_filename: file.file_name,
+                        filename: file.file_name,
+                        path: file.file_url,
+                        url: file.file_url,
+                        file_url: file.file_url,
+                        size: 0,
+                      }))}
+                      showLabel={false}
+                    />
+                  )}
+                </TabsContent>
+
+                {/* Client Call Notes Tab */}
+                <TabsContent value="call-notes" className="mt-4">
+                  {numericProjectId ? (
+                    callNotes.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No call notes recorded</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {callNotes.map((note: any) => (
+                          <Card key={note.id}>
+                            <CardContent className="pt-6">
+                              <div className="mb-3">
+                                <div className="text-base font-semibold">
+                                  {note.call_date ? new Date(note.call_date).toLocaleString() : 'No date'}
+                                </div>
+                                {note.participants && (
+                                  <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                                    <User className="h-3 w-3" />
+                                    Participants: {note.participants}
+                                  </div>
+                                )}
+                                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                  <CalendarIcon className="h-3 w-3" />
+                                  {note.follow_up_required ? (
+                                    note.follow_up_date ? (
+                                      `Follow-up Date: ${new Date(note.follow_up_date).toLocaleDateString()}`
+                                    ) : (
+                                      "Follow-up required"
+                                    )
+                                  ) : (
+                                    "Follow-up: No need"
+                                  )}
+                                </div>
+                              </div>
+                              {note.notes && <p className="text-sm mb-2">{note.notes}</p>}
+                              {note.action_items && (
+                                <div className="text-sm">
+                                  <span className="font-medium">Action Items: </span>
+                                  {note.action_items}
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Project ID not available</p>
+                  )}
+                </TabsContent>
+
+                {/* Comments Tab */}
+                <TabsContent value="comments" className="mt-4">
+                  {numericProjectId ? (
+                    <ProjectCommentsSection projectId={numericProjectId} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Project ID not available</p>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
 
           {/* Milestones */}
           {project.milestones && project.milestones.length > 0 && (
@@ -685,31 +758,6 @@ export default function ProjectDetail() {
               </CardContent>
             </Card>
           )}
-
-          {/* Project Files */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Project Files ({files.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {files.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No files uploaded yet</p>
-              ) : (
-                <AttachmentList
-                  attachments={files.map((file: any) => ({
-                    id: file.id,
-                    original_filename: file.file_name,
-                    filename: file.file_name,
-                    path: file.file_url,
-                    url: file.file_url,
-                    file_url: file.file_url,
-                    size: 0,
-                  }))}
-                  showLabel={false}
-                />
-              )}
-            </CardContent>
-          </Card>
 
           {/* Additional Notes */}
           {(project.internal_notes || project.client_notes || project.admin_remarks) && (
@@ -749,359 +797,7 @@ export default function ProjectDetail() {
             </Card>
           )}
 
-          {/* Repository Activity */}
-          {numericProjectId && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Github className="h-5 w-5" />
-                  Repository Activity
-                  {activitiesData?.data && ` (${activitiesData.data.length})`}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-              {activitiesLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  <span className="ml-2 text-sm text-muted-foreground">Loading activities...</span>
-                </div>
-              ) : activitiesError ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-destructive" />
-                  <p className="text-sm">Error loading repository activities</p>
-                  <p className="text-xs mt-1">{activitiesError.message || 'Unknown error'}</p>
-                </div>
-              ) : !activitiesData?.data || activitiesData.data.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Github className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm font-medium mb-1">No repository activity yet</p>
-                  <p className="text-xs">Commits, pull requests, and issues will appear here once webhooks are configured and events are received</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {activitiesData.data.map((activity: any) => (
-                  <div key={activity.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
-                    {activity.activity_type === 'push' ? (
-                      // Detailed Commit View
-                      <div className="space-y-3">
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5">
-                            <GitCommit className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2 flex-wrap">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  <span className="text-sm font-semibold text-foreground">
-                                    {activity.commit_message || 'No commit message'}
-                                  </span>
-                                  {activity.branch && (
-                                    <Badge variant="outline" className="text-xs">
-                                      <GitBranch className="h-3 w-3 mr-1" />
-                                      {activity.branch}
-                                    </Badge>
-                                  )}
-                                </div>
-                                {activity.commit_sha && (
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <code className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-muted-foreground">
-                                      {activity.commit_sha.substring(0, 7)}
-                                    </code>
-                                    {activity.commit_url && (
-                                      <a
-                                        href={activity.commit_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-primary hover:underline flex items-center gap-1"
-                                      >
-                                        <LinkIcon className="h-3 w-3" />
-                                        View on GitHub
-                                      </a>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            
-                            {/* Commit Stats */}
-                            {(activity.files_changed > 0 || activity.additions > 0 || activity.deletions > 0) && (
-                              <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2 pt-2 border-t">
-                                {activity.files_changed > 0 && (
-                                  <span className="flex items-center gap-1">
-                                    <FileText className="h-3 w-3" />
-                                    {activity.files_changed} file{activity.files_changed !== 1 ? 's' : ''}
-                                  </span>
-                                )}
-                                {activity.additions > 0 && (
-                                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                    <span className="font-semibold">+{activity.additions}</span>
-                                    additions
-                                  </span>
-                                )}
-                                {activity.deletions > 0 && (
-                                  <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                                    <span className="font-semibold">-{activity.deletions}</span>
-                                    deletions
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            
-                            {/* Author and Date */}
-                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <User className="h-3 w-3" />
-                                <span className="font-medium">{activity.commit_author || 'Unknown'}</span>
-                                {activity.commit_author_email && (
-                                  <span className="text-muted-foreground/70">({activity.commit_author_email})</span>
-                                )}
-                              </div>
-                              <span>•</span>
-                              <div className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                <span>{formatFullDate(activity.created_at)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : activity.activity_type === 'pull_request' ? (
-                      // Pull Request View
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5">
-                          <GitPullRequest className="h-5 w-5 text-blue-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="text-sm font-semibold">
-                              PR #{activity.pull_request_number}: {activity.pull_request_title}
-                            </span>
-                            {activity.branch && (
-                              <Badge variant="outline" className="text-xs">
-                                {activity.branch}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                            <span>{activity.commit_author || 'Unknown'}</span>
-                            <span>•</span>
-                            <span>{formatDate(activity.created_at)}</span>
-                            {activity.pull_request_url && (
-                              <>
-                                <span>•</span>
-                                <a
-                                  href={activity.pull_request_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-primary hover:underline"
-                                >
-                                  View PR
-                                </a>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ) : activity.activity_type === 'issue' ? (
-                      // Issue View
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5">
-                          <AlertTriangle className="h-5 w-5 text-orange-500" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="text-sm font-semibold">
-                              Issue #{activity.issue_number}: {activity.issue_title}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                            <span>{activity.commit_author || 'Unknown'}</span>
-                            <span>•</span>
-                            <span>{formatDate(activity.created_at)}</span>
-                            {activity.issue_url && (
-                              <>
-                                <span>•</span>
-                                <a
-                                  href={activity.issue_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-primary hover:underline"
-                                >
-                                  View Issue
-                                </a>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      // Other activity types (branch, tag, etc.)
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5">
-                          {activity.activity_type === 'branch_created' && <GitBranch className="h-5 w-5 text-green-500" />}
-                          {activity.activity_type === 'branch_deleted' && <GitBranch className="h-5 w-5 text-red-500" />}
-                          {activity.activity_type === 'tag_created' && <Flag className="h-5 w-5 text-purple-500" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="text-sm font-semibold">
-                              {activity.activity_type === 'branch_created' && `Branch created: ${activity.branch}`}
-                              {activity.activity_type === 'branch_deleted' && `Branch deleted: ${activity.branch}`}
-                              {activity.activity_type === 'tag_created' && `Tag created: ${activity.branch}`}
-                            </span>
-                            {activity.branch && (
-                              <Badge variant="outline" className="text-xs">
-                                {activity.branch}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                            <span>{formatDate(activity.created_at)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          )}
 
-          {/* Credentials Section */}
-          {numericProjectId && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Key className="h-5 w-5" />
-                  Credentials ({credentials.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {credentials.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No credentials stored</p>
-                ) : (
-                  <div className="space-y-3">
-                    {credentials.map((cred: any) => (
-                      <Card key={cred.id}>
-                        <CardContent className="pt-6">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex-1">
-                              <div className="font-semibold text-base mb-1">{cred.service_name}</div>
-                              <div className="text-sm text-muted-foreground mb-2">
-                                <StatusBadge variant="neutral" className="text-xs">{cred.credential_type}</StatusBadge>
-                              </div>
-                              {cred.url && (
-                                <div className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
-                                  <LinkIcon className="h-3 w-3" />
-                                  <a href={cred.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                    {cred.url}
-                                  </a>
-                                </div>
-                              )}
-                              {cred.username && (
-                                <div className="text-sm mb-1">
-                                  <span className="font-medium">Username: </span>
-                                  <span className="text-muted-foreground">{cred.username}</span>
-                                </div>
-                              )}
-                              {cred.notes && (
-                                <div className="text-sm mt-2 p-2 bg-muted rounded">
-                                  <span className="font-medium">Notes: </span>
-                                  <span className="text-muted-foreground">{cred.notes}</span>
-                                </div>
-                              )}
-                            </div>
-                            <StatusBadge variant={cred.is_active ? 'success' : 'neutral'}>
-                              {cred.is_active ? 'Active' : 'Inactive'}
-                            </StatusBadge>
-                          </div>
-                          {cred.created_by_name && (
-                            <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
-                              Created by: {cred.created_by_name}
-                              {cred.created_at && ` on ${formatDate(cred.created_at)}`}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Call Notes */}
-          {numericProjectId && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="h-5 w-5" />
-                  Client Call Notes ({callNotes.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {callNotes.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No call notes recorded</p>
-                ) : (
-                  <div className="space-y-4">
-                    {callNotes.map((note: any) => (
-                      <Card key={note.id}>
-                        <CardContent className="pt-6">
-                          <div className="mb-3">
-                            <div className="text-base font-semibold">
-                              {note.call_date ? new Date(note.call_date).toLocaleString() : 'No date'}
-                            </div>
-                            {note.participants && (
-                              <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                                <User className="h-3 w-3" />
-                                Participants: {note.participants}
-                              </div>
-                            )}
-                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                              <CalendarIcon className="h-3 w-3" />
-                              {note.follow_up_required ? (
-                                note.follow_up_date ? (
-                                  `Follow-up Date: ${new Date(note.follow_up_date).toLocaleDateString()}`
-                                ) : (
-                                  "Follow-up required"
-                                )
-                              ) : (
-                                "Follow-up: No need"
-                              )}
-                            </div>
-                          </div>
-                          {note.notes && <p className="text-sm mb-2">{note.notes}</p>}
-                          {note.action_items && (
-                            <div className="text-sm">
-                              <span className="font-medium">Action Items: </span>
-                              {note.action_items}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Comments Section - Conversation Format */}
-          {numericProjectId && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  Comments
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ProjectCommentsSection projectId={numericProjectId} />
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Right Column - Sidebar */}

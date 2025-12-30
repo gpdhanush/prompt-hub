@@ -248,47 +248,8 @@ async function handlePushEvent(payload, project) {
         const commitMessage = commit.message || 'No commit message';
         
         
-        const commitData = {
-          project_id: project.id,
-          activity_type: 'push',
-          repository_url: repoHtmlUrl,
-          branch: branch,
-          commit_sha: commitSha,
-          commit_message: commitMessage.substring(0, 10000), // Limit message length to prevent DB issues
-          commit_author: commitAuthor.substring(0, 255), // Limit author name length
-          commit_author_email: commitAuthorEmail ? commitAuthorEmail.substring(0, 255) : null,
-          commit_url: commitHtmlUrl.substring(0, 500), // Limit URL length
-          // GitHub push payload includes file lists but not line-level stats
-          files_changed: (commit.added?.length || 0) + (commit.removed?.length || 0) + (commit.modified?.length || 0),
-          additions: 0, // GitHub push payload doesn't include line-level additions
-          deletions: 0, // GitHub push payload doesn't include line-level deletions
-          raw_payload: JSON.stringify(commit).substring(0, 65535) // Limit JSON size
-        };
-
-        await db.query(
-          `INSERT INTO project_activities 
-           (project_id, activity_type, repository_url, branch, commit_sha, commit_message, 
-            commit_author, commit_author_email, commit_url, files_changed, additions, deletions, raw_payload)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            commitData.project_id,
-            commitData.activity_type,
-            commitData.repository_url,
-            commitData.branch,
-            commitData.commit_sha,
-            commitData.commit_message,
-            commitData.commit_author,
-            commitData.commit_author_email,
-            commitData.commit_url,
-            commitData.files_changed,
-            commitData.additions,
-            commitData.deletions,
-            commitData.raw_payload
-          ]
-        );
-
         processedCount++;
-        logger.debug(`Stored commit ${commitSha.substring(0, 7)} for project ${project.project_code}`);
+        logger.debug(`Received commit ${commitSha.substring(0, 7)} for project ${project.project_code}`);
 
       } catch (commitError) {
         logger.error(`Error processing individual commit:`, commitError);
@@ -316,37 +277,7 @@ async function handlePullRequestEvent(payload, project) {
     const { action, pull_request, repository } = payload;
     
     if (action === 'opened' || action === 'closed' || action === 'synchronize') {
-      const prData = {
-        project_id: project.id,
-        activity_type: 'pull_request',
-        repository_url: repository.html_url || repository.url,
-        branch: pull_request.head.ref,
-        pull_request_number: pull_request.number,
-        pull_request_title: pull_request.title,
-        pull_request_url: pull_request.html_url,
-        commit_author: pull_request.user.login,
-        raw_payload: JSON.stringify(pull_request)
-      };
-
-      await db.query(
-        `INSERT INTO project_activities 
-         (project_id, activity_type, repository_url, branch, pull_request_number, 
-          pull_request_title, pull_request_url, commit_author, raw_payload)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          prData.project_id,
-          prData.activity_type,
-          prData.repository_url,
-          prData.branch,
-          prData.pull_request_number,
-          prData.pull_request_title,
-          prData.pull_request_url,
-          prData.commit_author,
-          prData.raw_payload
-        ]
-      );
-
-      logger.info(`Processed pull request #${pull_request.number} for project ${project.project_code}`);
+      logger.info(`Received pull request #${pull_request.number} for project ${project.project_code}`);
       return { success: true };
     }
 
@@ -363,35 +294,7 @@ async function handleIssuesEvent(payload, project) {
     const { action, issue, repository } = payload;
     
     if (action === 'opened' || action === 'closed') {
-      const issueData = {
-        project_id: project.id,
-        activity_type: 'issue',
-        repository_url: repository.html_url || repository.url,
-        issue_number: issue.number,
-        issue_title: issue.title,
-        issue_url: issue.html_url,
-        commit_author: issue.user.login,
-        raw_payload: JSON.stringify(issue)
-      };
-
-      await db.query(
-        `INSERT INTO project_activities 
-         (project_id, activity_type, repository_url, issue_number, issue_title, 
-          issue_url, commit_author, raw_payload)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          issueData.project_id,
-          issueData.activity_type,
-          issueData.repository_url,
-          issueData.issue_number,
-          issueData.issue_title,
-          issueData.issue_url,
-          issueData.commit_author,
-          issueData.raw_payload
-        ]
-      );
-
-      logger.info(`Processed issue #${issue.number} for project ${project.project_code}`);
+      logger.info(`Received issue #${issue.number} for project ${project.project_code}`);
       return { success: true };
     }
 

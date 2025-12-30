@@ -26,6 +26,7 @@ export const ProjectCommentsSection = memo(function ProjectCommentsSection({ pro
   const [replyTexts, setReplyTexts] = useState<Record<number, string>>({});
   const [expandedComments, setExpandedComments] = useState<Set<number>>(new Set());
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const replyTextareaRefs = useRef<Record<number, HTMLTextAreaElement>>({});
 
   const { data: commentsData, isLoading, refetch } = useQuery({
     queryKey: ['project-comments', projectId],
@@ -173,6 +174,21 @@ export const ProjectCommentsSection = memo(function ProjectCommentsSection({ pro
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   }, []);
 
+  // Generate initials from user name
+  const getInitials = useCallback((name: string | null | undefined): string => {
+    if (!name || !name.trim()) return 'U';
+    
+    const parts = name.trim().split(/\s+/);
+    
+    if (parts.length >= 2) {
+      // 2+ words: use first letter of first 2 words
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    } else {
+      // 1 word: use first 2 letters
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+  }, []);
+
   const renderTextWithLinks = useCallback((text: string): React.ReactNode => {
     if (!text) return text;
 
@@ -246,6 +262,8 @@ export const ProjectCommentsSection = memo(function ProjectCommentsSection({ pro
     isCommentLong,
     renderTextWithLinks,
     userPhotoMap,
+    getInitials,
+    replyTextareaRefs,
     depth = 0 
   }: { 
     comment: any; 
@@ -262,6 +280,8 @@ export const ProjectCommentsSection = memo(function ProjectCommentsSection({ pro
     isCommentLong: (text: string) => boolean;
     renderTextWithLinks: (text: string) => React.ReactNode;
     userPhotoMap: Map<number, string | null>;
+    getInitials: (name: string | null | undefined) => string;
+    replyTextareaRefs: React.MutableRefObject<Record<number, HTMLTextAreaElement>>;
     depth?: number;
   }) => {
     const isReplying = replyingTo === comment.id;
@@ -271,7 +291,21 @@ export const ProjectCommentsSection = memo(function ProjectCommentsSection({ pro
     const isLong = isCommentLong(comment.comment);
     const profilePhotoUrl = comment.user_id ? userPhotoMap.get(comment.user_id) : null;
     const photoUrl = getProfilePhotoUrl(profilePhotoUrl || null);
-    const userInitials = comment.user_name ? comment.user_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 3) : "U";
+    const userInitials = getInitials(comment.user_name);
+
+    // Ensure textarea maintains LTR direction when replying starts
+    useEffect(() => {
+      if (isReplying && replyTextareaRefs.current[comment.id]) {
+        const textarea = replyTextareaRefs.current[comment.id];
+        // Force LTR direction
+        textarea.setAttribute('dir', 'ltr');
+        textarea.setAttribute('lang', 'en');
+        textarea.style.direction = 'ltr';
+        textarea.style.textAlign = 'left';
+        textarea.style.unicodeBidi = 'embed';
+        textarea.style.writingMode = 'horizontal-tb';
+      }
+    }, [isReplying, comment.id]);
 
     return (
       <div className="space-y-2">
@@ -352,14 +386,55 @@ export const ProjectCommentsSection = memo(function ProjectCommentsSection({ pro
 
         {/* Reply Input Box */}
         {isReplying && (
-          <div className="ml-11 space-y-2 p-3 rounded-lg bg-muted/90 border border-primary/30">
+          <div className="ml-11 space-y-2 p-3 rounded-lg bg-muted/90 border border-primary/30" dir="ltr" style={{ direction: 'ltr' }}>
             <Textarea
+              ref={(el) => {
+                if (el) {
+                  replyTextareaRefs.current[comment.id] = el;
+                  // Force LTR direction
+                  el.setAttribute('dir', 'ltr');
+                  el.setAttribute('lang', 'en');
+                  el.style.direction = 'ltr';
+                  el.style.textAlign = 'left';
+                  el.style.unicodeBidi = 'embed';
+                  el.style.writingMode = 'horizontal-tb';
+                } else {
+                  delete replyTextareaRefs.current[comment.id];
+                }
+              }}
+              key={`reply-textarea-${comment.id}`}
               placeholder="Write a reply..."
               value={replyText}
-              onChange={(e) => onReplyTextChange(comment.id, e.target.value)}
+              onChange={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                const newValue = target.value;
+                const cursorPosition = target.selectionStart;
+                
+                // Update state
+                onReplyTextChange(comment.id, newValue);
+                
+                // Preserve cursor position after state update
+                requestAnimationFrame(() => {
+                  if (replyTextareaRefs.current[comment.id]) {
+                    const textarea = replyTextareaRefs.current[comment.id];
+                    const newPosition = Math.min(cursorPosition, newValue.length);
+                    textarea.setSelectionRange(newPosition, newPosition);
+                    textarea.focus();
+                  }
+                });
+              }}
+              onInput={(e) => {
+                // Additional safeguard on input event
+                const target = e.target as HTMLTextAreaElement;
+                target.setAttribute('dir', 'ltr');
+                target.style.direction = 'ltr';
+                target.style.textAlign = 'left';
+              }}
               rows={3}
               className="text-sm"
               autoFocus
+              dir="ltr"
+              style={{ direction: 'ltr', textAlign: 'left', unicodeBidi: 'embed' }}
             />
             <div className="flex gap-2">
               <Button
@@ -401,6 +476,8 @@ export const ProjectCommentsSection = memo(function ProjectCommentsSection({ pro
                 isCommentLong={isCommentLong}
                 renderTextWithLinks={renderTextWithLinks}
                 userPhotoMap={userPhotoMap}
+                getInitials={getInitials}
+                replyTextareaRefs={replyTextareaRefs}
                 depth={depth + 1}
               />
             ))}
@@ -473,6 +550,8 @@ export const ProjectCommentsSection = memo(function ProjectCommentsSection({ pro
               isCommentLong={isCommentLong}
               renderTextWithLinks={renderTextWithLinks}
               userPhotoMap={userPhotoMap}
+              getInitials={getInitials}
+              replyTextareaRefs={replyTextareaRefs}
             />
           ))}
         </div>

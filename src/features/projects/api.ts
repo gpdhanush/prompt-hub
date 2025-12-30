@@ -96,22 +96,6 @@ export const projectsApi = {
     return response.data;
   },
 
-  // Credentials
-  createCredential: async (id: number, data: any) => {
-    const response = await apiClient.post<{ data: any }>(`/projects/${id}/credentials`, data);
-    return response.data;
-  },
-
-  getCredentials: async (id: number) => {
-    const response = await apiClient.get<{ data: any[] }>(`/projects/${id}/credentials`);
-    return response.data;
-  },
-
-  updateCredential: async (id: number, credId: number, data: any) => {
-    const response = await apiClient.put<{ data: any }>(`/projects/${id}/credentials/${credId}`, data);
-    return response.data;
-  },
-
   // Daily Status
   createDailyStatus: async (id: number, data: any) => {
     const response = await apiClient.post<{ data: any }>(`/projects/${id}/daily-status`, data);
@@ -150,14 +134,6 @@ export const projectsApi = {
 
   deleteComment: async (id: number, commentId: number) => {
     const response = await apiClient.delete<{ message: string }>(`/projects/${id}/comments/${commentId}`);
-    return response.data;
-  },
-
-  // Activities (GitHub/Bitbucket webhooks)
-  getActivities: async (id: number, params?: { activity_type?: string; limit?: number }) => {
-    const response = await apiClient.get<{ data: any[] }>(`/projects/${id}/activities`, {
-      params: params ? cleanParams(params) : {},
-    });
     return response.data;
   },
 

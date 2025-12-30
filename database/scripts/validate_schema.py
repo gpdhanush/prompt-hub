@@ -33,7 +33,14 @@ ACTIVE_TABLES = {
     "projects","project_users","project_milestones","project_files","project_client_call_notes","project_daily_status","project_comments","tasks","task_comments","task_history","bugs","bug_comments","attachments","timesheets",
     "notifications","audit_logs","settings","fcm_tokens","calendar_reminders"
 }
-EXCLUDED_TABLES = {"prompts","prompt_logs","asset_settings","project_activities","project_change_requests","project_credentials","kanban_boards","kanban_columns","kanban_tasks","kanban_integrations","kanban_task_history","kanban_board_members","kanban_time_logs"}
+EXCLUDED_TABLES = {
+    "prompts", "prompt_logs",
+    "asset_settings",
+    # Removed features: project_activities (Repository Activity), project_credentials (Credentials)
+   "project_change_requests", 
+    "kanban_boards", "kanban_columns", "kanban_tasks", "kanban_integrations",
+    "kanban_task_history", "kanban_board_members", "kanban_time_logs"
+}
 
 CREATE_PATTERN = re.compile(r"CREATE TABLE IF NOT EXISTS `(\\w+)`", re.IGNORECASE)
 INSERT_PATTERN = re.compile(r"INSERT INTO `(\\w+)`", re.IGNORECASE)
