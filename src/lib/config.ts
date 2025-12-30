@@ -11,17 +11,36 @@
 
 /**
  * API Configuration
- * VITE_API_URL must be set in .env file
+ * VITE_API_URL must be set in .env file (e.g., https://api.example.com/api)
  */
 export const API_CONFIG = {
   BASE_URL: import.meta.env.VITE_API_URL,
-  // Remove /api suffix to get base server URL
-  SERVER_URL: import.meta.env.VITE_API_URL?.replace('/api', '').replace(/\/$/, '') || '',
+  // Remove /api suffix to get base server URL for static file serving
+  // Example: https://api.example.com/api -> https://api.example.com
+  SERVER_URL: (() => {
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    // Remove trailing slash
+    let url = apiUrl.replace(/\/$/, '');
+    // Remove /api suffix if present
+    if (url.endsWith('/api')) {
+      url = url.slice(0, -4);
+    }
+    return url;
+  })(),
 } as const;
 
 /**
  * Static Assets Configuration
- * VITE_STATIC_URL can be set in .env file, otherwise uses SERVER_URL
+ * 
+ * For separate hosting (CDN or static server):
+ * - Set VITE_STATIC_URL to your static file server URL
+ * - Example: VITE_STATIC_URL=https://cdn.example.com or https://static.example.com
+ * 
+ * For same server hosting:
+ * - Leave VITE_STATIC_URL empty (uses SERVER_URL which is API_BASE_URL without /api)
+ * - Example: API_BASE_URL=https://api.example.com/api -> Static URL=https://api.example.com
+ * 
+ * Display URLs will be: STATIC_CONFIG.BASE_URL + /uploads/PATH_URL
  */
 export const STATIC_CONFIG = {
   BASE_URL: import.meta.env.VITE_STATIC_URL || API_CONFIG.SERVER_URL,
