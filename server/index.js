@@ -1,7 +1,6 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 import http from "http";
 import https from "https";
 import fs from "fs";
@@ -120,49 +119,6 @@ app.use(
   })
 );
 
-// Global Rate Limiting - Disabled in development/testing environments
-if (SERVER_CONFIG.NODE_ENV !== "production") {
-  logger.info("⚠️  Rate limiting is DISABLED (non-production environment)");
-}
-
-const globalRateLimiter =
-  SERVER_CONFIG.NODE_ENV === "production"
-    ? rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 100, // Limit each IP to 100 requests per windowMs
-        message: {
-          error: "Too many requests from this IP, please try again later.",
-          retryAfter: "15 minutes",
-        },
-        standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-        legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-        // Note: trustProxy is configured on the Express app (line 86), not here
-        skip: (req) => {
-          // Skip rate limiting for health checks
-          return req.path === "/health" || req.path === "/api/test-db";
-        },
-      })
-    : (req, res, next) => next(); // No-op middleware for non-production
-
-// Apply rate limiting to all API routes (only in production)
-app.use("/api", globalRateLimiter);
-
-// Stricter rate limiting for auth routes - Disabled in development/testing environments
-const authRateLimiter =
-  SERVER_CONFIG.NODE_ENV === "production"
-    ? rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 5, // Limit each IP to 5 login attempts per windowMs
-        message: {
-          error: "Too many authentication attempts, please try again later.",
-          retryAfter: "15 minutes",
-        },
-        standardHeaders: true,
-        legacyHeaders: false,
-        // Note: trustProxy is configured on the Express app (line 86), not here
-        skipSuccessfulRequests: true, // Don't count successful requests
-      })
-    : (req, res, next) => next(); // No-op middleware for non-production
 
 // Body parsing middleware
 app.use(express.json({ limit: "10mb" }));
@@ -296,8 +252,7 @@ app.get("/api-docs.json", (req, res) => {
 });
 
 // API Routes
-// Apply auth rate limiter to auth routes
-app.use("/api/auth", authRateLimiter, authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/employees", employeesRoutes);
 app.use("/api/projects", projectsRoutes);
