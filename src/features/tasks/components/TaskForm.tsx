@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Combobox } from "@/components/ui/combobox";
 import { toast } from "@/hooks/use-toast";
 import { projectsApi } from "@/features/projects/api";
 import { employeesApi } from "@/features/employees/api";
@@ -94,6 +95,12 @@ export function TaskForm({
   const projects = projectsData?.data || [];
   const allUsers = assignableUsersData?.data || [];
   const allEmployees = employeesData?.data || [];
+
+  // Convert projects to combobox format
+  const projectOptions = projects.map((project: any) => ({
+    value: project.id.toString(),
+    label: project.name,
+  }));
 
   // Debug: Log projects data if empty
   if (!isLoadingProjects && projects.length === 0 && projectsData) {
@@ -195,9 +202,12 @@ export function TaskForm({
           <CardDescription>Essential details about the task</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* First row: Task Title*, Project*, Priority* */}
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="title" className="text-red-500">Task Title *</Label>
+              <Label htmlFor="title" className="text-red-500">
+                Task Title *
+              </Label>
               <SecureInput
                 id="title"
                 fieldName="Task Title"
@@ -207,66 +217,31 @@ export function TaskForm({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="project_id" className="text-red-500">Project *</Label>
-              <Select
-                value={formData.project_id && formData.project_id !== "none" ? formData.project_id : undefined}
-                onValueChange={(value) => handleInputChange("project_id", value)}
-                required
+              <Label htmlFor="project_id" className="text-red-500">
+                Project *
+              </Label>
+              <Combobox
+                options={projectOptions}
+                value={
+                  formData.project_id && formData.project_id !== "none"
+                    ? formData.project_id
+                    : ""
+                }
+                onValueChange={(value) =>
+                  handleInputChange("project_id", value)
+                }
+                placeholder="Select Project"
+                searchPlaceholder="Search projects..."
+                emptyMessage="No projects found."
                 disabled={isLoadingProjects}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingProjects ? "Loading projects..." : "Select Project"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {isLoadingProjects ? (
-                    <SelectItem value="__loading__" disabled>
-                      Loading projects...
-                    </SelectItem>
-                  ) : projects.length > 0 ? (
-                    projects.map((project: any) => (
-                      <SelectItem key={project.id} value={project.id.toString()}>
-                        {project.name}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="__no_projects__" disabled>
-                      No project found
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="deadline">Deadline</Label>
-              <DatePicker
-                value={formData.deadline}
-                onChange={(date) => handleInputChange("deadline", date || "")}
-                placeholder="Select deadline"
+                loading={isLoadingProjects}
+                required
               />
             </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="description" className="text-red-500">Task Description *</Label>
-            <MarkdownEditor
-              value={formData.description}
-              onChange={(value) => handleInputChange("description", value)}
-              placeholder="Describe the task in detail. You can use markdown formatting: headings, lists, code blocks, and images."
-              rows={6}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Task Classification */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Task Classification</CardTitle>
-          <CardDescription>Priority, stage, and status</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="priority" className="text-red-500">Priority *</Label>
+              <Label htmlFor="priority" className="text-red-500">
+                Priority *
+              </Label>
               <Select
                 value={formData.priority}
                 onValueChange={(value) => handleInputChange("priority", value)}
@@ -282,6 +257,10 @@ export function TaskForm({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Second row: Stage, Status*, Deadline */}
+          <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="stage">Stage</Label>
               <Select
@@ -303,7 +282,9 @@ export function TaskForm({
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="status" className="text-red-500">Status *</Label>
+              <Label htmlFor="status" className="text-red-500">
+                Status *
+              </Label>
               <Select
                 value={formData.status || "Open"}
                 onValueChange={(value) => handleInputChange("status", value)}
@@ -322,122 +303,189 @@ export function TaskForm({
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="deadline">Deadline</Label>
+              <DatePicker
+                value={formData.deadline}
+                onChange={(date) => handleInputChange("deadline", date || "")}
+                placeholder="Select deadline"
+              />
+            </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Assignment */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Assignment</CardTitle>
-          <CardDescription>Assign team members to this task</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="assigned_to">Assigned To (Team Lead)</Label>
-              <Select
-                value={formData.assigned_to || "none"}
-                onValueChange={(value) => handleInputChange("assigned_to", value)}
-                disabled={isLoadingUsers}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingUsers ? "Loading..." : "Select team lead"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {isLoadingUsers ? (
-                    <SelectItem value="__loading__" disabled>Loading team leads...</SelectItem>
-                  ) : teamLeads.length > 0 ? (
-                    teamLeads.map((user: any) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
+
+          {/* Assignment section */}
+          <div className="space-y-1">
+            {/* <CardTitle>Assignment</CardTitle>
+            <CardDescription>Assign team members to this task</CardDescription> */}
+            {/* <Label className="text-sm font-medium">Assignment</Label> */}
+            <div className="grid grid-cols-4 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="assigned_to" className="text-sm">
+                  Assigned To (Team Lead)
+                </Label>
+                <Select
+                  value={formData.assigned_to || "none"}
+                  onValueChange={(value) =>
+                    handleInputChange("assigned_to", value)
+                  }
+                  disabled={isLoadingUsers}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        isLoadingUsers ? "Loading..." : "Select team lead"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {isLoadingUsers ? (
+                      <SelectItem value="__loading__" disabled>
+                        Loading team leads...
                       </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="__no_users__" disabled>No team leads available</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="developer_id">Developer</Label>
-              <Select
-                value={formData.developer_id || "none"}
-                onValueChange={(value) => handleInputChange("developer_id", value)}
-                disabled={isLoadingUsers}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingUsers ? "Loading..." : "Select developer"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {isLoadingUsers ? (
-                    <SelectItem value="__loading__" disabled>Loading developers...</SelectItem>
-                  ) : developers.length > 0 ? (
-                    developers.map((user: any) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
+                    ) : teamLeads.length > 0 ? (
+                      teamLeads.map((user: any) => (
+                        <SelectItem key={user.id} value={user.id.toString()}>
+                          {user.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__no_users__" disabled>
+                        No team leads available
                       </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="__no_developers__" disabled>No developers available</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="designer_id">Designer</Label>
-              <Select
-                value={formData.designer_id || "none"}
-                onValueChange={(value) => handleInputChange("designer_id", value)}
-                disabled={isLoadingUsers}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingUsers ? "Loading..." : "Select designer"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {isLoadingUsers ? (
-                    <SelectItem value="__loading__" disabled>Loading designers...</SelectItem>
-                  ) : designers.length > 0 ? (
-                    designers.map((user: any) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="developer_id" className="text-sm">
+                  Developer
+                </Label>
+                <Select
+                  value={formData.developer_id || "none"}
+                  onValueChange={(value) =>
+                    handleInputChange("developer_id", value)
+                  }
+                  disabled={isLoadingUsers}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        isLoadingUsers ? "Loading..." : "Select developer"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {isLoadingUsers ? (
+                      <SelectItem value="__loading__" disabled>
+                        Loading developers...
                       </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="__no_designers__" disabled>No designers available</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="tester_id">Tester</Label>
-              <Select
-                value={formData.tester_id || "none"}
-                onValueChange={(value) => handleInputChange("tester_id", value)}
-                disabled={isLoadingUsers}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingUsers ? "Loading..." : "Select tester"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {isLoadingUsers ? (
-                    <SelectItem value="__loading__" disabled>Loading testers...</SelectItem>
-                  ) : testers.length > 0 ? (
-                    testers.map((user: any) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
+                    ) : developers.length > 0 ? (
+                      developers.map((user: any) => (
+                        <SelectItem key={user.id} value={user.id.toString()}>
+                          {user.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__no_developers__" disabled>
+                        No developers available
                       </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="__no_testers__" disabled>No testers available</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="designer_id" className="text-sm">
+                  Designer
+                </Label>
+                <Select
+                  value={formData.designer_id || "none"}
+                  onValueChange={(value) =>
+                    handleInputChange("designer_id", value)
+                  }
+                  disabled={isLoadingUsers}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        isLoadingUsers ? "Loading..." : "Select designer"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {isLoadingUsers ? (
+                      <SelectItem value="__loading__" disabled>
+                        Loading designers...
+                      </SelectItem>
+                    ) : designers.length > 0 ? (
+                      designers.map((user: any) => (
+                        <SelectItem key={user.id} value={user.id.toString()}>
+                          {user.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__no_designers__" disabled>
+                        No designers available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="tester_id" className="text-sm">
+                  Tester
+                </Label>
+                <Select
+                  value={formData.tester_id || "none"}
+                  onValueChange={(value) =>
+                    handleInputChange("tester_id", value)
+                  }
+                  disabled={isLoadingUsers}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        isLoadingUsers ? "Loading..." : "Select tester"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {isLoadingUsers ? (
+                      <SelectItem value="__loading__" disabled>
+                        Loading testers...
+                      </SelectItem>
+                    ) : testers.length > 0 ? (
+                      testers.map((user: any) => (
+                        <SelectItem key={user.id} value={user.id.toString()}>
+                          {user.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__no_testers__" disabled>
+                        No testers available
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+          </div>
+
+          {/* Task Description */}
+          <div className="grid gap-2 mt-4 border-t border-gray-200 pt-4">
+            <Label htmlFor="description" className="text-red-500">
+              Task Description *
+            </Label>
+            <MarkdownEditor
+              value={formData.description}
+              onChange={(value) => handleInputChange("description", value)}
+              placeholder="Describe the task in detail. You can use markdown formatting: headings, lists, code blocks, and images."
+              rows={6}
+            />
           </div>
         </CardContent>
       </Card>
@@ -461,15 +509,19 @@ export function TaskForm({
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{attachment.original_filename}</p>
-                      <p className="text-xs text-muted-foreground">{formatFileSize(attachment.size || 0)}</p>
+                      <p className="text-sm font-medium truncate">
+                        {attachment.original_filename}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatFileSize(attachment.size || 0)}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => window.open(attachment.path, '_blank')}
+                      onClick={() => window.open(attachment.path, "_blank")}
                       title="Download"
                     >
                       <Download className="h-4 w-4" />
@@ -507,8 +559,8 @@ export function TaskForm({
                 accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/rtf,text/plain,.pdf,.doc,.docx,.ppt,.pptx,.rtf,.txt,.log"
                 className="hidden"
               />
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -516,7 +568,8 @@ export function TaskForm({
                 Choose Files
               </Button>
               <span className="text-sm text-muted-foreground">
-                Max 10MB per file. Images, PDF, Word, PPT, RTF, videos, logs, and text files only.
+                Max 10MB per file. Images, PDF, Word, PPT, RTF, videos, logs,
+                and text files only.
               </span>
             </div>
             {attachments.length > 0 && (
@@ -526,7 +579,9 @@ export function TaskForm({
                     key={index}
                     className="flex items-center justify-between p-2 border rounded"
                   >
-                    <span className="text-sm">{file.name} ({formatFileSize(file.size)})</span>
+                    <span className="text-sm">
+                      {file.name} ({formatFileSize(file.size)})
+                    </span>
                     <Button
                       variant="ghost"
                       size="sm"

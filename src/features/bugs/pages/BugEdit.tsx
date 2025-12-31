@@ -5,7 +5,7 @@ import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { bugsApi } from "@/features/bugs/api";
-import { BugForm } from "@/components/bug/BugForm";
+import { BugForm } from "../components/BugForm";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +35,6 @@ interface BugFormData {
   device: string;
   os: string;
   app_version: string;
-  api_endpoint: string;
   target_fix_date: string;
   actual_fix_date: string;
   tags: string;
@@ -64,7 +63,6 @@ export default function BugEdit() {
     device: "",
     os: "",
     app_version: "",
-    api_endpoint: "",
     target_fix_date: "",
     actual_fix_date: "",
     tags: "",
@@ -110,7 +108,6 @@ export default function BugEdit() {
         device: bug.device || "",
         os: bug.os || "",
         app_version: bug.app_version || "",
-        api_endpoint: bug.api_endpoint || "",
         target_fix_date: bug.target_fix_date ? bug.target_fix_date.split('T')[0] : "",
         actual_fix_date: bug.actual_fix_date ? bug.actual_fix_date.split('T')[0] : "",
         tags: bug.tags || "",
@@ -209,7 +206,6 @@ export default function BugEdit() {
       device: formData.device || '',
       os: formData.os || '',
       app_version: formData.app_version || '',
-      api_endpoint: formData.api_endpoint || '',
       tags: formData.tags || '',
     };
 
@@ -270,8 +266,11 @@ export default function BugEdit() {
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading bug details...</p>
+          </div>
         </div>
       </div>
     );

@@ -337,6 +337,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
   });
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [memberSearchTerm, setMemberSearchTerm] = useState("");
 
   // Fetch project data for edit mode (supports numeric ID or UUID)
   const fetchId = isUUID ? (projectId as string) : (projectId !== undefined ? Number(projectId) : undefined);
@@ -519,6 +520,19 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
 
     return uniqueUsers;
   }, [allUsers]);
+
+  // Filter assignable users based on search term
+  const filteredAssignableUsers = useMemo(() => {
+    if (!memberSearchTerm.trim()) {
+      return assignableUsers;
+    }
+    const searchLower = memberSearchTerm.toLowerCase();
+    return assignableUsers.filter((user: any) =>
+      user.name?.toLowerCase().includes(searchLower) ||
+      user.email?.toLowerCase().includes(searchLower) ||
+      user.role?.toLowerCase().includes(searchLower)
+    );
+  }, [assignableUsers, memberSearchTerm]);
 
   // Load project data into form for edit mode
   useEffect(() => {
@@ -777,8 +791,11 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
     if (isLoading) {
       return (
         <div className="container mx-auto p-6">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading project...</p>
+            </div>
           </div>
         </div>
       );
@@ -1013,6 +1030,12 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
               )}
             </div>
 
+            {/* Project Logo */}
+            <ProjectLogoUpload
+              value={formData.logo_url}
+              onChange={(url) => setFormData({ ...formData, logo_url: url })}
+            />
+
             {/* Description */}
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
@@ -1025,12 +1048,6 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 rows={6}
               />
             </div>
-
-            {/* Project Logo */}
-            <ProjectLogoUpload
-              value={formData.logo_url}
-              onChange={(url) => setFormData({ ...formData, logo_url: url })}
-            />
           </CardContent>
         </Card>
 
@@ -1041,7 +1058,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
             <CardDescription>Client information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="client_name">Client Name</Label>
                 <SecureInput
@@ -1095,8 +1112,6 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   </p>
                 )}
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="client_email">Client Email</Label>
                 <SecureInput
@@ -1157,32 +1172,56 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 No milestones added yet
               </p>
             ) : (
-              formData.milestones.map((milestone, index) => (
-                <Card key={index} className="p-4">
-                  <div className="flex items-start justify-between mb-4">
-                    <h4 className="font-medium">Milestone {index + 1}</h4>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeMilestone(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="grid gap-4">
-                    <div className="grid gap-2">
-                      <Label>Milestone Name</Label>
-                      <SecureInput
-                        fieldName="Milestone Name"
-                        value={milestone.name}
-                        onChange={(e) =>
-                          updateMilestone(index, "name", e.target.value)
-                        }
-                        placeholder="Enter milestone name"
-                      />
+              <div className="space-y-4">
+                {formData.milestones.map((milestone, index) => (
+                  <div key={index} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-medium">Milestone {index + 1}</h4>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeMilestone(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="grid gap-2">
+                        <Label>Milestone Name</Label>
+                        <SecureInput
+                          fieldName="Milestone Name"
+                          value={milestone.name}
+                          onChange={(e) =>
+                            updateMilestone(index, "name", e.target.value)
+                          }
+                          placeholder="Enter milestone name"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Status</Label>
+                        <Select
+                          value={milestone.status}
+                          onValueChange={(value) =>
+                            updateMilestone(index, "status", value)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Not Started">
+                              Not Started
+                            </SelectItem>
+                            <SelectItem value="In Progress">
+                              In Progress
+                            </SelectItem>
+                            <SelectItem value="Completed">Completed</SelectItem>
+                            <SelectItem value="Delayed">Delayed</SelectItem>
+                            <SelectItem value="Cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div className="grid gap-2">
                         <Label>Start Date</Label>
                         <DatePicker
@@ -1204,33 +1243,9 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                         />
                       </div>
                     </div>
-                    <div className="grid gap-2">
-                      <Label>Status</Label>
-                      <Select
-                        value={milestone.status}
-                        onValueChange={(value) =>
-                          updateMilestone(index, "status", value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Not Started">
-                            Not Started
-                          </SelectItem>
-                          <SelectItem value="In Progress">
-                            In Progress
-                          </SelectItem>
-                          <SelectItem value="Completed">Completed</SelectItem>
-                          <SelectItem value="Delayed">Delayed</SelectItem>
-                          <SelectItem value="Cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
-                </Card>
-              ))
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1272,10 +1287,21 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                 Select employees and clients to assign to this project. Clients
                 will have read-only access.
               </p>
+              <SecureInput
+                fieldName="Search Members"
+                placeholder="Search members..."
+                value={memberSearchTerm}
+                onChange={(e) => setMemberSearchTerm(e.target.value)}
+                className="mb-2"
+              />
               <div className="border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
-                {assignableUsers.length === 0 ? (
+                {filteredAssignableUsers.length === 0 ? (
                   <div className="text-center py-4 text-sm">
-                    {formData.team_lead_id ? (
+                    {memberSearchTerm.trim() ? (
+                      <p className="text-muted-foreground">
+                        No members found matching "{memberSearchTerm}".
+                      </p>
+                    ) : formData.team_lead_id ? (
                       <div className="space-y-1">
                         <p className="text-muted-foreground">
                           No employees are currently assigned to this team lead.
@@ -1297,7 +1323,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                     )}
                   </div>
                 ) : (
-                  assignableUsers.map((user: any) => {
+                  filteredAssignableUsers.map((user: any) => {
                     const isSelected = formData.member_ids.includes(
                       user.id.toString()
                     );

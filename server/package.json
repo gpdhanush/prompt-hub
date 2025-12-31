@@ -7,7 +7,11 @@
     "dev": "node --watch index.js",
     "create-super-admin": "node scripts/create-super-admin.js",
     "reset-password": "node scripts/reset-password.js",
-    "verify-password": "node scripts/verify-password.js"
+    "verify-password": "node scripts/verify-password.js",
+    "version:set": "node ../scripts/update-version.js",
+    "version:patch": "node ../scripts/version-bump.js patch",
+    "version:minor": "node ../scripts/version-bump.js minor",
+    "version:major": "node ../scripts/version-bump.js major"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

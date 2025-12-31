@@ -446,8 +446,11 @@ export default function ProjectDetail() {
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading project details...</p>
+          </div>
         </div>
       </div>
     );
@@ -474,15 +477,23 @@ export default function ProjectDetail() {
           <Button
             variant="default"
             size="icon"
-            onClick={() => navigate('/projects')}
+            onClick={() => navigate("/projects")}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
+          {project.logo_url && getImageUrl(project.logo_url) && (
+            <img
+              src={getImageUrl(project.logo_url)!}
+              alt="Project Logo"
+              className="h-12 w-12 rounded object-cover border"
+            />
+          )}
           <div>
-            <h1 className="text-3xl font-bold">Project Details</h1>
-            <p className="font-mono text-primary font-semibold text-xl">
-              {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
+            <h1 className="text-2xl font-bold">{project.name}</h1>
+            <p className="font-mono text-primary font-semibold text-md">
+              {project.project_code ||
+                `PRJ-${String(project.id).padStart(3, "0")}`}
             </p>
           </div>
         </div>
@@ -514,91 +525,113 @@ export default function ProjectDetail() {
           {/* Basic Information */}
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-4">
-                {project.logo_url && getImageUrl(project.logo_url) && (
-                  <img src={getImageUrl(project.logo_url)!} alt="Project Logo" className="h-16 w-16 rounded object-cover border" />
-                )}
-                <div>
-                  <CardTitle>{project.name}</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
-                  </p>
-                </div>
-              </div>
+              <CardTitle>{project.name}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* First Row: Project Name, Priority, Status, Risk Level in 4 columns */}
+              {/* First Row: Priority, Status, Risk Level, Technologies in 4 columns */}
               <div className="grid grid-cols-4 gap-4">
                 <div>
-                  <Label className="text-muted-foreground text-sm">Project Name</Label>
-                  <div className="text-sm font-medium mt-1">{project.name}</div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground text-sm">Priority</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Priority
+                  </Label>
                   <div className="mt-1">
                     {project.priority ? (
-                      <StatusBadge 
-                        variant={(project.priority === 'Critical' ? 'error' : project.priority === 'High' ? 'warning' : 'neutral') as 'error' | 'warning' | 'neutral'}
+                      <StatusBadge
+                        variant={
+                          (project.priority === "Critical"
+                            ? "error"
+                            : project.priority === "High"
+                            ? "warning"
+                            : "neutral") as "error" | "warning" | "neutral"
+                        }
                         className="text-xs"
                       >
                         {project.priority}
                       </StatusBadge>
                     ) : (
-                      <span className="text-sm text-muted-foreground">Not set</span>
+                      <span className="text-sm text-muted-foreground">
+                        Not set
+                      </span>
                     )}
                   </div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground text-sm">Project Status</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Project Status
+                  </Label>
                   <div className="mt-1">
-                    <StatusBadge 
-                      variant={projectStatusMap[project.status as keyof typeof projectStatusMap] || 'neutral'}
+                    <StatusBadge
+                      variant={
+                        projectStatusMap[
+                          project.status as keyof typeof projectStatusMap
+                        ] || "neutral"
+                      }
                       className="text-xs"
                     >
-                      {project.status || 'Not Started'}
+                      {project.status || "Not Started"}
                     </StatusBadge>
                   </div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground text-sm">Risk Level</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Risk Level
+                  </Label>
                   <div className="mt-1">
                     {project.risk_level ? (
-                      <StatusBadge 
-                        variant={project.risk_level === 'High' ? 'error' : project.risk_level === 'Medium' ? 'warning' : 'success'}
+                      <StatusBadge
+                        variant={
+                          project.risk_level === "High"
+                            ? "error"
+                            : project.risk_level === "Medium"
+                            ? "warning"
+                            : "success"
+                        }
                         className="text-xs"
                       >
                         {project.risk_level}
                       </StatusBadge>
                     ) : (
-                      <span className="text-sm text-muted-foreground">Not set</span>
+                      <span className="text-sm text-muted-foreground">
+                        Not set
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">
+                    Technologies Used
+                  </Label>
+                  <div className="mt-1">
+                    {project.technologies_used ? (
+                      <div className="flex flex-wrap gap-1">
+                        {(Array.isArray(project.technologies_used)
+                          ? project.technologies_used
+                          : typeof project.technologies_used === "string"
+                          ? JSON.parse(project.technologies_used || "[]")
+                          : []
+                        ).map((tech: string, index: number) => (
+                          <span
+                            key={index}
+                            className="px-2 py-1 bg-primary/10 text-primary rounded text-xs"
+                          >
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        Not set
+                      </span>
                     )}
                   </div>
                 </div>
               </div>
 
-
-              {/* Third Row: Technologies Used */}
-              {project.technologies_used && (
-                <div>
-                  <Label className="text-muted-foreground text-sm">Technologies Used</Label>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {(Array.isArray(project.technologies_used) 
-                      ? project.technologies_used 
-                      : typeof project.technologies_used === 'string' 
-                        ? JSON.parse(project.technologies_used || '[]')
-                        : []
-                    ).map((tech: string, index: number) => (
-                      <span key={index} className="px-2 py-1 bg-primary/10 text-primary rounded text-sm">
-                        {tech}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {project.estimated_delivery_plan && (
                 <div>
-                  <Label className="text-muted-foreground text-sm">Estimated Delivery Plan</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Estimated Delivery Plan
+                  </Label>
                   <div className="text-sm whitespace-pre-wrap mt-1">
                     {project.estimated_delivery_plan}
                   </div>
@@ -613,18 +646,34 @@ export default function ProjectDetail() {
               <CardTitle>Description</CardTitle>
             </CardHeader>
             <CardContent>
-              <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full">
+              <Tabs
+                value={activeDescriptionTab}
+                onValueChange={setActiveDescriptionTab}
+                className="w-full"
+              >
                 <TabsList className="grid w-full grid-cols-4 bg-muted/50">
-                  <TabsTrigger value="description" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <TabsTrigger
+                    value="description"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
                     Description
                   </TabsTrigger>
-                  <TabsTrigger value="files" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <TabsTrigger
+                    value="files"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
                     Project Files ({files.length})
                   </TabsTrigger>
-                  <TabsTrigger value="call-notes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <TabsTrigger
+                    value="call-notes"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
                     Client Call Notes ({callNotes.length})
                   </TabsTrigger>
-                  <TabsTrigger value="comments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <TabsTrigger
+                    value="comments"
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                  >
                     Comments
                   </TabsTrigger>
                 </TabsList>
@@ -636,14 +685,18 @@ export default function ProjectDetail() {
                       <MarkdownRenderer content={project.description} />
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No description provided</p>
+                    <p className="text-sm text-muted-foreground">
+                      No description provided
+                    </p>
                   )}
                 </TabsContent>
 
                 {/* Project Files Tab */}
                 <TabsContent value="files" className="mt-4">
                   {files.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No files uploaded yet</p>
+                    <p className="text-sm text-muted-foreground">
+                      No files uploaded yet
+                    </p>
                   ) : (
                     <AttachmentList
                       attachments={files.map((file: any) => ({
@@ -664,7 +717,9 @@ export default function ProjectDetail() {
                 <TabsContent value="call-notes" className="mt-4">
                   {numericProjectId ? (
                     callNotes.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No call notes recorded</p>
+                      <p className="text-sm text-muted-foreground">
+                        No call notes recorded
+                      </p>
                     ) : (
                       <div className="space-y-4">
                         {callNotes.map((note: any) => (
@@ -672,7 +727,9 @@ export default function ProjectDetail() {
                             <CardContent className="pt-6">
                               <div className="mb-3">
                                 <div className="text-base font-semibold">
-                                  {note.call_date ? new Date(note.call_date).toLocaleString() : 'No date'}
+                                  {note.call_date
+                                    ? new Date(note.call_date).toLocaleString()
+                                    : "No date"}
                                 </div>
                                 {note.participants && (
                                   <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
@@ -682,21 +739,23 @@ export default function ProjectDetail() {
                                 )}
                                 <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                                   <CalendarIcon className="h-3 w-3" />
-                                  {note.follow_up_required ? (
-                                    note.follow_up_date ? (
-                                      `Follow-up Date: ${new Date(note.follow_up_date).toLocaleDateString()}`
-                                    ) : (
-                                      "Follow-up required"
-                                    )
-                                  ) : (
-                                    "Follow-up: No need"
-                                  )}
+                                  {note.follow_up_required
+                                    ? note.follow_up_date
+                                      ? `Follow-up Date: ${new Date(
+                                          note.follow_up_date
+                                        ).toLocaleDateString()}`
+                                      : "Follow-up required"
+                                    : "Follow-up: No need"}
                                 </div>
                               </div>
-                              {note.notes && <p className="text-sm mb-2">{note.notes}</p>}
+                              {note.notes && (
+                                <p className="text-sm mb-2">{note.notes}</p>
+                              )}
                               {note.action_items && (
                                 <div className="text-sm">
-                                  <span className="font-medium">Action Items: </span>
+                                  <span className="font-medium">
+                                    Action Items:{" "}
+                                  </span>
                                   {note.action_items}
                                 </div>
                               )}
@@ -706,7 +765,9 @@ export default function ProjectDetail() {
                       </div>
                     )
                   ) : (
-                    <p className="text-sm text-muted-foreground">Project ID not available</p>
+                    <p className="text-sm text-muted-foreground">
+                      Project ID not available
+                    </p>
                   )}
                 </TabsContent>
 
@@ -715,7 +776,9 @@ export default function ProjectDetail() {
                   {numericProjectId ? (
                     <ProjectCommentsSection projectId={numericProjectId} />
                   ) : (
-                    <p className="text-sm text-muted-foreground">Project ID not available</p>
+                    <p className="text-sm text-muted-foreground">
+                      Project ID not available
+                    </p>
                   )}
                 </TabsContent>
               </Tabs>
@@ -736,8 +799,14 @@ export default function ProjectDetail() {
                   <div key={index} className="border rounded-lg p-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <h4 className="font-medium">{milestone.name}</h4>
-                      <StatusBadge 
-                        variant={milestone.status === 'Completed' ? 'success' : milestone.status === 'Delayed' ? 'warning' : 'neutral'}
+                      <StatusBadge
+                        variant={
+                          milestone.status === "Completed"
+                            ? "success"
+                            : milestone.status === "Delayed"
+                            ? "warning"
+                            : "neutral"
+                        }
                         className="text-xs"
                       >
                         {milestone.status}
@@ -745,12 +814,20 @@ export default function ProjectDetail() {
                     </div>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <Label className="text-muted-foreground text-xs">Start Date</Label>
-                        <div className="font-medium">{formatDate(milestone.start_date)}</div>
+                        <Label className="text-muted-foreground text-xs">
+                          Start Date
+                        </Label>
+                        <div className="font-medium">
+                          {formatDate(milestone.start_date)}
+                        </div>
                       </div>
                       <div>
-                        <Label className="text-muted-foreground text-xs">End Date</Label>
-                        <div className="font-medium">{formatDate(milestone.end_date)}</div>
+                        <Label className="text-muted-foreground text-xs">
+                          End Date
+                        </Label>
+                        <div className="font-medium">
+                          {formatDate(milestone.end_date)}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -760,7 +837,9 @@ export default function ProjectDetail() {
           )}
 
           {/* Additional Notes */}
-          {(project.internal_notes || project.client_notes || project.admin_remarks) && (
+          {(project.internal_notes ||
+            project.client_notes ||
+            project.admin_remarks) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -771,7 +850,9 @@ export default function ProjectDetail() {
               <CardContent className="space-y-4">
                 {project.internal_notes && (
                   <div>
-                    <Label className="text-muted-foreground text-sm">Internal Notes</Label>
+                    <Label className="text-muted-foreground text-sm">
+                      Internal Notes
+                    </Label>
                     <div className="text-sm whitespace-pre-wrap mt-1 p-3 bg-muted rounded">
                       {project.internal_notes}
                     </div>
@@ -779,7 +860,9 @@ export default function ProjectDetail() {
                 )}
                 {project.client_notes && (
                   <div>
-                    <Label className="text-muted-foreground text-sm">Client Notes</Label>
+                    <Label className="text-muted-foreground text-sm">
+                      Client Notes
+                    </Label>
                     <div className="text-sm whitespace-pre-wrap mt-1 p-3 bg-muted rounded">
                       {project.client_notes}
                     </div>
@@ -787,7 +870,9 @@ export default function ProjectDetail() {
                 )}
                 {project.admin_remarks && (
                   <div>
-                    <Label className="text-muted-foreground text-sm">Admin Remarks</Label>
+                    <Label className="text-muted-foreground text-sm">
+                      Admin Remarks
+                    </Label>
                     <div className="text-sm whitespace-pre-wrap mt-1 p-3 bg-muted rounded">
                       {project.admin_remarks}
                     </div>
@@ -796,61 +881,76 @@ export default function ProjectDetail() {
               </CardContent>
             </Card>
           )}
-
-
         </div>
 
         {/* Right Column - Sidebar */}
         <div className="space-y-6">
           {/* Client Details - First Card */}
-          {!project.is_internal && (project.client_name || project.client_email) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Client Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {project.client_name && (
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <Label className="text-muted-foreground text-sm">Client Name</Label>
-                      <div className="text-sm font-medium mt-1">{project.client_name}</div>
+          {!project.is_internal &&
+            (project.client_name || project.client_email) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Client Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {project.client_name && (
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <Label className="text-muted-foreground text-sm">
+                          Client Name
+                        </Label>
+                        <div className="text-sm font-medium mt-1">
+                          {project.client_name}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {project.client_contact_person && (
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <Label className="text-muted-foreground text-sm">Contact Person</Label>
-                      <div className="text-sm font-medium mt-1">{project.client_contact_person}</div>
+                  )}
+                  {project.client_contact_person && (
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <Label className="text-muted-foreground text-sm">
+                          Contact Person
+                        </Label>
+                        <div className="text-sm font-medium mt-1">
+                          {project.client_contact_person}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {project.client_email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <Label className="text-muted-foreground text-sm">Email</Label>
-                      <div className="text-sm font-medium">{project.client_email}</div>
+                  )}
+                  {project.client_email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <Label className="text-muted-foreground text-sm">
+                          Email
+                        </Label>
+                        <div className="text-sm font-medium">
+                          {project.client_email}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {project.client_phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <Label className="text-muted-foreground text-sm">Phone</Label>
-                      <div className="text-sm font-medium">{project.client_phone}</div>
+                  )}
+                  {project.client_phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <Label className="text-muted-foreground text-sm">
+                          Phone
+                        </Label>
+                        <div className="text-sm font-medium">
+                          {project.client_phone}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
           {/* Timeline & Scheduling */}
           <Card>
@@ -862,20 +962,26 @@ export default function ProjectDetail() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <Label className="text-muted-foreground text-sm">Start Date</Label>
+                <Label className="text-muted-foreground text-sm">
+                  Start Date
+                </Label>
                 <div className="text-sm font-medium mt-1">
                   {formatDate(project.start_date)}
                 </div>
               </div>
               <div>
-                <Label className="text-muted-foreground text-sm">End Date</Label>
+                <Label className="text-muted-foreground text-sm">
+                  End Date
+                </Label>
                 <div className="text-sm font-medium mt-1">
                   {formatDate(project.end_date || project.target_end_date)}
                 </div>
               </div>
               {project.target_end_date && (
                 <div>
-                  <Label className="text-muted-foreground text-sm">Target End Date (Alt)</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Target End Date (Alt)
+                  </Label>
                   <div className="text-sm font-medium mt-1">
                     {formatDate(project.target_end_date)}
                   </div>
@@ -883,7 +989,9 @@ export default function ProjectDetail() {
               )}
               {project.actual_end_date && (
                 <div>
-                  <Label className="text-muted-foreground text-sm">Actual End Date</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Actual End Date
+                  </Label>
                   <div className="text-sm font-medium mt-1">
                     {formatDate(project.actual_end_date)}
                   </div>
@@ -891,7 +999,9 @@ export default function ProjectDetail() {
               )}
               {project.project_duration_days && (
                 <div>
-                  <Label className="text-muted-foreground text-sm">Project Duration</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Project Duration
+                  </Label>
                   <div className="text-sm font-medium mt-1">
                     {project.project_duration_days} days
                   </div>
@@ -913,7 +1023,12 @@ export default function ProjectDetail() {
                 {project.github_repo_url && (
                   <div className="flex items-center gap-2">
                     <LinkIcon className="h-4 w-4 text-muted-foreground" />
-                    <a href={project.github_repo_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                    <a
+                      href={project.github_repo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline"
+                    >
                       {project.github_repo_url}
                     </a>
                   </div>
@@ -921,7 +1036,12 @@ export default function ProjectDetail() {
                 {project.bitbucket_repo_url && (
                   <div className="flex items-center gap-2">
                     <LinkIcon className="h-4 w-4 text-muted-foreground" />
-                    <a href={project.bitbucket_repo_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                    <a
+                      href={project.bitbucket_repo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline"
+                    >
                       {project.bitbucket_repo_url}
                     </a>
                   </div>
@@ -938,19 +1058,32 @@ export default function ProjectDetail() {
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10">
-                  <AvatarImage 
-                    src={getProfilePhotoUrl(project.team_lead_photo_url || null)} 
-                    alt={project.team_lead_name || 'Team Lead'}
+                  <AvatarImage
+                    src={getProfilePhotoUrl(
+                      project.team_lead_photo_url || null
+                    )}
+                    alt={project.team_lead_name || "Team Lead"}
                     className="object-cover"
                   />
                   <AvatarFallback className="bg-primary/10 text-primary">
-                    {project.team_lead_name ? project.team_lead_name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "TL"}
+                    {project.team_lead_name
+                      ? project.team_lead_name
+                          .split(" ")
+                          .map((n: string) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 2)
+                      : "TL"}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <div className="text-sm font-medium">{project.team_lead_name || 'Unassigned'}</div>
+                  <div className="text-sm font-medium">
+                    {project.team_lead_name || "Unassigned"}
+                  </div>
                   {project.team_lead_email && (
-                    <div className="text-xs text-muted-foreground">{project.team_lead_email}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {project.team_lead_email}
+                    </div>
                   )}
                 </div>
               </div>
@@ -962,44 +1095,73 @@ export default function ProjectDetail() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Team Members ({memberDetails.length > 0 ? memberDetails.length : (project?.member_ids?.length || 0)})
+                Team Members (
+                {memberDetails.length > 0
+                  ? memberDetails.length
+                  : project?.member_ids?.length || 0}
+                )
               </CardTitle>
             </CardHeader>
             <CardContent>
               {memberDetails.length > 0 ? (
                 <div className="space-y-2">
                   {memberDetails.map((member: any, index: number) => (
-                    <div key={member.id || index} className="flex items-center justify-between text-sm">
+                    <div
+                      key={member.id || index}
+                      className="flex items-center justify-between text-sm"
+                    >
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
-                          <AvatarImage 
-                            src={getProfilePhotoUrl(member.profile_photo_url || null)} 
+                          <AvatarImage
+                            src={getProfilePhotoUrl(
+                              member.profile_photo_url || null
+                            )}
                             alt={member.name}
                             className="object-cover"
                           />
                           <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-                            {member.name ? member.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "E"}
+                            {member.name
+                              ? member.name
+                                  .split(" ")
+                                  .map((n: string) => n[0])
+                                  .join("")
+                                  .toUpperCase()
+                                  .slice(0, 2)
+                              : "E"}
                           </AvatarFallback>
                         </Avatar>
                         <div>
                           <div className="font-medium">{member.name}</div>
                           {member.email && (
-                            <div className="text-xs text-muted-foreground">{member.email}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {member.email}
+                            </div>
                           )}
                         </div>
                       </div>
                       <StatusBadge variant="neutral" className="text-xs">
-                        {member.role === 'tl' ? 'TL' : member.role === 'developer' ? 'Dev' : member.role === 'qa' ? 'QA' : member.role === 'designer' ? 'Designer' : 'Employee'}
+                        {member.role === "tl"
+                          ? "TL"
+                          : member.role === "developer"
+                          ? "Dev"
+                          : member.role === "qa"
+                          ? "QA"
+                          : member.role === "designer"
+                          ? "Designer"
+                          : "Employee"}
                       </StatusBadge>
                     </div>
                   ))}
                 </div>
               ) : project?.member_ids && project.member_ids.length > 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  {project.member_ids.length} member(s) assigned, but user details are not available.
+                  {project.member_ids.length} member(s) assigned, but user
+                  details are not available.
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">No members assigned</div>
+                <div className="text-sm text-muted-foreground">
+                  No members assigned
+                </div>
               )}
             </CardContent>
           </Card>
@@ -1020,25 +1182,33 @@ export default function ProjectDetail() {
             <CardContent>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label className="text-muted-foreground text-sm">Total Hours</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Total Hours
+                  </Label>
                   <div className="text-2xl font-bold">
-                    {typeof workedTime.total_hours === 'number' 
-                      ? workedTime.total_hours.toFixed(2) 
-                      : (parseFloat(String(workedTime.total_hours)) || 0).toFixed(2)}
+                    {typeof workedTime.total_hours === "number"
+                      ? workedTime.total_hours.toFixed(2)
+                      : (
+                          parseFloat(String(workedTime.total_hours)) || 0
+                        ).toFixed(2)}
                   </div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground text-sm">Total Minutes</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Total Minutes
+                  </Label>
                   <div className="text-2xl font-bold">
-                    {typeof workedTime.total_minutes === 'number'
+                    {typeof workedTime.total_minutes === "number"
                       ? workedTime.total_minutes
                       : parseInt(String(workedTime.total_minutes)) || 0}
                   </div>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground text-sm">Contributors</Label>
+                  <Label className="text-muted-foreground text-sm">
+                    Contributors
+                  </Label>
                   <div className="text-2xl font-bold">
-                    {typeof workedTime.unique_contributors === 'number'
+                    {typeof workedTime.unique_contributors === "number"
                       ? workedTime.unique_contributors
                       : parseInt(String(workedTime.unique_contributors)) || 0}
                   </div>
@@ -1047,7 +1217,6 @@ export default function ProjectDetail() {
             </CardContent>
           </Card>
         )}
-
       </div>
 
       {/* Delete Confirmation Dialog */}
@@ -1056,13 +1225,17 @@ export default function ProjectDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the project
+              This action cannot be undone. This will permanently delete the
+              project
               {project.project_code && ` ${project.project_code}`}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

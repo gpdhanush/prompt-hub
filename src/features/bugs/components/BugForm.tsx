@@ -42,7 +42,6 @@ interface BugFormData {
   device: string;
   os: string;
   app_version: string;
-  api_endpoint: string;
   target_fix_date: string;
   actual_fix_date: string;
   tags: string;
@@ -240,7 +239,8 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
           <CardDescription>Essential details about the bug</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          {/* First row: Bug Title, Bug Type, Project, Task (Optional) */}
+          <div className="grid grid-cols-4 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="title" className="text-red-500">Bug Title *</Label>
               <SecureInput
@@ -251,6 +251,26 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
                 onChange={(e) => handleInputChange("title", e.target.value)}
                 placeholder="Enter bug title"
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="bug_type">Bug Type</Label>
+              <Select
+                value={formData.bug_type}
+                onValueChange={(value) => handleInputChange("bug_type", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Functional">Functional</SelectItem>
+                  <SelectItem value="UI/UX">UI/UX</SelectItem>
+                  <SelectItem value="Performance">Performance</SelectItem>
+                  <SelectItem value="Security">Security</SelectItem>
+                  <SelectItem value="Integration">Integration</SelectItem>
+                  <SelectItem value="Crash">Crash</SelectItem>
+                  <SelectItem value="Data Issue">Data Issue</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="project_id">Project</Label>
@@ -292,7 +312,32 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          {/* Second row: Priority, Bug Status, Team Lead, Assigned To */}
+          <div className="grid grid-cols-4 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="priority">Priority</Label>
+              <Select
+                value={formData.priority}
+                onValueChange={(value) => handleInputChange("priority", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="P1">P1 - Critical</SelectItem>
+                  <SelectItem value="P2">P2 - High</SelectItem>
+                  <SelectItem value="P3">P3 - Medium</SelectItem>
+                  <SelectItem value="P4">P4 - Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="status">Bug Status</Label>
+              <BugStatusDropdown
+                currentStatus={formData.status || "Open"}
+                onStatusChange={(value) => handleInputChange("status", value)}
+              />
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="team_lead_id">Team Lead</Label>
               <Select
@@ -346,53 +391,6 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
                   )}
                 </SelectContent>
               </Select>
-            </div>
-          </div>
-          {/* Bug Type, Priority, Bug Status in 3 columns next to Assigned To */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="bug_type">Bug Type</Label>
-              <Select
-                value={formData.bug_type}
-                onValueChange={(value) => handleInputChange("bug_type", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Functional">Functional</SelectItem>
-                  <SelectItem value="UI/UX">UI/UX</SelectItem>
-                  <SelectItem value="Performance">Performance</SelectItem>
-                  <SelectItem value="Security">Security</SelectItem>
-                  <SelectItem value="Integration">Integration</SelectItem>
-                  <SelectItem value="Crash">Crash</SelectItem>
-                  <SelectItem value="Data Issue">Data Issue</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select
-                value={formData.priority}
-                onValueChange={(value) => handleInputChange("priority", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="P1">P1 - Critical</SelectItem>
-                  <SelectItem value="P2">P2 - High</SelectItem>
-                  <SelectItem value="P3">P3 - Medium</SelectItem>
-                  <SelectItem value="P4">P4 - Low</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="status">Bug Status</Label>
-              <BugStatusDropdown
-                currentStatus={formData.status || "Open"}
-                onStatusChange={(value) => handleInputChange("status", value)}
-              />
             </div>
           </div>
           <div className="grid gap-2">
@@ -459,17 +457,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
           <CardDescription>Where the bug was found</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="browser">Browser</Label>
-              <SecureInput
-                id="browser"
-                fieldName="Browser"
-                value={formData.browser}
-                onChange={(e) => handleInputChange("browser", e.target.value)}
-                placeholder="e.g., Chrome, Firefox, Safari"
-              />
-            </div>
+          <div className="grid grid-cols-4 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="device">Device</Label>
               <Select
@@ -488,6 +476,16 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
               </Select>
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="browser">Browser</Label>
+              <SecureInput
+                id="browser"
+                fieldName="Browser"
+                value={formData.browser}
+                onChange={(e) => handleInputChange("browser", e.target.value)}
+                placeholder="e.g., Chrome, Firefox, Safari"
+              />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="os">Operating System</Label>
               <SecureInput
                 id="os"
@@ -497,8 +495,6 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
                 placeholder="e.g., Android, iOS, Windows, Mac"
               />
             </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="app_version">App Version</Label>
               <SecureInput
@@ -507,16 +503,6 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
                 value={formData.app_version}
                 onChange={(e) => handleInputChange("app_version", e.target.value)}
                 placeholder="e.g., 1.0.0"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="api_endpoint">API Endpoint (if applicable)</Label>
-              <SecureInput
-                id="api_endpoint"
-                fieldName="API Endpoint"
-                value={formData.api_endpoint}
-                onChange={(e) => handleInputChange("api_endpoint", e.target.value)}
-                placeholder="e.g., /api/users/123"
               />
             </div>
           </div>

@@ -25,7 +25,6 @@ interface BugFormData {
   device: string;
   os: string;
   app_version: string;
-  api_endpoint: string;
   target_fix_date: string;
   actual_fix_date: string;
   tags: string;
@@ -53,7 +52,6 @@ export default function BugCreate() {
     device: "",
     os: "",
     app_version: "",
-    api_endpoint: "",
     target_fix_date: "",
     actual_fix_date: "",
     tags: "",
@@ -146,9 +144,6 @@ export default function BugCreate() {
     }
     if (formData.app_version) {
       formDataToSend.append('app_version', formData.app_version);
-    }
-    if (formData.api_endpoint) {
-      formDataToSend.append('api_endpoint', formData.api_endpoint);
     }
     
     // Timeline
