@@ -31,11 +31,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PageTitle } from "@/components/ui/page-title";
-import { getProfilePhotoUrl } from "@/lib/imageUtils";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -87,7 +84,6 @@ export default function Employees() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [roleFilter, setRoleFilter] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -173,13 +169,9 @@ export default function Employees() {
       
       const matchesRole = !roleFilter || employee.role === roleFilter;
       
-      const matchesStatus = !statusFilter || 
-        employee.employee_status === statusFilter ||
-        employee.status === statusFilter;
-      
-      return matchesSearch && matchesRole && matchesStatus;
+      return matchesSearch && matchesRole;
     });
-  }, [baseEmployees, searchQuery, roleFilter, statusFilter]);
+  }, [baseEmployees, searchQuery, roleFilter]);
 
   // Client-side pagination
   const paginatedEmployees = useMemo(() => {
@@ -243,9 +235,6 @@ export default function Employees() {
     setRoleFilter(value);
   }, []);
 
-  const handleStatusFilterChange = useCallback((value: string) => {
-    setStatusFilter(value);
-  }, []);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
@@ -340,27 +329,6 @@ export default function Employees() {
                 ))}
               </SelectContent>
             </Select>
-            <Select 
-              value={statusFilter || "all"} 
-              onValueChange={(value) => {
-                handleStatusFilterChange(value === "all" ? "" : value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Inactive">Inactive</SelectItem>
-                <SelectItem value="Resigned">Resigned</SelectItem>
-                <SelectItem value="Terminated">Terminated</SelectItem>
-                <SelectItem value="Present">Present</SelectItem>
-                <SelectItem value="Absent">Absent</SelectItem>
-                <SelectItem value="On Leave">On Leave</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -381,7 +349,7 @@ export default function Employees() {
               <User className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
               <h3 className="text-lg font-semibold mb-2">No employees found</h3>
               <p className="text-muted-foreground">
-                {searchQuery || roleFilter || statusFilter
+                {searchQuery || roleFilter
                   ? 'Try adjusting your filters'
                   : 'No employees available'}
               </p>
@@ -396,8 +364,6 @@ export default function Employees() {
                     <TableHead>Email</TableHead>
                     <TableHead>Mobile</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Team Lead</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -412,15 +378,9 @@ export default function Employees() {
                         <span className="font-mono text-sm">{emp.emp_code || `EMP-${emp.id}`}</span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={getProfilePhotoUrl(emp.profile_photo_url || null)} />
-                            <AvatarFallback className="text-xs">
-                              {emp.name ? emp.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "E"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="font-medium">{emp.name}</span>
-                        </div>
+                        <span className="font-medium truncate max-w-[200px]" title={emp.name}>
+                          {emp.name && emp.name.length > 20 ? `${emp.name.substring(0, 20)}…` : emp.name || "N/A"}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">{emp.email}</span>
@@ -432,16 +392,6 @@ export default function Employees() {
                         <Badge variant="outline" className="capitalize">
                           {emp.role || "N/A"}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground">{emp.team_lead_name || "N/A"}</span>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge 
-                          variant={(emp.employee_status || emp.status) === "Active" ? "success" : (emp.employee_status || emp.status) === "On Leave" ? "info" : "warning"}
-                        >
-                          {emp.employee_status || emp.status || "Active"}
-                        </StatusBadge>
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
