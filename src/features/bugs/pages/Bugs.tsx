@@ -7,6 +7,7 @@ import { usersApi } from "@/features/users/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { usePageMeta, pageMeta } from "@/hooks/usePageMeta";
 import { logger } from "@/lib/logger";
 import { BugsHeader } from "../components/BugsHeader";
 import { BugsFilters } from "../components/BugsFilters";
@@ -18,6 +19,9 @@ import type { Bug } from "../utils/utils";
 
 export default function Bugs() {
   const navigate = useNavigate();
+
+  // Set page metadata
+  const metaElement = usePageMeta(pageMeta.bugs);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
@@ -181,7 +185,9 @@ export default function Bugs() {
   }, [editBugId, editBugData, handleEdit, setSearchParams]);
 
   return (
-    <div className="space-y-6">
+    <>
+      {metaElement}
+      <div className="space-y-6">
       <BugsHeader canCreateBug={canCreateBug} userRole={userRole} />
 
       <BugsFilters
@@ -219,5 +225,6 @@ export default function Bugs() {
         onConfirm={confirmDelete}
       />
     </div>
+    </>
   );
 }

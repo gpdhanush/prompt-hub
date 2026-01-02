@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { PageTitle } from "@/components/ui/page-title";
 import { settingsApi } from "@/features/settings/api";
 import { reportsApi } from "@/features/reports/api";
+import { usePageMeta, pageMeta } from "@/hooks/usePageMeta";
 import CommonDashboard from "@/components/dashboard/CommonDashboard";
 import Clock from "@/components/dashboard/Clock";
 import Leaderboard from "@/components/dashboard/Leaderboard";
@@ -29,6 +30,9 @@ export default function Dashboard() {
   const isTLOrAdmin = isTL || isAdmin;
   // Level 2 employees: Developer, Tester, Designer, Employee, etc. (not Super Admin, Admin, Team Lead)
   const isLevel2Employee = !isSuperAdmin && !isAdmin && !isTL;
+
+  // Set page metadata
+  const metaElement = usePageMeta(pageMeta.dashboard);
 
   // Redirect Admin users to IT Asset Dashboard
   useEffect(() => {
@@ -106,7 +110,9 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <>
+      {metaElement}
+      <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -168,5 +174,6 @@ export default function Dashboard() {
       {/* Leaderboard - Always visible if data exists */}
       <Leaderboard leaderboard={leaderboard} />
     </div>
+    </>
   );
 }

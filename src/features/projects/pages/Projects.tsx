@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getCurrentUser } from "@/lib/auth";
+import { usePageMeta, pageMeta } from "@/hooks/usePageMeta";
 import { useProjectsQuery, useProjectMutations } from "../hooks/useProjects";
 import { ProjectsHeader } from "../components/ProjectsHeader";
 import { ProjectsFilters } from "../components/ProjectsFilters";
@@ -14,6 +15,10 @@ import type { Project } from "../utils/utils";
 
 export default function Projects() {
   const navigate = useNavigate();
+
+  // Set page metadata
+  const metaElement = usePageMeta(pageMeta.projects);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [viewFilter, setViewFilter] = useState<'all' | 'my'>('all');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -121,7 +126,9 @@ export default function Projects() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <>
+      {metaElement}
+      <div className="space-y-6">
       <ProjectsHeader canCreateProject={canCreateProject} />
 
       <ProjectsFilters
@@ -158,5 +165,6 @@ export default function Projects() {
         onConfirm={confirmDelete}
       />
     </div>
+    </>
   );
 }
