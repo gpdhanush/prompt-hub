@@ -58,20 +58,22 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between", className)}
+          className={cn("w-full justify-between font-normal", className)}
           disabled={disabled || loading}
         >
           {loading ? (
             "Loading..."
           ) : selectedOption ? (
-            selectedOption.label
+            selectedOption.label.length > 25
+              ? `${selectedOption.label.substring(0, 25)}...`
+              : selectedOption.label
           ) : (
             placeholder
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-h-[--radix-popover-content-available-height] p-0" align="start">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-h-[--radix-popover-content-available-height] p-0 overflow-y-auto" align="start">
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
@@ -92,7 +94,9 @@ export function Combobox({
                       value === option.value ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  {option.label}
+                  {option.label.length > 25
+                    ? `${option.label.substring(0, 25)}...`
+                    : option.label}
                 </CommandItem>
               ))}
             </CommandGroup>

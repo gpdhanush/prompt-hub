@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getCurrentUser } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface BugStatusDropdownProps {
   currentStatus: string;
@@ -7,63 +8,21 @@ interface BugStatusDropdownProps {
   disabled?: boolean;
 }
 
-const BUG_STATUS_FLOW = {
-  'Open': ['Assigned'],
-  'Assigned': ['Fixed', 'Open'],
-  'Fixed': ['Retest'],
-  'Retest': ['Closed', 'Reopened'],
-  'Closed': ['Reopened'],
-  'Reopened': ['Assigned', 'Fixed']
-};
+// Simple list of all available bug statuses
+const BUG_STATUSES = [
+  'Open',
+  'Assigned',
+  'In Progress',
+  'Testing',
+  'Fixed',
+  'Retesting',
+  'Closed',
+  'Reopened'
+];
 
 export function BugStatusDropdown({ currentStatus, onStatusChange, disabled }: BugStatusDropdownProps) {
-  const currentUser = getCurrentUser();
-  const userRole = currentUser?.role || '';
-  
-  // Ensure we have a valid status
+  // Ensure we have a valid status, default to 'Open'
   const status = currentStatus || 'Open';
-
-  const getAllowedTransitions = (status: string, role: string): string[] => {
-    const possibleNext = BUG_STATUS_FLOW[status as keyof typeof BUG_STATUS_FLOW] || [];
-    
-    if (role === 'Super Admin' || role === 'Admin' || role === 'Team Leader' || role === 'Team Lead') {
-      // TL/Admin can move to any status, including reopen/close
-      return possibleNext;
-    }
-
-    if (role === 'Developer') {
-      // Developers: Assigned → Fixed (cannot close)
-      return possibleNext.filter(next => {
-        if (status === 'Assigned' && next === 'Fixed') return true;
-        return false;
-      });
-    }
-
-    if (role === 'Tester') {
-      // Tester: Retest → Closed
-      return possibleNext.filter(next => {
-        if (status === 'Retest' && next === 'Closed') return true;
-        return false;
-      });
-    }
-
-    return [];
-  };
-
-  const allowedStatuses = getAllowedTransitions(status, userRole);
-
-  if (allowedStatuses.length === 0 && status !== 'Closed') {
-    return (
-      <Select value={status} disabled>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={status}>{status}</SelectItem>
-        </SelectContent>
-      </Select>
-    );
-  }
 
   return (
     <Select
@@ -75,10 +34,9 @@ export function BugStatusDropdown({ currentStatus, onStatusChange, disabled }: B
         <SelectValue placeholder="Select status" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={status}>{status}</SelectItem>
-        {allowedStatuses.map((nextStatus) => (
-          <SelectItem key={nextStatus} value={nextStatus}>
-            {nextStatus}
+        {BUG_STATUSES.map((statusOption) => (
+          <SelectItem key={statusOption} value={statusOption}>
+            {statusOption}
           </SelectItem>
         ))}
       </SelectContent>

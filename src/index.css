@@ -67,7 +67,7 @@
   }
 
   .dark {
-    --background: oklch(21% .034 264.665);
+    --background: oklch(21% 0.034 264.665);
     --foreground: 210 20% 95%;
 
     --card: 220 16% 8%;
@@ -135,7 +135,7 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   }
 
   /* Modern Custom Scrollbar - Always Visible */
@@ -242,13 +242,18 @@
   }
 
   .gradient-border::before {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(135deg, hsl(var(--primary) / 0.5), hsl(var(--primary) / 0.1));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.5),
+      hsl(var(--primary) / 0.1)
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
@@ -312,4 +317,245 @@
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* Quill Editor Styles */
+.quill-editor-container .ql-toolbar {
+  border-top: 1px solid hsl(var(--border));
+  border-left: 1px solid hsl(var(--border));
+  border-right: 1px solid hsl(var(--border));
+  border-bottom: none;
+}
+.quill-editor-container .ql-container {
+  border-bottom: 1px solid hsl(var(--border));
+  border-left: 1px solid hsl(var(--border));
+  border-right: 1px solid hsl(var(--border));
+  border-top: none;
+  min-height: 120px;
+}
+.quill-editor-container .ql-editor {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.quill-editor-container .ql-editor.ql-blank::before {
+  color: hsl(var(--muted-foreground));
+  font-style: normal;
+}
+.quill-editor-container .ql-editor img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+.quill-editor-container .ql-editor .ql-image {
+  display: block;
+  margin: 8px 0;
+}
+.quill-readonly .ql-editor {
+  padding: 0;
+  border: none;
+}
+.quill-readonly .ql-container {
+  border: none;
+}
+
+/* Dropdown hover theme colors - comprehensive coverage */
+[data-radix-select-content] [data-radix-select-item]:hover,
+[data-radix-dropdown-menu-content] [data-radix-menu-item]:hover,
+[data-radix-popover-content] [data-radix-select-item]:hover,
+[data-radix-popover-content] [data-radix-menu-item]:hover,
+[data-radix-select-content] [role="option"]:hover,
+[data-radix-dropdown-menu-content] [role="menuitem"]:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+[data-radix-select-content] [data-radix-select-item][data-state="checked"],
+[data-radix-dropdown-menu-content] [data-radix-menu-item][data-state="checked"],
+[data-radix-select-content] [data-radix-select-item][aria-selected="true"],
+[data-radix-dropdown-menu-content]
+  [data-radix-menu-item][aria-selected="true"] {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Dropdown and popover backdrop theme colors */
+[data-radix-popover-content],
+[data-radix-select-content],
+[data-radix-dropdown-menu-content] {
+  background-color: hsl(var(--popover)) !important;
+  border-color: hsl(var(--border)) !important;
+  box-shadow: 0 4px 6px -1px hsl(var(--shadow) / 0.1),
+    0 2px 4px -2px hsl(var(--shadow) / 0.1) !important;
+}
+
+/* Additional coverage for any dropdown-like elements */
+select:hover,
+select:focus,
+[data-radix-select-trigger]:hover,
+[data-radix-select-trigger]:focus,
+[data-radix-dropdown-menu-trigger]:hover,
+[data-radix-dropdown-menu-trigger]:focus {
+  border-color: hsl(var(--ring)) !important;
+}
+
+/* Combobox specific styles */
+[data-radix-popover-content] [cmdk-item]:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+/* Animation classes */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.4s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.4s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out;
+}
+
+.animate-bounce-in {
+  animation: bounce-in 0.6s ease-out;
+}
+
+/* Stagger animation for lists */
+.animate-stagger > * {
+  animation: fade-in 0.5s ease-out;
+}
+
+.animate-stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.animate-stagger > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+.animate-stagger > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+.animate-stagger > *:nth-child(4) {
+  animation-delay: 150ms;
+}
+.animate-stagger > *:nth-child(5) {
+  animation-delay: 200ms;
+}
+.animate-stagger > *:nth-child(6) {
+  animation-delay: 250ms;
+}
+.animate-stagger > *:nth-child(7) {
+  animation-delay: 300ms;
+}
+.animate-stagger > *:nth-child(8) {
+  animation-delay: 350ms;
+}
+.animate-stagger > *:nth-child(9) {
+  animation-delay: 400ms;
+}
+.animate-stagger > *:nth-child(10) {
+  animation-delay: 450ms;
+}
+
+/* Pulse animation for loading states */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Smooth transitions for interactive elements */
+button,
+.cursor-pointer,
+[role="button"] {
+  transition: all 0.2s ease-in-out;
+}
+
+button:hover,
+.cursor-pointer:hover,
+[role="button"]:hover {
+  transform: translateY(-1px);
+}
+
+button:active,
+.cursor-pointer:active,
+[role="button"]:active {
+  transform: translateY(0);
 }

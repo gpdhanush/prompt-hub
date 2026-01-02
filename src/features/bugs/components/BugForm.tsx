@@ -16,6 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "@/hooks/use-toast";
 import { tasksApi } from "@/features/tasks/api";
 import { projectsApi } from "@/features/projects/api";
@@ -32,9 +34,9 @@ interface BugFormData {
   bug_type: string;
   priority: string;
   status: string;
-  resolution_type: string;
   assigned_to: string;
   team_lead_id: string;
+  deadline: string;
   steps_to_reproduce: string;
   expected_behavior: string;
   actual_behavior: string;
@@ -42,9 +44,6 @@ interface BugFormData {
   device: string;
   os: string;
   app_version: string;
-  target_fix_date: string;
-  actual_fix_date: string;
-  tags: string;
 }
 
 interface BugFormProps {
@@ -145,19 +144,27 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
       ['Tester', 'Developer', 'Designer'].includes(user.role)
     );
 
-    // Exclude current user from the list
-    return baseLevel2Users.filter((user: any) => user.id !== currentUserId);
-  }, [assignableUsersFromAPI, currentUserId]);
+    // Include current user in the list so they can assign bugs to themselves
+    return baseLevel2Users;
+  }, [assignableUsersFromAPI]);
 
   const handleInputChange = (field: keyof BugFormData, value: string) => {
     const normalizedValue = (value === "none" || value === "unassigned" || value === "all") ? "" : value;
     const newData = { ...formData, [field]: normalizedValue };
-    
+
     // Clear task_id if project changes
     if (field === 'project_id') {
       newData.task_id = "";
     }
-    
+
+    // Set status to "Assigned" when someone is assigned to the bug
+    if (field === 'assigned_to' && normalizedValue && normalizedValue !== "unassigned") {
+      // Only change status if it's currently "Open" or empty
+      if (!newData.status || newData.status === "Open") {
+        newData.status = "Assigned";
+      }
+    }
+
     onChange(newData);
   };
 
@@ -231,9 +238,9 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-stagger">
       {/* Basic Bug Information */}
-      <Card>
+      <Card className="animate-slide-in-left">
         <CardHeader>
           <CardTitle>Basic Bug Information</CardTitle>
           <CardDescription>Essential details about the bug</CardDescription>
@@ -274,70 +281,44 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
             </div>
             <div className="grid gap-2">
               <Label htmlFor="project_id">Project</Label>
-              <Select
+              <Combobox
+                options={[
+                  { value: "none", label: "None" },
+                  ...(projects?.map((project: any) => ({
+                    value: project.id.toString(),
+                    label: project.name
+                  })) || [])
+                ]}
                 value={formData.project_id || "none"}
                 onValueChange={(value) => handleInputChange("project_id", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {projects.map((project: any) => (
-                    <SelectItem key={project.id} value={project.id.toString()}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select project"
+                searchPlaceholder="Search projects..."
+                emptyMessage="No projects found."
+                className="w-full"
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="task_id">Task (Optional)</Label>
-              <Select
+              <Combobox
+                options={[
+                  { value: "none", label: "None" },
+                  ...(filteredTasks?.map((task: any) => ({
+                    value: task.id.toString(),
+                    label: task.title || task.task_code || `Task #${task.id}`
+                  })) || [])
+                ]}
                 value={formData.task_id || "none"}
                 onValueChange={(value) => handleInputChange("task_id", value)}
+                placeholder="Select task"
+                searchPlaceholder="Search tasks..."
+                emptyMessage="No tasks found."
                 disabled={!formData.project_id || formData.project_id === "none"}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select task" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {filteredTasks.map((task: any) => (
-                    <SelectItem key={task.id} value={task.id.toString()}>
-                      {task.title || task.task_code || `Task #${task.id}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          {/* Second row: Priority, Bug Status, Team Lead, Assigned To */}
-          <div className="grid grid-cols-4 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select
-                value={formData.priority}
-                onValueChange={(value) => handleInputChange("priority", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="P1">P1 - Critical</SelectItem>
-                  <SelectItem value="P2">P2 - High</SelectItem>
-                  <SelectItem value="P3">P3 - Medium</SelectItem>
-                  <SelectItem value="P4">P4 - Low</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="status">Bug Status</Label>
-              <BugStatusDropdown
-                currentStatus={formData.status || "Open"}
-                onStatusChange={(value) => handleInputChange("status", value)}
+                className="w-full"
               />
             </div>
+          </div>
+          {/* Second row: Team Lead, Assigned To, Priority & Status */}
+          <div className="grid grid-cols-4 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="team_lead_id">Team Lead</Label>
               <Select
@@ -366,31 +347,56 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
             </div>
             <div className="grid gap-2">
               <Label htmlFor="assigned_to">Assigned To</Label>
-              <Select
+              <Combobox
+                options={[
+                  { value: "unassigned", label: "Unassigned" },
+                  ...(assignableUsers?.map((user: any) => ({
+                    value: user.id.toString(),
+                    label: `${user.name} (${user.role})`
+                  })) || [])
+                ]}
                 value={formData.assigned_to || "unassigned"}
                 onValueChange={(value) => handleInputChange("assigned_to", value)}
+                placeholder={isLoadingAssignable ? "Loading users..." : "Select assignee"}
+                searchPlaceholder="Search users..."
+                emptyMessage="No users found."
                 disabled={isLoadingAssignable}
+                loading={isLoadingAssignable}
+                className="w-full"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="priority">Priority</Label>
+              <Select
+                value={formData.priority}
+                onValueChange={(value) => handleInputChange("priority", value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={isLoadingAssignable ? "Loading users..." : "Select assignee"} />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {isLoadingAssignable ? (
-                    <SelectItem value="loading" disabled>Loading users...</SelectItem>
-                  ) : assignableUsers.length > 0 ? (
-                    assignableUsers.map((user: any) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name} ({user.role})
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-options" disabled>
-                      No Level 2 users available
-                    </SelectItem>
-                  )}
+                  <SelectItem value="Critical">Critical</SelectItem>
+                  <SelectItem value="High">High</SelectItem>
+                  <SelectItem value="Medium">Medium</SelectItem>
+                  <SelectItem value="Low">Low</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="status">Bug Status</Label>
+              <BugStatusDropdown
+                currentStatus={formData.status || "Open"}
+                onStatusChange={(value) => handleInputChange("status", value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="deadline">Deadline</Label>
+              <DatePicker
+                id="deadline"
+                value={formData.deadline}
+                onChange={(value) => handleInputChange("deadline", value)}
+                placeholder="Select deadline date"
+              />
             </div>
           </div>
           <div className="grid gap-2">
@@ -406,7 +412,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
       </Card>
 
       {/* Steps & Reproduction */}
-      <Card>
+      <Card className="animate-slide-in-right">
         <CardHeader>
           <CardTitle>Steps & Reproduction</CardTitle>
           <CardDescription>How to reproduce the bug</CardDescription>
@@ -451,7 +457,7 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
       </Card>
 
       {/* Environment Details */}
-      <Card>
+      <Card className="animate-scale-in">
         <CardHeader>
           <CardTitle>Environment Details</CardTitle>
           <CardDescription>Where the bug was found</CardDescription>
@@ -509,10 +515,10 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
         </CardContent>
       </Card>
 
-      {/* Additional Fields */}
-      <Card>
+      {/* Attachments */}
+      <Card className="animate-bounce-in">
         <CardHeader>
-          <CardTitle>Additional Fields</CardTitle>
+          <CardTitle>Attachments</CardTitle>
           <CardDescription>Screenshots and attachments</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -49,6 +49,23 @@ export async function createNotification(
   sendPush = true
 ) {
   try {
+    // Check for duplicate notification (same user, type, title, and message within last 5 minutes)
+    const [existingNotifications] = await db.query(
+      `SELECT id FROM notifications
+       WHERE user_id = ?
+         AND type = ?
+         AND title = ?
+         AND message = ?
+         AND created_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
+      [userId, type, title, message]
+    );
+
+    // If duplicate found, skip creating new notification
+    if (existingNotifications.length > 0) {
+      logger.debug(`Duplicate notification skipped for user ${userId}, type: ${type}`);
+      return existingNotifications[0];
+    }
+
     // Create notification in database
     const [result] = await db.query(
       `INSERT INTO notifications (user_id, type, title, message, payload, is_read, created_at)

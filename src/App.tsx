@@ -327,7 +327,7 @@ const AppContent = () => {
                 } 
               />
               <Route 
-                path="/bugs/:id" 
+                path="/bugs/:bugUuid" 
                 element={
                   <ProtectedRoute requiredPermission="bugs.view">
                     <LazyRoute><BugDetail /></LazyRoute>
@@ -335,7 +335,7 @@ const AppContent = () => {
                 } 
               />
               <Route 
-                path="/bugs/:id/edit" 
+                path="/bugs/:bugUuid/edit" 
                 element={
                   <ProtectedRoute requiredPermission="bugs.edit">
                     <LazyRoute><BugEdit /></LazyRoute>
@@ -704,7 +704,7 @@ const AppContent = () => {
                 } 
               />
               <Route 
-                path="/client/bugs/:id" 
+                path="/client/bugs/:bugUuid" 
                 element={
                   <ProtectedRoute allowedRoles={['CLIENT']}>
                     <LazyRoute><BugDetail /></LazyRoute>

@@ -19,8 +19,10 @@ export function NotificationAlert() {
 
   useEffect(() => {
     console.log('🔔 [NotificationAlert] currentNotification changed:', currentNotification);
+    console.log('🔔 [NotificationAlert] currentNotification exists:', !!currentNotification);
     if (currentNotification) {
       console.log('🔔 [NotificationAlert] Opening dialog with notification:', currentNotification);
+      console.log('🔔 [NotificationAlert] Setting isOpen to true');
       setIsOpen(true);
     } else {
       console.log('🔔 [NotificationAlert] No notification, closing dialog');
@@ -66,6 +68,23 @@ export function NotificationAlert() {
 
   console.log('🔔 [NotificationAlert] Rendering, isOpen:', isOpen, 'currentNotification:', currentNotification);
 
+  // Temporary fallback: show a simple div notification if dialog doesn't work
+  if (currentNotification && !isOpen) {
+    console.log('🔔 [NotificationAlert] Showing fallback notification');
+    return (
+      <div className="fixed top-4 right-4 z-[10001] bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-sm">
+        <div className="font-bold">{currentNotification.title}</div>
+        <div className="text-sm">{currentNotification.body}</div>
+        <button
+          onClick={() => dismissNotification()}
+          className="mt-2 text-xs underline"
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
       console.log('🔔 [NotificationAlert] Dialog onOpenChange:', open);
@@ -75,7 +94,7 @@ export function NotificationAlert() {
     }}>
       <DialogContent
         className={cn(
-          'sm:max-w-md p-0 overflow-hidden z-[9999]',
+          'sm:max-w-md p-0 overflow-hidden z-[10000]',
           getTypeStyles()
         )}
         onInteractOutside={(e) => {

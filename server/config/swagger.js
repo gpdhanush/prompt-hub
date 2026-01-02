@@ -198,7 +198,6 @@ const options = {
             task_id: { type: 'integer' },
             title: { type: 'string' },
             description: { type: 'string' },
-            severity: { type: 'string' },
             priority: { type: 'string' },
             status: { type: 'string' },
             created_at: { type: 'string', format: 'date-time' },

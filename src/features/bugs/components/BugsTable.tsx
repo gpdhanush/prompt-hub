@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { StatusBadge, bugStatusMap } from "@/components/ui/status-badge";
+import { StatusBadge, bugStatusMap, bugPriorityMap } from "@/components/ui/status-badge";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -28,6 +28,7 @@ import {
 import PaginationControls from "@/shared/components/PaginationControls";
 import type { Bug } from "../utils/utils";
 import { BUG_PAGE_LIMITS } from "../utils/constants";
+import { formatDeadline } from "../utils/utils";
 
 interface BugsTableProps {
   bugs: Bug[];
@@ -46,6 +47,15 @@ interface BugsTableProps {
   onDelete: (bug: Bug) => void;
   onTaskClick: (taskId: number) => void;
 }
+
+const isDeadlineOverdue = (deadline?: string): boolean => {
+  if (!deadline) return false;
+  const deadlineDate = new Date(deadline);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  deadlineDate.setHours(0, 0, 0, 0);
+  return deadlineDate < today;
+};
 
 export const BugsTable = memo(function BugsTable({
   bugs,
@@ -88,20 +98,14 @@ export const BugsTable = memo(function BugsTable({
     onTaskClick(taskId);
   }, [onTaskClick]);
 
-  const getSeverityVariant = useCallback((severity?: string) => {
-    if (severity === 'Critical') return 'error';
-    if (severity === 'High') return 'warning';
-    if (severity === 'Medium') return 'info';
-    return 'neutral';
-  }, []);
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="animate-scale-in">
         <CardContent className="pt-6">
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <div className="animate-bounce-in rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
               <p className="text-muted-foreground">Loading bugs...</p>
             </div>
           </div>
@@ -160,16 +164,22 @@ export const BugsTable = memo(function BugsTable({
                 <TableHead className="w-[120px]">Bug ID</TableHead>
                 <TableHead>Task ID</TableHead>
                 <TableHead>Description</TableHead>
-                <TableHead>Priority</TableHead>
+                {/* <TableHead>Bug Type</TableHead> */}
+                {/* <TableHead>Priority</TableHead> */}
                 <TableHead>Status</TableHead>
+                <TableHead>Deadline</TableHead>
                 <TableHead className="text-right w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {bugs.map((bug) => (
-                <TableRow 
+              {bugs.map((bug, index) => (
+                <TableRow
                   key={bug.id}
-                  className="hover:bg-muted/50 cursor-pointer"
+                  className="hover:bg-muted/50 cursor-pointer animate-fade-in transition-all duration-200 hover:shadow-sm"
+                  style={{
+                    animationDelay: `${index * 50}ms`,
+                    animationFillMode: 'both'
+                  }}
                   onClick={() => handleRowClick(bug)}
                 >
                   <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
@@ -189,17 +199,27 @@ export const BugsTable = memo(function BugsTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm">{bug.title || (bug.description ? bug.description.charAt(0).toUpperCase() + bug.description.slice(1) : '-')}</span>
+                    <span className="text-sm truncate block max-w-[600px]" title={bug.title || bug.description || '-'}>
+                      {bug.title || (bug.description ? bug.description.charAt(0).toUpperCase() + bug.description.slice(1) : '-')}
+                    </span>
                   </TableCell>
-                  <TableCell>
-                    <StatusBadge variant={getSeverityVariant(bug.severity)}>
-                      {bug.severity || 'Low'}
+                  {/* <TableCell>
+                    <span className="text-sm">{bug.bug_type || 'Functional'}</span>
+                  </TableCell> */}
+                  {/* <TableCell>
+                    <StatusBadge variant={bugPriorityMap[bug.priority as keyof typeof bugPriorityMap] || 'neutral'}>
+                      {bug.priority || 'Low'}
                     </StatusBadge>
-                  </TableCell>
+                  </TableCell> */}
                   <TableCell>
                     <StatusBadge variant={bugStatusMap[bug.status || 'Open'] || 'default'}>
                       {bug.status || 'Open'}
                     </StatusBadge>
+                  </TableCell>
+                  <TableCell>
+                    <span className={`text-sm ${isDeadlineOverdue(bug.deadline) ? 'text-red-500 bg-red-50 px-2 py-1 rounded' : ''}`}>
+                      {bug.deadline ? formatDeadline(bug.deadline) : '-'}
+                    </span>
                   </TableCell>
                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>

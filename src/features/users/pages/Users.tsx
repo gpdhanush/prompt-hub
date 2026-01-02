@@ -814,7 +814,7 @@ export default function Users() {
                                 </DropdownMenuItem>
                                 {/* Hide delete button for Super Admin users */}
                                 {user.role !== 'Super Admin' && (
-                                  <DropdownMenuItem 
+                                  <DropdownMenuItem
                                     className="text-destructive"
                                     onClick={() => handleDelete(user)}
                                   >

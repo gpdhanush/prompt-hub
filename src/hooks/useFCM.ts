@@ -60,20 +60,39 @@ export function useFCM() {
 
         if (Notification.permission === 'granted') {
           logger.info('✅ Notification permission granted, getting FCM token...');
-          
-          // Get FCM token
-          const fcmToken = await getCurrentFCMToken();
-          
+
+          try {
+            // Force token refresh by deleting existing token first
+            await navigator.serviceWorker?.ready.then((registration) => {
+              return registration.active?.postMessage({ type: 'DELETE_TOKEN' });
+            });
+            logger.debug('🔄 Forced token refresh');
+          } catch (error) {
+            logger.debug('⚠️ Could not force token refresh:', error);
+          }
+
+          // Get FCM token with retry logic
+          let fcmToken = await getCurrentFCMToken();
+          let retryCount = 0;
+          const maxRetries = 3;
+
+          while (!fcmToken && retryCount < maxRetries) {
+            logger.warn(`⚠️ FCM token attempt ${retryCount + 1} failed, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            fcmToken = await getCurrentFCMToken();
+            retryCount++;
+          }
+
           if (fcmToken) {
             setToken(fcmToken);
             logger.info('✅ FCM token obtained');
-            
+
             // Register token with backend
             try {
               // Get device info
               const deviceInfo = getDeviceInfo();
               logger.debug('📱 Device info:', deviceInfo);
-              
+
               await fcmApi.register(fcmToken, {
                 deviceId: deviceInfo.deviceId,
                 deviceType: deviceInfo.deviceType,
@@ -82,9 +101,9 @@ export function useFCM() {
               });
               setIsRegistered(true);
               logger.info('✅ FCM token registered successfully with backend');
-              logAnalyticsEvent('fcm_token_registered', { 
+              logAnalyticsEvent('fcm_token_registered', {
                 deviceType: deviceInfo.deviceType,
-                browser: deviceInfo.browser 
+                browser: deviceInfo.browser
               });
             } catch (error: any) {
               logError(error, { source: 'useFCM_register', deviceId: getDeviceInfo().deviceId });
@@ -95,7 +114,12 @@ export function useFCM() {
               });
             }
           } else {
-            logger.warn('⚠️  Could not get FCM token. Check VAPID key configuration.');
+            logger.error('❌ Could not get FCM token after multiple attempts. Check VAPID key configuration.');
+            toast({
+              title: 'Notification Setup',
+              description: 'Unable to get push notification token',
+              variant: 'destructive',
+            });
           }
         } else if (Notification.permission === 'denied') {
           logger.warn('⚠️  Notification permission was denied. User must enable it in browser settings.');
@@ -111,6 +135,37 @@ export function useFCM() {
 
     initializeFCM();
   }, []);
+
+  // Periodic token refresh every 24 hours to ensure tokens stay valid
+  useEffect(() => {
+    if (!isRegistered || !token) return;
+
+    const refreshInterval = setInterval(async () => {
+      try {
+        logger.debug('🔄 Periodic FCM token refresh check');
+
+        const newToken = await getCurrentFCMToken();
+        if (newToken && newToken !== token) {
+          logger.info('🔄 FCM token changed, updating...');
+
+          const deviceInfo = getDeviceInfo();
+          await fcmApi.register(newToken, {
+            deviceId: deviceInfo.deviceId,
+            deviceType: deviceInfo.deviceType,
+            browser: deviceInfo.browser,
+            platform: deviceInfo.platform,
+          });
+
+          setToken(newToken);
+          logger.info('✅ FCM token refreshed successfully');
+        }
+      } catch (error) {
+        logger.error('❌ Error during periodic token refresh:', error);
+      }
+    }, 24 * 60 * 60 * 1000); // 24 hours
+
+    return () => clearInterval(refreshInterval);
+  }, [isRegistered, token]);
 
   // Listen for foreground messages - continuous listener
   // Set up listener regardless of permission to handle data-only messages
@@ -146,7 +201,7 @@ export function useFCM() {
             console.log('📢 [FCM] Calling showNotification with:', notificationData);
             logger.info('📢 Showing notification alert:', notificationData);
 
-            // Show modern alert popup
+            // Show modern alert popup (primary notification method)
             if (showNotification) {
               console.log('📢 [FCM] showNotification function exists, calling it...');
               showNotification(notificationData);
@@ -154,12 +209,6 @@ export function useFCM() {
             } else {
               console.error('❌ [FCM] showNotification function is not available!');
             }
-
-            // Also show toast for quick feedback
-            toast({
-              title: notificationData.title,
-              description: notificationData.body,
-            });
 
             // Show browser notification as well
             if ('Notification' in window && Notification.permission === 'granted') {
@@ -203,6 +252,46 @@ export function useFCM() {
       } catch (error) {
         logError(error as Error, { source: 'useFCM_unregister' });
       }
+    }
+  };
+
+  // Manual token refresh
+  const refreshToken = async () => {
+    try {
+      if (Notification.permission !== 'granted') {
+        logger.warn('⚠️ Cannot refresh token: notification permission not granted');
+        return false;
+      }
+
+      logger.info('🔄 Manual FCM token refresh...');
+
+      // Force token refresh
+      await navigator.serviceWorker?.ready.then((registration) => {
+        return registration.active?.postMessage({ type: 'DELETE_TOKEN' });
+      });
+
+      const newToken = await getCurrentFCMToken();
+      if (newToken) {
+        setToken(newToken);
+
+        const deviceInfo = getDeviceInfo();
+        await fcmApi.register(newToken, {
+          deviceId: deviceInfo.deviceId,
+          deviceType: deviceInfo.deviceType,
+          browser: deviceInfo.browser,
+          platform: deviceInfo.platform,
+        });
+
+        setIsRegistered(true);
+        logger.info('✅ FCM token refreshed manually');
+        return true;
+      } else {
+        logger.error('❌ Failed to get new FCM token during refresh');
+        return false;
+      }
+    } catch (error) {
+      logError(error as Error, { source: 'useFCM_refreshToken' });
+      return false;
     }
   };
 
@@ -251,5 +340,6 @@ export function useFCM() {
     permission,
     unregister,
     requestPermission,
+    refreshToken,
   };
 }

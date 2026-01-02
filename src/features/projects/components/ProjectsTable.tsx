@@ -172,8 +172,8 @@ export const ProjectsTable = memo(function ProjectsTable({
                         {project.project_code || `PRJ-${String(project.id).padStart(3, '0')}`}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <span className="font-medium">{project.name}</span>
+                    <TableCell title={project.name}>
+                      <span className="font-medium">{project.name.length > 25 ? `${project.name.substring(0, 50)}...` : project.name}</span>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">

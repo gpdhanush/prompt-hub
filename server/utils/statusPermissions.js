@@ -95,19 +95,23 @@ export function canTransitionTaskStatus(fromStatus, toStatus, userRole) {
  */
 export function getAllowedBugStatusTransitions(currentStatus, userRole) {
   const statusFlow = {
-    'Open': ['Assigned'],
-    'Assigned': ['Fixed', 'Open'],
-    'Fixed': ['Retest'],
+    'Open': ['Assigned', 'Closed'], // Allow closing directly from Open
+    'Assigned': ['Fixed', 'Open', 'Closed'], // Allow closing directly from Assigned
+    'Fixed': ['Retest', 'Closed'], // Allow closing directly from Fixed
     'Retest': ['Closed', 'Reopened'],
     'Closed': ['Reopened'],
-    'Reopened': ['Assigned', 'Fixed']
+    'Reopened': ['Assigned', 'Fixed', 'Closed'] // Allow closing directly from Reopened
   };
 
   const rolePermissions = {
     'Developer': {
-      allowed: ['Assigned', 'Fixed'],
+      allowed: ['Assigned', 'Fixed', 'Closed'], // Allow closing
       canMove: (from, to) => {
         if (from === 'Assigned' && to === 'Fixed') return true;
+        if (from === 'Assigned' && to === 'Closed') return true; // Allow closing
+        if (from === 'Fixed' && to === 'Closed') return true; // Allow closing
+        if (from === 'Reopened' && to === 'Fixed') return true;
+        if (from === 'Reopened' && to === 'Closed') return true; // Allow closing
         return false;
       }
     },
@@ -115,6 +119,8 @@ export function getAllowedBugStatusTransitions(currentStatus, userRole) {
       allowed: ['Retest', 'Closed'],
       canMove: (from, to) => {
         if (from === 'Retest' && to === 'Closed') return true;
+        if (from === 'Fixed' && to === 'Closed') return true; // Allow closing
+        if (from === 'Assigned' && to === 'Closed') return true; // Allow closing
         return false;
       }
     },
@@ -149,10 +155,10 @@ export function getAllowedBugStatusTransitions(currentStatus, userRole) {
   };
 
   const roleConfig = rolePermissions[userRole] || rolePermissions['Developer'];
-  
+
   // Get all possible next statuses from current status
   const possibleNext = statusFlow[currentStatus] || [];
-  
+
   // Filter based on role permissions
   return possibleNext.filter(nextStatus => {
     return roleConfig.canMove(currentStatus, nextStatus);

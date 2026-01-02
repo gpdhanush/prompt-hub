@@ -5,7 +5,6 @@ import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyBugAssigned, notifyBugStatusUpdated, notifyBugComment } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeInput, validateAndSanitizeObject } from '../utils/inputValidation.js';
-import { canTransitionBugStatus } from '../utils/statusPermissions.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -105,7 +104,7 @@ const upload = multer({
 
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, my_bugs } = req.query;
+    const { page = 1, limit = 10, my_bugs, status, priority, task_id } = req.query;
     const offset = (page - 1) * limit;
     const userId = req.user?.id;
     const userRole = req.user?.role || '';
@@ -192,7 +191,26 @@ router.get('/', async (req, res) => {
     } else {
       logger.debug('Showing ALL bugs to user:', userRole);
     }
-    
+
+    // Add additional filters
+    if (status) {
+      query += ' AND b.status = ?';
+      params.push(status);
+      logger.debug('Filtering by status:', status);
+    }
+
+    if (priority) {
+      query += ' AND b.priority = ?';
+      params.push(priority);
+      logger.debug('Filtering by priority:', priority);
+    }
+
+    if (task_id) {
+      query += ' AND b.task_id = ?';
+      params.push(task_id);
+      logger.debug('Filtering by task_id:', task_id);
+    }
+
     query += ' ORDER BY b.created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
     
@@ -200,9 +218,26 @@ router.get('/', async (req, res) => {
     logger.debug('Query params:', params);
     
     const [bugs] = await db.query(query, params);
-    
-    logger.debug(`Found ${bugs.length} bugs`);
-    logger.debug('Bug IDs:', bugs.map(b => `${b.bug_code} (reported_by: ${b.reported_by}, assigned_to: ${b.assigned_to})`).join(', '));
+
+    // Convert old priority values (P1-P4) to new values (Critical, High, Medium, Low)
+    const convertPriorityValue = (priority) => {
+      switch (priority) {
+        case 'P1': return 'Critical';
+        case 'P2': return 'High';
+        case 'P3': return 'Medium';
+        case 'P4': return 'Low';
+        default: return priority; // Already using new values
+      }
+    };
+
+    // Apply conversion to all bugs
+    const convertedBugs = bugs.map(bug => ({
+      ...bug,
+      priority: convertPriorityValue(bug.priority)
+    }));
+
+    logger.debug(`Found ${convertedBugs.length} bugs`);
+    logger.debug('Bug IDs:', convertedBugs.map(b => `${b.bug_code} (reported_by: ${b.reported_by}, assigned_to: ${b.assigned_to})`).join(', '));
     
     // Count query with same filters
     let countQuery = `
@@ -236,11 +271,27 @@ router.get('/', async (req, res) => {
       countQuery += ' AND (b.assigned_to = ? OR b.reported_by = ?)';
       countParams.push(userId, userId);
     }
-    
+
+    // Add same additional filters to count query
+    if (status) {
+      countQuery += ' AND b.status = ?';
+      countParams.push(status);
+    }
+
+    if (priority) {
+      countQuery += ' AND b.priority = ?';
+      countParams.push(priority);
+    }
+
+    if (task_id) {
+      countQuery += ' AND b.task_id = ?';
+      countParams.push(task_id);
+    }
+
     const [countResult] = await db.query(countQuery, countParams);
     logger.debug('Total bugs count:', countResult[0].total);
     
-    res.json({ data: bugs, pagination: { page: parseInt(page), limit: parseInt(limit), total: countResult[0].total, totalPages: Math.ceil(countResult[0].total / limit) } });
+    res.json({ data: convertedBugs, pagination: { page: parseInt(page), limit: parseInt(limit), total: countResult[0].total, totalPages: Math.ceil(countResult[0].total / limit) } });
   } catch (error) {
     logger.error('Error fetching bugs:', error);
     res.status(500).json({ error: error.message });
@@ -281,6 +332,12 @@ router.get('/', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const bugId = await resolveIdFromUuid('bugs', req.params.id);
+    if (!bugId) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
     // Check if tasks table has role-specific columns
     let hasRoleColumns = false;
     try {
@@ -327,17 +384,30 @@ router.get('/:id', async (req, res) => {
     }
     
     query += ` WHERE b.id = ?`;
-    
-    const [bugs] = await db.query(query, [req.params.id]);
+
+    const [bugs] = await db.query(query, [bugId]);
     if (bugs.length === 0) return res.status(404).json({ error: 'Bug not found' });
-    
+
     // Fetch attachments for this bug
     const [attachments] = await db.query(
       'SELECT id, uploaded_by, original_filename, mime_type, size, created_at FROM attachments WHERE bug_id = ? ORDER BY created_at DESC',
-      [req.params.id]
+      [bugId]
     );
     
     const bugData = bugs[0];
+
+    // Convert old priority values (P1-P4) to new values (Critical, High, Medium, Low)
+    const convertPriorityValue = (priority) => {
+      switch (priority) {
+        case 'P1': return 'Critical';
+        case 'P2': return 'High';
+        case 'P3': return 'Medium';
+        case 'P4': return 'Low';
+        default: return priority; // Already using new values
+      }
+    };
+
+    bugData.priority = convertPriorityValue(bugData.priority);
     bugData.attachments = attachments;
     
     res.json({ data: bugData });
@@ -378,7 +448,6 @@ router.get('/:id', async (req, res) => {
  *               bug_type:
  *                 type: string
  *                 enum: [Functional, UI/UX, Performance, Security, Other]
- *               severity:
  *                 type: string
  *                 enum: [Critical, High, Medium, Low]
  *               priority:
@@ -442,7 +511,7 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
     }
     
     let { 
-      task_id, project_id, title, description, bug_type, severity, priority, status, resolution_type,
+      task_id, project_id, title, description, bug_type, priority, status, resolution_type,
       steps_to_reproduce, expected_behavior, actual_behavior, 
       assigned_to: provided_assigned_to, team_lead_id,
       browser, device, os, app_version, api_endpoint,
@@ -537,11 +606,14 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
       }
     }
     
-    logger.debug('Inserting bug with:', { bugCode, project_id, task_id, title, bugDescription, bug_type, severity, priority, status, reported_by, assigned_to });
+    logger.debug('Inserting bug with:', { bugCode, project_id, task_id, title, bugDescription, bug_type, priority, status, reported_by, assigned_to });
     
+    // Determine default status based on assignment
+    const defaultStatus = assigned_to ? 'Assigned' : (status || 'Open');
+
     // Build dynamic INSERT query based on available columns
-    const insertFields = ['bug_code', 'description', 'severity', 'status', 'reported_by', 'assigned_to'];
-    const insertValues = [bugCode, bugDescription, severity || 'Low', status || 'Open', reported_by, assigned_to];
+    const insertFields = ['bug_code', 'description', 'priority', 'status', 'reported_by', 'assigned_to'];
+    const insertValues = [bugCode, bugDescription, priority || 'Low', defaultStatus, reported_by, assigned_to];
     
     // Add optional fields if they exist in the request
     if (title) {
@@ -564,13 +636,13 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
       insertFields.push('priority');
       insertValues.push(priority);
     }
-    if (resolution_type) {
-      insertFields.push('resolution_type');
-      insertValues.push(resolution_type);
-    }
     if (team_lead_id) {
       insertFields.push('team_lead_id');
       insertValues.push(parseInt(team_lead_id) || null);
+    }
+    if (deadline) {
+      insertFields.push('deadline');
+      insertValues.push(deadline);
     }
     // Always include Steps & Reproduction fields (can be empty)
     insertFields.push('steps_to_reproduce');
@@ -594,18 +666,6 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
     if (app_version) {
       insertFields.push('app_version');
       insertValues.push(app_version);
-    }
-    if (api_endpoint) {
-      insertFields.push('api_endpoint');
-      insertValues.push(api_endpoint);
-    }
-    if (target_fix_date) {
-      insertFields.push('target_fix_date');
-      insertValues.push(target_fix_date);
-    }
-    if (tags) {
-      insertFields.push('tags');
-      insertValues.push(tags);
     }
     
     // Add uuid as first field
@@ -641,8 +701,7 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
       project_id: project_id,
       task_id: task_id,
       status: status || 'Open',
-      severity: severity || 'Low',
-      priority: priority || 'P4'
+      priority: priority || 'Low'
     }, 'Bug');
     
     // Notify assigned user about bug assignment
@@ -695,7 +754,6 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
  *               status:
  *                 type: string
  *                 enum: [Open, In Progress, Fixed, Rejected, Won't Fix, Duplicate]
- *               severity:
  *                 type: string
  *                 enum: [Critical, High, Medium, Low]
  *               priority:
@@ -731,35 +789,34 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
 router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Resolve UUID to numeric ID if needed
     const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
     const bugId = await resolveIdFromUuid('bugs', id);
     if (!bugId) {
       return res.status(404).json({ error: 'Bug not found' });
     }
-    
+
     const userRole = req.user?.role || '';
-    
+
     // Validate and sanitize text inputs
-    const textFields = ['title', 'description', 'steps_to_reproduce', 'expected_behavior', 'actual_behavior', 
+    const textFields = ['title', 'description', 'steps_to_reproduce', 'expected_behavior', 'actual_behavior',
       'browser', 'device', 'os', 'app_version', 'api_endpoint', 'tags'];
     const validation = validateAndSanitizeObject(req.body, textFields);
     if (validation.errors && validation.errors.length > 0) {
-      return res.status(400).json({ 
-        error: 'Invalid input detected', 
-        details: validation.errors.join('; ') 
+      return res.status(400).json({
+        error: 'Invalid input detected',
+        details: validation.errors.join('; ')
       });
     }
-    
-    let { 
-      title, description, project_id, task_id, bug_type, severity, priority, status, resolution_type,
-      assigned_to, team_lead_id,
+
+    let {
+      title, description, project_id, task_id, bug_type, priority, status,
+      assigned_to, team_lead_id, deadline,
       steps_to_reproduce, expected_behavior, actual_behavior,
-      browser, device, os, app_version, api_endpoint,
-      target_fix_date, actual_fix_date, tags
+      browser, device, os, app_version
     } = req.body;
-    
+
     // Use sanitized values
     title = validation.data.title || title;
     description = validation.data.description || description;
@@ -770,105 +827,118 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
     device = validation.data.device || device;
     os = validation.data.os || os;
     app_version = validation.data.app_version || app_version;
-    api_endpoint = validation.data.api_endpoint || api_endpoint;
-    tags = validation.data.tags || tags;
-    
+
     // Get before data for audit log
     const [existingBugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [bugId]);
     if (existingBugs.length === 0) {
       return res.status(404).json({ error: 'Bug not found' });
     }
     const beforeData = existingBugs[0];
-    
+
     logger.debug('=== UPDATE BUG REQUEST ===');
     logger.debug('Bug ID (param):', id);
     logger.debug('Bug ID (resolved):', bugId);
     logger.debug('User Role:', userRole);
     logger.debug('Request body:', req.body);
-    
-    // Check status transition permissions if status is being changed
-    if (status && status !== beforeData.status) {
-      // Map old statuses to new format for validation
-      const statusMap = {
-        'In Progress': 'Assigned',
-        'Fixing': 'Fixed',
-        'Retesting': 'Retest',
-        'Passed': 'Closed',
-        'Resolved': 'Fixed',
-        'Completed': 'Closed',
-        'Done': 'Closed',
-      };
-      const oldStatus = statusMap[beforeData.status] || beforeData.status;
-      const newStatus = statusMap[status] || status;
-      
-      if (!canTransitionBugStatus(oldStatus, newStatus, userRole)) {
-        return res.status(403).json({ 
-          error: `You do not have permission to change status from "${beforeData.status}" to "${status}"` 
-        });
+
+    // Check if user has bugs.edit permission OR is Super Admin/Level 1 to determine what fields they can update
+    let hasFullEditPermission = false;
+
+    // Super Admin always has full access
+    if (userRole === 'Super Admin') {
+      hasFullEditPermission = true;
+      logger.debug('Super Admin has full bug edit access');
+    }
+    // Level 1 users (managers) always have full access
+    else {
+      const [level1Roles] = await db.query('SELECT name FROM roles WHERE level = 1');
+      const level1RoleNames = level1Roles.map(role => role.name);
+      if (level1RoleNames.includes(userRole)) {
+        hasFullEditPermission = true;
+        logger.debug('Level 1 user has full bug edit access');
+      }
+      // Others need bugs.edit permission
+      else {
+        try {
+          const [permissions] = await db.query(`
+            SELECT p.code
+            FROM role_permissions rp
+            JOIN permissions p ON rp.permission_id = p.id
+            JOIN users u ON u.role_id = rp.role_id
+            WHERE u.id = ? AND p.code = 'bugs.edit' AND rp.allowed = TRUE
+          `, [req.user.id]);
+
+          hasFullEditPermission = permissions.length > 0;
+          logger.debug('User has bugs.edit permission:', hasFullEditPermission);
+        } catch (error) {
+          logger.warn('Error checking bugs.edit permission:', error);
+          // Default to restricted permissions if we can't check
+          hasFullEditPermission = false;
+        }
       }
     }
-    
-    // Valid status values matching database ENUM
-    const validStatuses = ['Open', 'Assigned', 'Fixed', 'Retest', 'Closed', 'Reopened', 'In Progress', 'In Review', 'Blocked', 'Fixing', 'Retesting', 'Passed', 'Rejected', 'Duplicate', 'Not a Bug'];
-    
-    // Normalize status - map common variations to valid values
-    let normalizedStatus = status;
-    if (status) {
-      const statusMap = {
-        'Completed': 'Closed',
-        'Done': 'Closed',
-        'Resolved': 'Fixed',
-        'Resolve': 'Fixed',
-        'Complete': 'Closed',
-        'In Progress': 'Assigned',
-        'Fixing': 'Fixed',
-        'Retesting': 'Retest',
-      };
-      
-      if (statusMap[status]) {
-        normalizedStatus = statusMap[status];
-        logger.debug(`Status mapped from "${status}" to "${normalizedStatus}"`);
-      }
-      
-      // Validate status is in allowed values
-      if (!validStatuses.includes(normalizedStatus)) {
-        return res.status(400).json({ 
-          error: `Invalid status: "${status}". Valid values are: ${validStatuses.join(', ')}` 
-        });
-      }
+
+    // Allow any valid status change (no transition restrictions)
+
+    // Valid status values for bug status dropdown
+    const validStatuses = ['Open', 'Assigned', 'In Progress', 'Testing', 'Fixed', 'Retesting', 'Closed', 'Reopened'];
+
+    // Validate status is in allowed values
+    if (status && !validStatuses.includes(status)) {
+      logger.error('Invalid status provided:', status);
+      return res.status(400).json({
+        error: `Invalid status: "${status}". Valid values are: ${validStatuses.join(', ')}`
+      });
     }
-    
+
     // Use description as-is (title is now a separate field)
     const bugDescription = description || '';
-    
+
     const updated_by = req.user.id;
-    
+
     // Handle assigned_to: convert empty string, null, undefined, or 0 to null, otherwise use the value
     const assignedToValue = (assigned_to === '' || assigned_to === null || assigned_to === undefined || assigned_to === 0) ? null : parseInt(assigned_to);
     const teamLeadValue = (team_lead_id === '' || team_lead_id === null || team_lead_id === undefined || team_lead_id === 0) ? null : parseInt(team_lead_id);
     const projectValue = (project_id === '' || project_id === null || project_id === undefined || project_id === 0) ? null : parseInt(project_id);
     const taskValue = (task_id === '' || task_id === null || task_id === undefined || task_id === 0) ? null : parseInt(task_id);
-    
+
     logger.debug('Processed values:', { assignedToValue, teamLeadValue, projectValue, taskValue });
-    
+
     // Build update fields dynamically
     const updateFields = [];
     const updateValues = [];
-    
-    // All users can update status and assigned_to
-    // Developer, Designer, and Tester can only update status and assigned_to (not description/severity)
-    if (userRole === 'Developer' || userRole === 'Designer' || userRole === 'Tester') {
-      // Developer, Designer, Tester: can update status and assigned_to only
-      if (status !== undefined) {
-        updateFields.push('status = ?');
-        updateValues.push(normalizedStatus);
-      }
-      if (assigned_to !== undefined) {
-        updateFields.push('assigned_to = ?');
-        updateValues.push(assignedToValue);
-      }
+
+    // Check if user is Level 2 (dynamic query from roles table)
+    const [level2Roles] = await db.query('SELECT name FROM roles WHERE level = 2 OR name IN ("Developer", "Designer", "Tester")');
+    const level2RoleNames = level2Roles.map(role => role.name);
+    const isLevel2User = level2RoleNames.includes(userRole);
+    const canUpdateStatusAndAssignment = hasFullEditPermission || isLevel2User;
+
+    logger.debug('Level 2 roles from DB:', level2RoleNames);
+    logger.debug('User role:', userRole);
+    logger.debug('Is Level 2 user:', isLevel2User);
+    logger.debug('Can update status and assignment:', canUpdateStatusAndAssignment);
+    logger.debug('Status value:', status);
+
+    // Allow Level 2 users and users with bugs.edit permission to update status and assigned_to
+    if (status !== undefined && canUpdateStatusAndAssignment) {
+      updateFields.push('status = ?');
+      updateValues.push(status);
+      logger.debug('Status field added to update:', status);
     } else {
-      // Admin, Team Lead, Super Admin can update all fields
+      logger.debug('Status field NOT added to update. Status:', status, 'Can update:', canUpdateStatusAndAssignment);
+    }
+    if (assigned_to !== undefined && canUpdateStatusAndAssignment) {
+      updateFields.push('assigned_to = ?');
+      updateValues.push(assignedToValue);
+    }
+
+    // Only allow updates if user has bugs.edit permission
+    if (hasFullEditPermission) {
+      // Users with bugs.edit permission can update all fields
+      logger.debug('User can edit all bug fields');
+
+      // Include all updatable fields
       if (title !== undefined) {
         updateFields.push('title = ?');
         updateValues.push(title || null);
@@ -889,29 +959,17 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
         updateFields.push('bug_type = ?');
         updateValues.push(bug_type);
       }
-      if (severity !== undefined) {
-        updateFields.push('severity = ?');
-        updateValues.push(severity);
-      }
       if (priority !== undefined) {
         updateFields.push('priority = ?');
         updateValues.push(priority);
       }
-      if (status !== undefined) {
-        updateFields.push('status = ?');
-        updateValues.push(normalizedStatus);
-      }
-      if (resolution_type !== undefined) {
-        updateFields.push('resolution_type = ?');
-        updateValues.push(resolution_type || null);
-      }
-      if (assigned_to !== undefined) {
-        updateFields.push('assigned_to = ?');
-        updateValues.push(assignedToValue);
-      }
       if (team_lead_id !== undefined) {
         updateFields.push('team_lead_id = ?');
         updateValues.push(teamLeadValue);
+      }
+      if (deadline !== undefined) {
+        updateFields.push('deadline = ?');
+        updateValues.push(deadline || null);
       }
       if (steps_to_reproduce !== undefined) {
         updateFields.push('steps_to_reproduce = ?');
@@ -941,44 +999,43 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
         updateFields.push('app_version = ?');
         updateValues.push(app_version || null);
       }
-      if (api_endpoint !== undefined) {
-        updateFields.push('api_endpoint = ?');
-        updateValues.push(api_endpoint || null);
-      }
-      if (target_fix_date !== undefined) {
-        updateFields.push('target_fix_date = ?');
-        updateValues.push(target_fix_date || null);
-      }
-      if (actual_fix_date !== undefined) {
-        updateFields.push('actual_fix_date = ?');
-        updateValues.push(actual_fix_date || null);
-      }
-      if (tags !== undefined) {
-        updateFields.push('tags = ?');
-        updateValues.push(tags || null);
-      }
+    } else {
+      // User does not have bugs.edit permission - no updates allowed
+      return res.status(403).json({
+        error: 'You do not have permission to update bugs'
+      });
     }
-    
+
     // Always update updated_by and updated_at
     updateFields.push('updated_by = ?');
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
     updateValues.push(updated_by);
     updateValues.push(bugId);
-    
+
     if (updateFields.length > 2) { // More than just updated_by and updated_at
       const query = `UPDATE bugs SET ${updateFields.join(', ')} WHERE id = ?`;
+      logger.debug('Update query:', query);
+      logger.debug('Update values:', updateValues);
       await db.query(query, updateValues);
-      logger.debug('Bug updated successfully');
+    } else {
+      logger.debug('No fields to update besides timestamps');
     }
-    
+
     const [updated] = await db.query('SELECT * FROM bugs WHERE id = ?', [bugId]);
-    logger.debug('Updated bug:', updated[0]);
-    
+
+    // Increment reopened_count if status changed to "Reopened"
+    if (status && status === 'Reopened' && beforeData.status !== 'Reopened') {
+      await db.query('UPDATE bugs SET reopened_count = reopened_count + 1 WHERE id = ?', [bugId]);
+      // Get updated data again
+      const [updatedWithCount] = await db.query('SELECT * FROM bugs WHERE id = ?', [bugId]);
+      updated[0] = updatedWithCount[0];
+    }
+
     // Create audit log for bug update
     await logUpdate(req, 'Bugs', bugId, beforeData, updated[0], 'Bug');
-    
+
     // Notify assigned user if bug status is updated
-    if (status && normalizedStatus && normalizedStatus !== beforeData.status) {
+    if (status && status !== beforeData.status) {
       const assignedUserId = assignedToValue || updated[0].assigned_to;
       if (assignedUserId) {
         await notifyBugStatusUpdated(
@@ -986,12 +1043,12 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
           bugId,
           title || updated[0].title || 'Bug',
           beforeData.status,
-          normalizedStatus,
+          status,
           updated_by
         );
       }
     }
-    
+
     // Notify user if bug is newly assigned
     if (assigned_to !== undefined && assignedToValue && assignedToValue !== beforeData.assigned_to && assignedToValue !== updated_by) {
       await notifyBugAssigned(
@@ -1001,7 +1058,7 @@ router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Dev
         updated_by
       );
     }
-    
+
     res.json({ data: updated[0] });
   } catch (error) {
     logger.error('Error updating bug:', error);
@@ -1014,13 +1071,20 @@ router.post('/:id/attachments', authorize('Tester', 'Admin', 'Team Leader', 'Tea
   try {
     const { id } = req.params;
     const userId = req.user?.id;
-    
+
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const bugId = await resolveIdFromUuid('bugs', id);
+    if (!bugId) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
     }
-    
+
     // Check if bug exists
-    const [bugs] = await db.query('SELECT id FROM bugs WHERE id = ?', [id]);
+    const [bugs] = await db.query('SELECT id FROM bugs WHERE id = ?', [bugId]);
     if (bugs.length === 0) {
       // Clean up uploaded files
       req.files.forEach((file) => {
@@ -1038,7 +1102,7 @@ router.post('/:id/attachments', authorize('Tester', 'Admin', 'Team Leader', 'Tea
           bug_id, uploaded_by, path, original_filename, mime_type, size
         )
         VALUES (?, ?, ?, ?, ?, ?)
-      `, [id, userId, file.path, file.originalname, file.mimetype, file.size]);
+      `, [bugId, userId, file.path, file.originalname, file.mimetype, file.size]);
       
       uploadedFiles.push({
         id: attachmentResult.insertId,
@@ -1068,11 +1132,18 @@ router.post('/:id/attachments', authorize('Tester', 'Admin', 'Team Leader', 'Tea
 router.get('/:bugId/attachments/:attachmentId', async (req, res) => {
   try {
     const { bugId, attachmentId } = req.params;
-    
+
+    // Resolve UUID to numeric ID if needed for bugId
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const resolvedBugId = await resolveIdFromUuid('bugs', bugId);
+    if (!resolvedBugId) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+
     // Get attachment info
     const [attachments] = await db.query(
       'SELECT path, original_filename, mime_type FROM attachments WHERE id = ? AND bug_id = ?',
-      [attachmentId, bugId]
+      [attachmentId, resolvedBugId]
     );
     
     if (attachments.length === 0) {
@@ -1121,11 +1192,18 @@ router.delete('/:bugId/attachments/:attachmentId', authorize('Tester', 'Admin', 
   try {
     const { bugId, attachmentId } = req.params;
     const userId = req.user?.id;
-    
+
+    // Resolve UUID to numeric ID if needed for bugId
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const resolvedBugId = await resolveIdFromUuid('bugs', bugId);
+    if (!resolvedBugId) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+
     // Check if attachment exists and belongs to bug
     const [attachments] = await db.query(
       'SELECT * FROM attachments WHERE id = ? AND bug_id = ?',
-      [attachmentId, bugId]
+      [attachmentId, resolvedBugId]
     );
     
     if (attachments.length === 0) {
@@ -1158,7 +1236,14 @@ router.delete('/:bugId/attachments/:attachmentId', authorize('Tester', 'Admin', 
 router.get('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const bugId = await resolveIdFromUuid('bugs', id);
+    if (!bugId) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+
     // Fetch all comments for this bug with user information
     const [comments] = await db.query(`
       SELECT 
@@ -1171,7 +1256,7 @@ router.get('/:id/comments', async (req, res) => {
       LEFT JOIN roles r ON u.role_id = r.id
       WHERE bc.bug_id = ?
       ORDER BY bc.created_at ASC
-    `, [id]);
+    `, [bugId]);
     
     // Organize comments into a tree structure
     const commentMap = new Map();
@@ -1211,13 +1296,20 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
     const { id } = req.params;
     const { comment_text, parent_id } = req.body;
     const userId = req.user.id;
-    
+
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const bugId = await resolveIdFromUuid('bugs', id);
+    if (!bugId) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+
     if (!comment_text || comment_text.trim() === '') {
       return res.status(400).json({ error: 'Comment text is required' });
     }
-    
+
     // Verify bug exists and get details for notification
-    const [bugs] = await db.query('SELECT id, title, assigned_to, reported_by FROM bugs WHERE id = ?', [id]);
+    const [bugs] = await db.query('SELECT id, title, assigned_to, reported_by FROM bugs WHERE id = ?', [bugId]);
     if (bugs.length === 0) {
       return res.status(404).json({ error: 'Bug not found' });
     }
@@ -1227,18 +1319,18 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
     if (parent_id) {
       const [parentComments] = await db.query(
         'SELECT id FROM bug_comments WHERE id = ? AND bug_id = ?',
-        [parent_id, id]
+        [parent_id, bugId]
       );
       if (parentComments.length === 0) {
         return res.status(400).json({ error: 'Parent comment not found or does not belong to this bug' });
       }
     }
-    
+
     // Insert comment
     const [result] = await db.query(`
       INSERT INTO bug_comments (bug_id, user_id, parent_id, comment_text)
       VALUES (?, ?, ?, ?)
-    `, [id, userId, parent_id || null, comment_text.trim()]);
+    `, [bugId, userId, parent_id || null, comment_text.trim()]);
     
     // Fetch the created comment with user info
     const [newComments] = await db.query(`
@@ -1311,26 +1403,33 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
 router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
   try {
     const { id } = req.params;
-    
+
+    // Resolve UUID to numeric ID if needed
+    const { resolveIdFromUuid } = await import('../utils/uuidResolver.js');
+    const bugId = await resolveIdFromUuid('bugs', id);
+    if (!bugId) {
+      return res.status(404).json({ error: 'Bug not found' });
+    }
+
     // Get before data for audit log
-    const [existingBugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [id]);
+    const [existingBugs] = await db.query('SELECT * FROM bugs WHERE id = ?', [bugId]);
     if (existingBugs.length === 0) {
       return res.status(404).json({ error: 'Bug not found' });
     }
     const beforeData = existingBugs[0];
     
     // Delete associated attachments first
-    const [attachments] = await db.query('SELECT path FROM attachments WHERE bug_id = ?', [id]);
+    const [attachments] = await db.query('SELECT path FROM attachments WHERE bug_id = ?', [bugId]);
     attachments.forEach((att) => {
       if (fs.existsSync(att.path)) {
         fs.unlinkSync(att.path);
       }
     });
-    await db.query('DELETE FROM attachments WHERE bug_id = ?', [id]);
-    await db.query('DELETE FROM bugs WHERE id = ?', [id]);
-    
+    await db.query('DELETE FROM attachments WHERE bug_id = ?', [bugId]);
+    await db.query('DELETE FROM bugs WHERE id = ?', [bugId]);
+
     // Create audit log for bug deletion
-    await logDelete(req, 'Bugs', id, beforeData, 'Bug');
+    await logDelete(req, 'Bugs', bugId, beforeData, 'Bug');
     
     res.json({ message: 'Bug deleted successfully' });
   } catch (error) {

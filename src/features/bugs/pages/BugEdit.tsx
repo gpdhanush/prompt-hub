@@ -25,9 +25,9 @@ interface BugFormData {
   bug_type: string;
   priority: string;
   status: string;
-  resolution_type: string;
   assigned_to: string;
   team_lead_id: string;
+  deadline: string;
   steps_to_reproduce: string;
   expected_behavior: string;
   actual_behavior: string;
@@ -35,14 +35,11 @@ interface BugFormData {
   device: string;
   os: string;
   app_version: string;
-  target_fix_date: string;
-  actual_fix_date: string;
-  tags: string;
 }
 
 export default function BugEdit() {
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
+  const { bugUuid } = useParams<{ bugUuid: string }>();
   const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState<BugFormData>({
@@ -51,9 +48,8 @@ export default function BugEdit() {
     project_id: "",
     task_id: "",
     bug_type: "Functional",
-    priority: "P4",
+    priority: "Low",
     status: "Open",
-    resolution_type: "",
     assigned_to: "",
     team_lead_id: "",
     steps_to_reproduce: "",
@@ -63,9 +59,7 @@ export default function BugEdit() {
     device: "",
     os: "",
     app_version: "",
-    target_fix_date: "",
-    actual_fix_date: "",
-    tags: "",
+    deadline: "",
   });
 
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -75,9 +69,9 @@ export default function BugEdit() {
 
   // Fetch bug data - optimized query
   const { data: bugData, isLoading, error } = useQuery({
-    queryKey: ['bug', id],
-    queryFn: () => bugsApi.getById(id!),
-    enabled: !!id,
+    queryKey: ['bug', bugUuid],
+    queryFn: () => bugsApi.getById(bugUuid!),
+    enabled: !!bugUuid,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
@@ -96,11 +90,11 @@ export default function BugEdit() {
         project_id: bug.project_id?.toString() || "",
         task_id: bug.task_id?.toString() || "",
         bug_type: bug.bug_type || "Functional",
-        priority: bug.priority || "P4",
+        priority: bug.priority || "Low",
         status: bug.status || "Open",
-        resolution_type: bug.resolution_type || "",
         assigned_to: bug.assigned_to?.toString() || "",
         team_lead_id: bug.team_lead_id?.toString() || "",
+        deadline: bug.deadline ? bug.deadline.split('T')[0] : "",
         steps_to_reproduce: bug.steps_to_reproduce || "",
         expected_behavior: bug.expected_behavior || "",
         actual_behavior: bug.actual_behavior || "",
@@ -108,9 +102,6 @@ export default function BugEdit() {
         device: bug.device || "",
         os: bug.os || "",
         app_version: bug.app_version || "",
-        target_fix_date: bug.target_fix_date ? bug.target_fix_date.split('T')[0] : "",
-        actual_fix_date: bug.actual_fix_date ? bug.actual_fix_date.split('T')[0] : "",
-        tags: bug.tags || "",
       });
       
       // Load existing attachments
@@ -121,10 +112,10 @@ export default function BugEdit() {
   }, [bug]);
 
   const deleteAttachmentMutation = useMutation({
-    mutationFn: (attachmentId: number) => bugsApi.deleteAttachment(id!, attachmentId),
+    mutationFn: (attachmentId: number) => bugsApi.deleteAttachment(bugUuid!, attachmentId),
     onSuccess: (_, attachmentId) => {
       setExistingAttachments(prev => prev.filter(att => att.id !== attachmentId));
-      queryClient.invalidateQueries({ queryKey: ['bug', id] });
+      queryClient.invalidateQueries({ queryKey: ['bug', bugUuid] });
       toast({
         title: "Success",
         description: "Attachment deleted successfully.",
@@ -140,12 +131,12 @@ export default function BugEdit() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: any) => bugsApi.update(id!, data),
+    mutationFn: (data: any) => bugsApi.update(bugUuid!, data),
     onSuccess: async () => {
       // Upload attachments if any
       if (attachments.length > 0) {
         try {
-          await bugsApi.uploadAttachments(id!, attachments);
+          await bugsApi.uploadAttachments(bugUuid!, attachments);
         } catch (error: any) {
           toast({
             title: "Warning",
@@ -156,12 +147,12 @@ export default function BugEdit() {
       }
       
       queryClient.invalidateQueries({ queryKey: ['bugs'] });
-      queryClient.invalidateQueries({ queryKey: ['bug', id] });
+      queryClient.invalidateQueries({ queryKey: ['bug', bugUuid] });
       toast({
         title: "Success",
         description: "Bug updated successfully.",
       });
-      navigate(`/bugs/${id}`);
+      navigate(`/bugs/${bugUuid}`);
     },
     onError: (error: any) => {
       toast({
@@ -206,7 +197,7 @@ export default function BugEdit() {
       device: formData.device || '',
       os: formData.os || '',
       app_version: formData.app_version || '',
-      tags: formData.tags || '',
+      deadline: formData.deadline || null,
     };
 
     if (formData.project_id && formData.project_id !== "none") {
@@ -221,12 +212,6 @@ export default function BugEdit() {
       updateData.task_id = null;
     }
 
-    if (formData.resolution_type && formData.resolution_type !== "none") {
-      updateData.resolution_type = formData.resolution_type;
-    } else {
-      updateData.resolution_type = null;
-    }
-
     if (formData.assigned_to && formData.assigned_to !== "unassigned") {
       updateData.assigned_to = parseInt(formData.assigned_to);
     } else {
@@ -239,20 +224,14 @@ export default function BugEdit() {
       updateData.team_lead_id = null;
     }
 
-    if (formData.target_fix_date) {
-      updateData.target_fix_date = formData.target_fix_date;
+    if (formData.deadline) {
+      updateData.deadline = formData.deadline;
     } else {
-      updateData.target_fix_date = null;
-    }
-
-    if (formData.actual_fix_date) {
-      updateData.actual_fix_date = formData.actual_fix_date;
-    } else {
-      updateData.actual_fix_date = null;
+      updateData.deadline = null;
     }
 
     updateMutation.mutate(updateData);
-  }, [formData, attachments, updateMutation, id]);
+  }, [formData, attachments, updateMutation, bugUuid]);
 
   // Memoized navigation handlers
   const handleNavigateBack = useCallback(() => {
@@ -260,8 +239,8 @@ export default function BugEdit() {
   }, [navigate]);
 
   const handleNavigateView = useCallback(() => {
-    navigate(`/bugs/${id}`);
-  }, [navigate, id]);
+    navigate(`/bugs/${bugUuid}`);
+  }, [navigate, bugUuid]);
 
   if (isLoading) {
     return (
@@ -290,8 +269,8 @@ export default function BugEdit() {
   }
 
   return (
-    <div className="mx-auto p-6 space-y-6 ">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto p-6 space-y-6 animate-fade-in">
+      <div className="flex items-center justify-between animate-slide-in-left">
         <div className="flex items-center gap-4">
           <Button
             variant="outline"
@@ -322,7 +301,7 @@ export default function BugEdit() {
         />
 
         <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => navigate(`/bugs/${id}`)}>
+          <Button type="button" variant="outline" onClick={() => navigate(`/bugs/${bugUuid}`)}>
             Cancel
           </Button>
           <Button type="submit" disabled={updateMutation.isPending}>

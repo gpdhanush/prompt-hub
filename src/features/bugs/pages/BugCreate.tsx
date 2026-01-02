@@ -15,9 +15,9 @@ interface BugFormData {
   bug_type: string;
   priority: string;
   status: string;
-  resolution_type: string;
   assigned_to: string;
   team_lead_id: string;
+  deadline: string;
   steps_to_reproduce: string;
   expected_behavior: string;
   actual_behavior: string;
@@ -25,9 +25,6 @@ interface BugFormData {
   device: string;
   os: string;
   app_version: string;
-  target_fix_date: string;
-  actual_fix_date: string;
-  tags: string;
 }
 
 export default function BugCreate() {
@@ -40,11 +37,11 @@ export default function BugCreate() {
     project_id: "",
     task_id: "",
     bug_type: "Functional",
-    priority: "P4",
+    priority: "Low",
     status: "Open",
-    resolution_type: "",
     assigned_to: "",
     team_lead_id: "",
+    deadline: "",
     steps_to_reproduce: "",
     expected_behavior: "",
     actual_behavior: "",
@@ -52,9 +49,6 @@ export default function BugCreate() {
     device: "",
     os: "",
     app_version: "",
-    target_fix_date: "",
-    actual_fix_date: "",
-    tags: "",
   });
 
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -62,12 +56,13 @@ export default function BugCreate() {
   const createMutation = useMutation({
     mutationFn: (formDataToSend: FormData) => bugsApi.create(formDataToSend),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bugs'] });
+      queryClient.invalidateQueries({ queryKey: ["bugs"] });
       toast({
         title: "Success",
         description: "Bug created successfully.",
       });
-      navigate('/bugs');
+      // Add success animation before navigation
+      setTimeout(() => navigate("/bugs"), 500);
     },
     onError: (error: any) => {
       toast({
@@ -78,105 +73,102 @@ export default function BugCreate() {
     },
   });
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Custom validation
-    const errors: string[] = [];
-    if (!formData.title || !formData.title.trim()) {
-      errors.push("Bug Title is required");
-    }
-    if (!formData.description || !formData.description.trim()) {
-      errors.push("Bug Description is required");
-    }
-    
-    if (errors.length > 0) {
-      toast({
-        title: "Validation Error",
-        description: errors.join(", "),
-        variant: "destructive",
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+
+      // Custom validation
+      const errors: string[] = [];
+      if (!formData.title || !formData.title.trim()) {
+        errors.push("Bug Title is required");
+      }
+      if (!formData.description || !formData.description.trim()) {
+        errors.push("Bug Description is required");
+      }
+
+      if (errors.length > 0) {
+        toast({
+          title: "Validation Error",
+          description: errors.join(", "),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const formDataToSend = new FormData();
+
+      // Basic Information
+      formDataToSend.append("title", formData.title);
+      formDataToSend.append("description", formData.description);
+      if (formData.project_id && formData.project_id !== "none") {
+        formDataToSend.append("project_id", formData.project_id);
+      }
+      if (formData.task_id && formData.task_id !== "none") {
+        formDataToSend.append("task_id", formData.task_id);
+      }
+
+      // Bug Type & Classification
+      formDataToSend.append("bug_type", formData.bug_type);
+      formDataToSend.append("priority", formData.priority);
+      formDataToSend.append("status", formData.status);
+
+      // Assignment
+      if (formData.assigned_to && formData.assigned_to !== "unassigned") {
+        formDataToSend.append("assigned_to", formData.assigned_to);
+      }
+      if (formData.team_lead_id && formData.team_lead_id !== "none") {
+        formDataToSend.append("team_lead_id", formData.team_lead_id);
+      }
+
+      // Steps & Reproduction - always send these fields
+      formDataToSend.append(
+        "steps_to_reproduce",
+        formData.steps_to_reproduce || ""
+      );
+      formDataToSend.append(
+        "expected_behavior",
+        formData.expected_behavior || ""
+      );
+      formDataToSend.append("actual_behavior", formData.actual_behavior || "");
+
+      // Environment Details
+      if (formData.browser) {
+        formDataToSend.append("browser", formData.browser);
+      }
+      if (formData.device && formData.device !== "none") {
+        formDataToSend.append("device", formData.device);
+      }
+      if (formData.os) {
+        formDataToSend.append("os", formData.os);
+      }
+      if (formData.app_version) {
+        formDataToSend.append("app_version", formData.app_version);
+      }
+
+      // Deadline
+      if (formData.deadline) {
+        formDataToSend.append("deadline", formData.deadline);
+      }
+
+      // Attachments
+      attachments.forEach((file) => {
+        formDataToSend.append("attachments", file);
       });
-      return;
-    }
 
-    const formDataToSend = new FormData();
-    
-    // Basic Information
-    formDataToSend.append('title', formData.title);
-    formDataToSend.append('description', formData.description);
-    if (formData.project_id && formData.project_id !== "none") {
-      formDataToSend.append('project_id', formData.project_id);
-    }
-    if (formData.task_id && formData.task_id !== "none") {
-      formDataToSend.append('task_id', formData.task_id);
-    }
-    
-    // Bug Type & Classification
-    formDataToSend.append('bug_type', formData.bug_type);
-    formDataToSend.append('priority', formData.priority);
-    formDataToSend.append('status', formData.status);
-    if (formData.resolution_type && formData.resolution_type !== "none") {
-      formDataToSend.append('resolution_type', formData.resolution_type);
-    }
-    
-    // Assignment
-    if (formData.assigned_to && formData.assigned_to !== "unassigned") {
-      formDataToSend.append('assigned_to', formData.assigned_to);
-    }
-    if (formData.team_lead_id && formData.team_lead_id !== "none") {
-      formDataToSend.append('team_lead_id', formData.team_lead_id);
-    }
-    
-    // Steps & Reproduction - always send these fields
-    formDataToSend.append('steps_to_reproduce', formData.steps_to_reproduce || '');
-    formDataToSend.append('expected_behavior', formData.expected_behavior || '');
-    formDataToSend.append('actual_behavior', formData.actual_behavior || '');
-    
-    // Environment Details
-    if (formData.browser) {
-      formDataToSend.append('browser', formData.browser);
-    }
-    if (formData.device && formData.device !== "none") {
-      formDataToSend.append('device', formData.device);
-    }
-    if (formData.os) {
-      formDataToSend.append('os', formData.os);
-    }
-    if (formData.app_version) {
-      formDataToSend.append('app_version', formData.app_version);
-    }
-    
-    // Timeline
-    if (formData.target_fix_date) {
-      formDataToSend.append('target_fix_date', formData.target_fix_date);
-    }
-    
-    // Additional Fields
-    if (formData.tags) {
-      formDataToSend.append('tags', formData.tags);
-    }
-    
-    // Attachments
-    attachments.forEach((file) => {
-      formDataToSend.append('attachments', file);
-    });
-
-    createMutation.mutate(formDataToSend);
-  }, [formData, attachments, createMutation, toast]);
+      createMutation.mutate(formDataToSend);
+    },
+    [formData, attachments, createMutation, toast]
+  );
 
   const handleCancel = useCallback(() => {
-    navigate('/bugs');
+    navigate("/bugs");
   }, [navigate]);
 
   return (
-    <div className="mx-auto p-6 space-y-6 ">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto p-6 space-y-6 animate-fade-in">
+      <div className="flex items-center justify-between animate-slide-in-left">
         <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleCancel}
-          >
+          <Button variant="outline" size="icon" onClick={handleCancel}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

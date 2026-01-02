@@ -838,14 +838,14 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/bugs?page={{page}}&limit={{limit}}&status={{status}}&severity={{severity}}&task_id={{task_id}}",
+							"raw": "{{base_url}}/api/bugs?page={{page}}&limit={{limit}}&status={{status}}&priority={{priority}}&task_id={{task_id}}",
 							"host": ["{{base_url}}"],
 							"path": ["api", "bugs"],
 							"query": [
 								{"key": "page", "value": "{{page}}"},
 								{"key": "limit", "value": "{{limit}}"},
 								{"key": "status", "value": "{{status}}"},
-								{"key": "severity", "value": "{{severity}}"},
+								{"key": "priority", "value": "{{priority}}"},
 								{"key": "task_id", "value": "{{task_id}}"}
 							]
 						}
@@ -877,7 +877,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"task_id\": {{task_id}},\n  \"description\": \"Bug description\",\n  \"severity\": \"Major\",\n  \"steps_to_reproduce\": \"Step 1, Step 2\",\n  \"expected_behavior\": \"Expected\",\n  \"actual_behavior\": \"Actual\"\n}"
+							"raw": "{\n  \"task_id\": {{task_id}},\n  \"description\": \"Bug description\",\n  \"priority\": \"High\",\n  \"steps_to_reproduce\": \"Step 1, Step 2\",\n  \"expected_behavior\": \"Expected\",\n  \"actual_behavior\": \"Actual\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/bugs",
@@ -2183,10 +2183,10 @@
 			"description": "Task stage filter"
 		},
 		{
-			"key": "severity",
+			"key": "priority",
 			"value": "",
 			"type": "string",
-			"description": "Bug severity filter"
+			"description": "Bug priority filter"
 		},
 		{
 			"key": "department",

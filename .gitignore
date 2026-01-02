@@ -31,3 +31,4 @@ server/config/firebase*.json
 # Database consolidation artifacts
 /database/_schema_extracted/
 /database/_reports/*.tmp
+package-lock.json

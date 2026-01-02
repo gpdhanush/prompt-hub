@@ -6,7 +6,7 @@ import { AttachmentList } from "@/components/ui/attachment-list";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge, bugSeverityMap, bugStatusMap } from "@/components/ui/status-badge";
+import { StatusBadge, bugStatusMap } from "@/components/ui/status-badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
@@ -16,12 +16,11 @@ import { getCurrentUser, getAuthToken } from "@/lib/auth";
 import { API_CONFIG } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import ConfirmationDialog from "@/shared/components/ConfirmationDialog";
-import { formatFullDate } from "../utils/utils";
-import { getPriorityLabel } from "@/features/tasks/utils/utils";
+import { formatFullDate, formatDeadline } from "../utils/utils";
 
 export default function BugDetail() {
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
+  const { bugUuid } = useParams<{ bugUuid: string }>();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Get current user info for role-based permissions
@@ -44,9 +43,9 @@ export default function BugDetail() {
 
   // Fetch bug details
   const { data: bugData, isLoading, error } = useQuery({
-    queryKey: ['bug', id],
-    queryFn: () => bugsApi.getById(Number(id)),
-    enabled: !!id,
+    queryKey: ['bug', bugUuid],
+    queryFn: () => bugsApi.getById(bugUuid),
+    enabled: !!bugUuid,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
@@ -56,7 +55,7 @@ export default function BugDetail() {
   const bug = bugData?.data;
 
   const deleteBugMutation = useMutation({
-    mutationFn: () => bugsApi.delete(Number(id)),
+    mutationFn: () => bugsApi.delete(bugUuid),
     onSuccess: () => {
       toast({
         title: "Success",
@@ -90,8 +89,8 @@ export default function BugDetail() {
   });
 
   const handleEdit = useCallback(() => {
-    navigate(`/bugs/${id}/edit`);
-  }, [navigate, id]);
+    navigate(`/bugs/${bugUuid}/edit`);
+  }, [navigate, bugUuid]);
 
   const handleDelete = useCallback(() => {
     deleteBugMutation.mutate();
@@ -105,7 +104,7 @@ export default function BugDetail() {
     try {
       const API_BASE_URL = API_CONFIG.BASE_URL;
       const token = getAuthToken();
-      const url = `${API_BASE_URL}/bugs/${id}/attachments/${attachment.id}`;
+      const url = `${API_BASE_URL}/bugs/${bugUuid}/attachments/${attachment.id}`;
       
       const headers: HeadersInit = {
         'Authorization': `Bearer ${token}`,
@@ -143,12 +142,12 @@ export default function BugDetail() {
         variant: "destructive",
       });
     }
-  }, [id, toast]);
+  }, [bugUuid, toast]);
 
-  const getSeverityVariant = useCallback((severity?: string) => {
-    if (severity === 'High') return 'error';
-    if (severity === 'Medium') return 'warning';
-    if (severity === 'Low') return 'info';
+  const getPriorityVariant = useCallback((priority?: string) => {
+    if (priority === 'Critical' || priority === 'High') return 'error';
+    if (priority === 'Medium') return 'warning';
+    if (priority === 'Low') return 'info';
     return 'neutral';
   }, []);
 
@@ -184,9 +183,9 @@ export default function BugDetail() {
   }
 
   return (
-    <div className="mx-auto p-6 space-y-6">
+    <div className="mx-auto p-6 space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-slide-in-left">
         <div className="flex items-center gap-4">
           <Button
             variant="default"
@@ -205,7 +204,7 @@ export default function BugDetail() {
         </div>
         <div className="flex gap-2">
           {canEditBug && (
-            <Button onClick={handleEdit} variant="outline">
+            <Button onClick={handleEdit} variant="default">
               <Edit className="mr-2 h-4 w-4" />
               Edit Bug
             </Button>
@@ -227,19 +226,18 @@ export default function BugDetail() {
       {/* Main Content */}
       <div className="grid gap-6 md:grid-cols-3">
         {/* Left Column - Main Details */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="md:col-span-2 space-y-6 animate-stagger">
           {/* Title */}
           {bug.title && (
-            <Card>
+            <Card className="animate-scale-in">
               <CardHeader>
                 <CardTitle>{bug.title}</CardTitle>
               </CardHeader>
               <CardContent>
-
                 {/* Status & Classification */}
                 <div className="space-y-4">
-                  {/* First Row: Project, Task */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* First Row: Project, Task, Deadline */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Project */}
                     {bug.project_id && (
                       <div>
@@ -250,7 +248,7 @@ export default function BugDetail() {
                         <div className="mt-1">
                           <Button
                             variant="link"
-                            className="p-0 h-auto text-sm font-medium"
+                            className="p-0 h-auto text-sm font-medium text-left justify-start"
                             onClick={() => {
                               const projectIdentifier =
                                 bug.project_uuid || bug.project_id;
@@ -263,8 +261,9 @@ export default function BugDetail() {
                                 : "/projects";
                               navigate(`${basePath}/${projectIdentifier}`);
                             }}
+                            title={bug.project_name || `Project #${bug.project_id}`}
                           >
-                            {bug.project_name || `Project #${bug.project_id}`}
+                            {(bug.project_name || bug.project_uuid ? `${bug.project_name || 'Unknown'}` : `Project #${bug.project_id}`).substring(0, 25)}...
                           </Button>
                         </div>
                       </div>
@@ -279,68 +278,69 @@ export default function BugDetail() {
                         <div className="mt-1">
                           <Button
                             variant="link"
-                            className="p-0 h-auto text-sm font-medium"
+                            className="p-0 h-auto text-sm font-medium text-left justify-start"
                             onClick={() =>
                               navigate(`/tasks?task=${bug.task_id}`)
                             }
+                            title={bug.task_title || `Task #${bug.task_id}`}
                           >
-                            {bug.task_title || `Task #${bug.task_id}`}
+                            {(bug.task_title ? `${bug.task_title}` : `Task #${bug.task_id}`).substring(0, 15)}
                           </Button>
                         </div>
                       </div>
                     )}
+
+                    {/* Deadline */}
+                    <div>
+                      <Label className="text-muted-foreground text-sm">
+                        Deadline
+                      </Label>
+                      <div className="mt-1">
+                        <div
+                          className={`text-sm font-medium ${
+                            new Date(bug.deadline || "") < new Date() &&
+                            bug.deadline
+                              ? "text-red-500 bg-red-50 px-2 py-1 rounded"
+                              : ""
+                          }`}
+                        >
+                          {bug.deadline
+                            ? formatDeadline(bug.deadline)
+                            : "Not set"}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   {/* Divider */}
                   <Separator />
                   {/* Status, Priority, Bug Type */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Status */}
-                    <div>
-                      <Label className="text-muted-foreground text-sm">
-                        Status
-                      </Label>
-                      <div className="mt-1">
-                        <div className="text-sm font-medium mt-1">
-                          {bug.status || "Open"}
-                        </div>
-                        {/* <StatusBadge
-                          variant={
-                            bugStatusMap[
-                              bug.status as keyof typeof bugStatusMap
-                            ] || "neutral"
-                          }
-                          className="text-xs px-2.5 py-0.5 w-fit"
-                        >
-                          {bug.status || "Open"}
-                        </StatusBadge> */}
-                      </div>
-                    </div>
-
-                    {/* Priority */}
-                    <div>
-                      <Label className="text-muted-foreground text-sm">
-                        Priority
-                      </Label>
-                      <div className="mt-1">
-                        <div className="text-sm font-medium mt-1">
-                          {getPriorityLabel(bug.severity)}
-                        </div>
-                        {/* <StatusBadge
-                          variant={getSeverityVariant(bug.severity)}
-                          className="text-xs px-2.5 py-0.5 w-fit"
-                        >
-                          {bug.severity || "Low"}
-                        </StatusBadge> */}
-                      </div>
-                    </div>
-
                     {/* Bug Type */}
                     <div>
                       <Label className="text-muted-foreground text-sm">
                         Bug Type
                       </Label>
                       <div className="text-sm font-medium mt-1">
-                        {bug.bug_type || "-"}
+                        {bug.bug_type || "Functional"}
+                      </div>
+                    </div>
+                    
+                    {/* Priority */}
+                    <div>
+                      <Label className="text-muted-foreground text-sm">
+                        Priority
+                      </Label>
+                      <div className="text-sm font-medium mt-1">
+                        {bug.priority || "Low"}
+                      </div>
+                    </div>
+                    {/* Status */}
+                    <div>
+                      <Label className="text-muted-foreground text-sm">
+                        Status
+                      </Label>
+                      <div className="text-sm font-medium mt-1">
+                        {bug.status || "Open"}
                       </div>
                     </div>
                   </div>
@@ -350,7 +350,7 @@ export default function BugDetail() {
           )}
 
           {/* Description */}
-          <Card>
+          <Card className="animate-slide-in-left">
             <CardHeader>
               <CardTitle>Description</CardTitle>
             </CardHeader>
@@ -369,7 +369,7 @@ export default function BugDetail() {
 
           {/* Steps to Reproduce */}
           {bug.steps_to_reproduce && (
-            <Card>
+            <Card className="animate-slide-in-right">
               <CardHeader>
                 <CardTitle>Steps to Reproduce</CardTitle>
               </CardHeader>
@@ -423,7 +423,7 @@ export default function BugDetail() {
             bug.os ||
             bug.app_version ||
             bug.api_endpoint) && (
-            <Card>
+            <Card className="animate-bounce-in">
               <CardHeader>
                 <CardTitle>Environment Details</CardTitle>
               </CardHeader>
@@ -482,7 +482,7 @@ export default function BugDetail() {
                 <AttachmentList
                   attachments={bug.attachments.map((att: any) => ({
                     ...att,
-                    path: `/bugs/${id}/attachments/${att.id}`,
+                    path: `/bugs/${bugUuid}/attachments/${att.id}`,
                   }))}
                   onDownload={handleDownloadAttachment}
                   showLabel={false}
@@ -521,7 +521,7 @@ export default function BugDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <BugComments bugId={Number(id)} />
+              <BugComments bugId={bugUuid} />
             </CardContent>
           </Card>
         </div>
@@ -537,23 +537,18 @@ export default function BugDetail() {
               <div className="grid gap-2">
                 <Label className="text-muted-foreground">Reported By</Label>
                 <div className="text-sm">{bug.reported_by_name || "-"}</div>
-                {bug.reported_by_email && (
+                {/* {bug.reported_by_email && (
                   <div className="text-xs text-muted-foreground">
                     {bug.reported_by_email}
                   </div>
-                )}
+                )} */}
               </div>
               <Separator />
-              <div className="grid gap-2">
+              <div className="grid gap-1">
                 <Label className="text-muted-foreground">Assigned To</Label>
                 <div className="text-sm">
                   {bug.assigned_to_name || "Unassigned"}
                 </div>
-                {bug.assigned_to_email && (
-                  <div className="text-xs text-muted-foreground">
-                    {bug.assigned_to_email}
-                  </div>
-                )}
               </div>
               {bug.team_lead_name && (
                 <>
@@ -561,11 +556,11 @@ export default function BugDetail() {
                   <div className="grid gap-2">
                     <Label className="text-muted-foreground">Team Lead</Label>
                     <div className="text-sm">{bug.team_lead_name}</div>
-                    {bug.team_lead_email && (
+                    {/* {bug.team_lead_email && (
                       <div className="text-xs text-muted-foreground">
                         {bug.team_lead_email}
                       </div>
-                    )}
+                    )} */}
                   </div>
                 </>
               )}

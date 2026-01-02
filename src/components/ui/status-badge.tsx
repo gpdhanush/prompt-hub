@@ -80,20 +80,27 @@ export const taskPriorityMap = {
   High: "error",
 } as const;
 
-export const bugSeverityMap = {
-  Minor: "neutral",
-  Major: "warning",
+export const bugPriorityMap = {
   Critical: "error",
+  High: "error",
+  Medium: "warning",
+  Low: "info",
 } as const;
 
 export const bugStatusMap = {
   Open: "error",
+  Assigned: "warning",
+  "In Progress": "warning",
+  Testing: "info",
+  Fixed: "info",
+  Retest: "purple",
+  Closed: "success",
+  Reopened: "error",
   "In Review": "info",
   Fixing: "warning",
   Retesting: "purple",
   Passed: "success",
   Completed: "success",
-  Closed: "success",
   Rejected: "neutral",
   Duplicate: "neutral",
   "Not a Bug": "neutral",
