@@ -9,7 +9,7 @@ import { ClientLayout } from "./components/layout/ClientLayout";
 import { LoadingProvider, useLoading } from "./contexts/LoadingContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { NotificationAlert } from "./components/NotificationAlert";
-import { ErrorBoundary } from "./components/ErrorBoundary";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { logger } from "./lib/logger";
 import { ENV_CONFIG } from "./lib/config";
 import { queryClient } from "./lib/queryClient";
@@ -19,6 +19,7 @@ import { initializeSecureStorage, getItemSync } from "@/lib/secureStorage";
 import { getCurrentUserAsync } from "@/lib/auth";
 import { registerLoadingCallback } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useCrashlytics } from "@/hooks/useCrashlytics";
 import { useQueryClient } from "@tanstack/react-query";
 import { clearAuth } from "@/lib/auth";
 import { AlertCircle } from "lucide-react";
@@ -187,6 +188,9 @@ function ProtectedRoute({
 // Inner app component that uses loading context
 const AppContent = () => {
   const { setLoading } = useLoading();
+
+  // Initialize Firebase Crashlytics
+  useCrashlytics();
 
   // Initialize secure storage on app startup
   useEffect(() => {

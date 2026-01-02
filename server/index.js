@@ -42,6 +42,13 @@ import {
   reportFatalError,
   createErrorContext,
 } from "./utils/errorReporting.js";
+import {
+  requestLogger,
+  unhandledRejectionHandler,
+  apiErrorReporter,
+  userContextMiddleware,
+  healthCheckMiddleware,
+} from "./middleware/crashlytics.js";
 import { initializeReminderScheduler } from "./utils/reminderScheduler.js";
 import { initializeTicketEscalationScheduler } from "./utils/ticketEscalationScheduler.js";
 import { initializeSocketIO } from "./utils/socketService.js";
@@ -123,6 +130,12 @@ app.use(
 // Body parsing middleware
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Firebase Crashlytics Middleware
+app.use(requestLogger()); // Log all requests for performance monitoring
+app.use(userContextMiddleware()); // Set user context for authenticated requests
+app.use(healthCheckMiddleware()); // Monitor health check endpoints
+unhandledRejectionHandler(); // Handle uncaught exceptions and rejections
 
 // Serve static files from uploads directory
 // Files are stored in server/uploads/profile-photos (based on employees.js multer config)
@@ -276,6 +289,9 @@ app.use("/api/assets", assetsRoutes);
 app.use("/api/reminders", remindersRoutes);
 app.use("/api/document-requests", documentRequestsRoutes);
 app.use("/api/holidays", holidaysRoutes);
+
+// Crashlytics error reporting middleware
+app.use(apiErrorReporter());
 
 // Error handling middleware
 app.use((err, req, res, next) => {
