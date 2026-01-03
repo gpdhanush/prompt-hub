@@ -217,8 +217,8 @@ export default function MyTickets() {
                 className="pl-10"
               />
             </div>
-            <Select 
-              value={statusFilter || "all"} 
+            <Select
+              value={statusFilter || "all"}
               onValueChange={handleStatusFilterChange}
             >
               <SelectTrigger className="w-full sm:w-[180px]">
@@ -235,8 +235,8 @@ export default function MyTickets() {
                 <SelectItem value="closed">Closed</SelectItem>
               </SelectContent>
             </Select>
-            <Select 
-              value={priorityFilter || "all"} 
+            <Select
+              value={priorityFilter || "all"}
               onValueChange={handlePriorityFilterChange}
             >
               <SelectTrigger className="w-full sm:w-[180px]">
@@ -274,9 +274,11 @@ export default function MyTickets() {
           ) : error ? (
             <div className="text-center py-12">
               <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
-              <p className="text-destructive font-semibold mb-2">Error loading tickets</p>
+              <p className="text-destructive font-semibold mb-2">
+                Error loading tickets
+              </p>
               <p className="text-sm text-muted-foreground">
-                {(error as any)?.message || 'Failed to fetch tickets'}
+                {(error as any)?.message || "Failed to fetch tickets"}
               </p>
             </div>
           ) : tickets.length === 0 ? (
@@ -284,9 +286,11 @@ export default function MyTickets() {
               <Ticket className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
               <h3 className="text-lg font-semibold mb-2">No tickets found</h3>
               <p className="text-muted-foreground">
-                {searchTerm || statusFilter !== 'all' || priorityFilter !== 'all'
-                  ? 'Try adjusting your filters'
-                  : 'No tickets available'}
+                {searchTerm ||
+                statusFilter !== "all" ||
+                priorityFilter !== "all"
+                  ? "Try adjusting your filters"
+                  : "No tickets available"}
               </p>
             </div>
           ) : (
@@ -294,13 +298,15 @@ export default function MyTickets() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[120px]">Ticket #</TableHead>
+                    <TableHead className="w-[100px]">Ticket #</TableHead>
                     <TableHead>Subject</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Priority</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Created</TableHead>
-                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                    <TableHead className="text-right w-[100px]">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -310,54 +316,74 @@ export default function MyTickets() {
                       className="hover:bg-muted/50 cursor-pointer"
                       onClick={() => handleViewTicket(ticket)}
                     >
-                      <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
-                        <span className="font-mono text-sm">#{ticket.ticket_number}</span>
+                      <TableCell
+                        className="font-medium"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="font-mono text-sm">
+                          #{ticket.ticket_number}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {getStatusIcon(ticket.status)}
                           <div>
-                            <span className="font-medium text-sm">{ticket.subject || 'No subject'}</span>
+                            <span className="font-medium text-sm">
+                              {ticket.subject || "No subject"}
+                            </span>
                             {ticket.description && (
                               <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                                {ticket.description}
+                                {ticket.description.slice(0, 50)}...
+                                {ticket.description.length > 50 && "..."}
                               </p>
                             )}
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {ticket.ticket_type?.replace('_', ' ') || 'N/A'}
-                        </Badge>
+                        <div className="capitalize">
+                          {ticket.ticket_type?.replace("_", " ") || "N/A"}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge variant={getPriorityVariant(ticket.priority)}>
-                          {ticket.priority || 'medium'}
-                        </StatusBadge>
+                        <div className="capitalize">
+                          {ticket.priority || "medium"}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge variant={getStatusVariant(ticket.status)}>
-                          {ticket.status?.replace('_', ' ') || 'open'}
-                        </StatusBadge>
+                        <div className="capitalize">
+                          {ticket.status?.replace("_", " ") || "open"}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">
-                            {format(new Date(ticket.created_at), "MMM dd, yyyy")}
+                            {format(
+                              new Date(ticket.created_at),
+                              "dd-MMM-yyyy"
+                            )}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                            >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewTicket(ticket)}>
+                            <DropdownMenuItem
+                              onClick={() => handleViewTicket(ticket)}
+                            >
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
@@ -375,11 +401,15 @@ export default function MyTickets() {
           {total > 0 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
               <div className="text-sm text-muted-foreground">
-                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} tickets
+                Showing {(page - 1) * limit + 1} to{" "}
+                {Math.min(page * limit, total)} of {total} tickets
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="page-limit" className="text-sm text-muted-foreground">
+                  <Label
+                    htmlFor="page-limit"
+                    className="text-sm text-muted-foreground"
+                  >
                     Rows per page:
                   </Label>
                   <Select

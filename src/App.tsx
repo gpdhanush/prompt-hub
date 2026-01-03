@@ -44,6 +44,13 @@ const TaskCreate = lazy(() => import("./features/tasks/pages/TaskCreate"));
 const TaskEdit = lazy(() => import("./features/tasks/pages/TaskEdit"));
 const TaskView = lazy(() => import("./features/tasks/pages/TaskView"));
 const Bugs = lazy(() => import("./features/bugs/pages/Bugs"));
+const AppIssueCreate = lazy(() => import("./features/app-issues/pages/AppIssueCreate"));
+const MyAppIssues = lazy(() => import("./features/app-issues/pages/MyAppIssues"));
+const BrowseIssues = lazy(() => import("./features/app-issues/pages/BrowseIssues"));
+const BrowseIssueDetail = lazy(() => import("./features/app-issues/pages/BrowseIssueDetail"));
+const AppIssueDetail = lazy(() => import("./features/app-issues/pages/AppIssueDetail"));
+const AdminAppIssues = lazy(() => import("./features/app-issues/pages/AdminAppIssues"));
+const AdminAppIssueDetail = lazy(() => import("./features/app-issues/pages/AdminAppIssueDetail"));
 const Leaves = lazy(() => import("./features/leaves/pages/Leaves"));
 const Holidays = lazy(() => import("./features/holidays/pages/Holidays"));
 const Reimbursements = lazy(() => import("./features/reimbursements/pages/Reimbursements"));
@@ -347,6 +354,47 @@ const AppContent = () => {
                   </ProtectedRoute>
                 } 
               />
+              {/* App Issues Routes */}
+              <Route
+                path="/app-issues/create"
+                element={
+                  <ProtectedRoute>
+                    <LazyRoute><AppIssueCreate /></LazyRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/app-issues/my"
+                element={
+                  <ProtectedRoute>
+                    <LazyRoute><MyAppIssues /></LazyRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/app-issues/browse"
+                element={
+                  <ProtectedRoute>
+                    <LazyRoute><BrowseIssues /></LazyRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/app-issues/browse/:uuid"
+                element={
+                  <ProtectedRoute>
+                    <LazyRoute><BrowseIssueDetail /></LazyRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/app-issues/:uuid"
+                element={
+                  <ProtectedRoute>
+                    <LazyRoute><AppIssueDetail /></LazyRoute>
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/leaves" element={<LazyRoute><Leaves /></LazyRoute>} />
               <Route path="/holidays" element={<LazyRoute><Holidays /></LazyRoute>} />
               <Route 
@@ -388,6 +436,23 @@ const AppContent = () => {
                     <LazyRoute><AuditLogs /></LazyRoute>
                   </ProtectedRoute>
                 } 
+              />
+              {/* Admin App Issues Routes */}
+              <Route
+                path="/admin/app-issues"
+                element={
+                  <ProtectedRoute allowedRoles={['Super Admin', 'Admin']}>
+                    <LazyRoute><AdminAppIssues /></LazyRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/app-issues/:uuid"
+                element={
+                  <ProtectedRoute allowedRoles={['Super Admin', 'Admin']}>
+                    <LazyRoute><AdminAppIssueDetail /></LazyRoute>
+                  </ProtectedRoute>
+                }
               />
               <Route path="/files" element={<LazyRoute><FileManager /></LazyRoute>} />
               <Route path="/notifications" element={<LazyRoute><Notifications /></LazyRoute>} />

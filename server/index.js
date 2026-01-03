@@ -36,6 +36,7 @@ import remindersRoutes from "./routes/reminders.js";
 import webhooksRoutes from "./routes/webhooks.js";
 import documentRequestsRoutes from "./routes/documentRequests.js";
 import holidaysRoutes from "./routes/holidays.js";
+import appIssuesRoutes from "./routes/app-issues.js";
 import { performHealthCheck } from "./utils/dbHealthCheck.js";
 import { initializeFirebase } from "./utils/fcmService.js";
 import {
@@ -289,6 +290,8 @@ app.use("/api/assets", assetsRoutes);
 app.use("/api/reminders", remindersRoutes);
 app.use("/api/document-requests", documentRequestsRoutes);
 app.use("/api/holidays", holidaysRoutes);
+app.use("/api/app-issues", appIssuesRoutes);
+app.use("/api/admin/app-issues", appIssuesRoutes);
 
 // Crashlytics error reporting middleware
 app.use(apiErrorReporter());

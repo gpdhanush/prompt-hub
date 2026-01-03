@@ -95,11 +95,7 @@ const LeaveRow = React.memo(({
           <span className="text-sm font-medium">{leave.employee_name || 'N/A'}</span>
         </TableCell>
       )}
-      <TableCell>
-        <Badge variant="outline" className="capitalize">
-          {leave.leave_type}
-        </Badge>
-      </TableCell>
+      
       <TableCell>
         <span className="text-sm">{new Date(leave.start_date).toLocaleDateString("en-US", {
           month: "short",
@@ -686,7 +682,6 @@ export default function Leaves() {
                   <TableRow>
                     <TableHead className="w-[120px]">Leave ID</TableHead>
                     {canApproveLeaves && <TableHead>Employee</TableHead>}
-                    <TableHead>Type</TableHead>
                     <TableHead>Start Date</TableHead>
                     <TableHead>End Date</TableHead>
                     <TableHead>Duration</TableHead>

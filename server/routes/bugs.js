@@ -448,11 +448,11 @@ router.get('/:id', async (req, res) => {
  *               bug_type:
  *                 type: string
  *                 enum: [Functional, UI/UX, Performance, Security, Other]
- *                 type: string
- *                 enum: [Critical, High, Medium, Low]
+ *                 description: Bug type/category
  *               priority:
  *                 type: string
- *                 enum: [High, Medium, Low]
+ *                 enum: [Critical, High, Medium, Low]
+ *                 description: Bug priority level
  *               status:
  *                 type: string
  *                 enum: [Open, In Progress, Fixed, Rejected, Won't Fix, Duplicate]

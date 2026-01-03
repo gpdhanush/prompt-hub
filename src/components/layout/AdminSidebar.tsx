@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
+  AlertCircle,
   KeyRound,
   FileText,
   Laptop,
@@ -28,6 +29,7 @@ import {
   LogOut,
   Clock,
   LayoutGrid,
+  Eye,
 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -54,6 +56,7 @@ const allMenuItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, section: null },
   // Administration (Super Admin only)
   { name: "Audit Logs", href: "/audit-logs", icon: FileText, section: "admin" },
+  { name: "App Issues Admin", href: "/admin/app-issues", icon: AlertCircle, section: "admin" },
   // Activity Logs (All users) - Hidden
   // { name: "Activity Logs", href: "/activity-logs", icon: FileText, section: "main" },
   { name: "User Hierarchy", href: "/user-hierarchy", icon: Users, section: "admin" },
@@ -66,6 +69,8 @@ const allMenuItems = [
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
   { name: "Tasks", href: "/tasks", icon: CheckSquare, section: "main" },
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
+  // { name: "My Issues", href: "/app-issues/my", icon: AlertCircle, section: "main" },
+  // { name: "Browse Issues", href: "/app-issues/browse", icon: Eye, section: "main" },
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Holidays", href: "/holidays", icon: Calendar, section: "main" },
   { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
@@ -190,9 +195,20 @@ export function AdminSidebar() {
     }
     // Special handling for Employee Directory - should match /employees/list, /employees/:id/view, and /employee-profile/:id
     if (href === '/employees/list') {
-      return location.pathname === href || 
+      return location.pathname === href ||
              location.pathname.match(/^\/employees\/\d+\/view$/) ||
              location.pathname.match(/^\/employee-profile\/\d+$/);
+    }
+    // Special handling for My App Issues - should match /app-issues/my, /app-issues/create, and /app-issues/:uuid (but not /app-issues/browse/*)
+    if (href === '/app-issues/my') {
+      return location.pathname === '/app-issues/my' ||
+             location.pathname === '/app-issues/create' ||
+             (location.pathname.match(/^\/app-issues\/[^/]+$/) && !location.pathname.startsWith('/app-issues/browse'));
+    }
+    // Special handling for Browse Issues - should match /app-issues/browse and /app-issues/browse/:uuid
+    if (href === '/app-issues/browse') {
+      return location.pathname === '/app-issues/browse' ||
+             location.pathname.startsWith('/app-issues/browse/');
     }
     return location.pathname === href || location.pathname.startsWith(href + '/');
   };
@@ -258,6 +274,8 @@ export function AdminSidebar() {
             '/projects',
             '/tasks',
             '/bugs',
+            '/app-issues/my',
+            '/app-issues/browse',
             '/holidays',
             '/leaves',
             '/reimbursements',
