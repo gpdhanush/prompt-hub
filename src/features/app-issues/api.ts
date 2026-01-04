@@ -64,7 +64,7 @@ export const appIssuesApi = {
     return response.data;
   },
 
-  getAllIssues: async (params?: { page?: number; limit?: number }) => {
+  getAllIssues: async (params?: { page?: number; limit?: number; search?: string; status?: string }) => {
     const queryParams = params ? cleanParams(params) : {};
     const response = await apiClient.get<{
       data: AppIssue[];

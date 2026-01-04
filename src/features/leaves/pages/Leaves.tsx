@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, MoreHorizontal, Check, X, Eye, Filter, Calendar, Edit, Trash2, Loader2, User, Clock, CalendarDays, FileText, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,16 +52,14 @@ import { Separator } from "@/components/ui/separator";
 import { leavesApi } from "@/features/leaves/api";
 import { employeesApi } from "@/features/employees/api";
 import { toast } from "@/hooks/use-toast";
-import { DatePicker } from "@/components/ui/date-picker";
 import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 
 // Memoized Leave Row Component
-const LeaveRow = React.memo(({ 
-  leave, 
-  canApproveLeaves, 
-  canApproveRejectLeave, 
-  canAcceptLeaves, 
+const LeaveRow = React.memo(({
+  leave,
+  canApproveRejectLeave,
+  canAcceptLeaves,
   canRejectLeaves,
   onView,
   onEdit,
@@ -69,7 +68,6 @@ const LeaveRow = React.memo(({
   onReject,
 }: {
   leave: any;
-  canApproveLeaves: boolean;
   canApproveRejectLeave: (leave: any) => boolean;
   canAcceptLeaves: boolean;
   canRejectLeaves: boolean;
@@ -82,7 +80,7 @@ const LeaveRow = React.memo(({
   const canApproveReject = canApproveRejectLeave(leave);
   
   return (
-    <TableRow 
+    <TableRow
       key={leave.id}
       className="hover:bg-muted/50 cursor-pointer"
       onClick={() => onView(leave)}
@@ -90,33 +88,35 @@ const LeaveRow = React.memo(({
       <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
         <span className="font-mono text-sm">LV-{String(leave.id).padStart(4, '0')}</span>
       </TableCell>
-      {canApproveLeaves && (
-        <TableCell>
-          <span className="text-sm font-medium">{leave.employee_name || 'N/A'}</span>
-        </TableCell>
-      )}
-      
+
+      <TableCell>
+        <span className="text-sm capitalize">{leave.leave_type || 'N/A'}</span>
+      </TableCell>
+
       <TableCell>
         <span className="text-sm">{new Date(leave.start_date).toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
           year: "numeric",
-        })}</span>
-      </TableCell>
-      <TableCell>
-        <span className="text-sm">{new Date(leave.end_date).toLocaleDateString("en-US", {
+        })} - {new Date(leave.end_date).toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
           year: "numeric",
         })}</span>
       </TableCell>
+
       <TableCell>
         <span className="text-sm">{leave.duration || 0} day{(leave.duration || 0) > 1 ? "s" : ""}</span>
       </TableCell>
+
       <TableCell>
         <StatusBadge variant={leaveStatusMap[leave.status as keyof typeof leaveStatusMap] || 'neutral'}>
           {leave.status}
         </StatusBadge>
+      </TableCell>
+
+      <TableCell>
+        <span className="text-sm">{leave.approved_by_name || leave.approved_by || '-'}</span>
       </TableCell>
       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-end gap-2">
@@ -184,6 +184,8 @@ LeaveRow.displayName = 'LeaveRow';
 
 export default function Leaves() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -445,16 +447,40 @@ export default function Leaves() {
   // Memoized client-side filtering
   const filteredLeaves = useMemo(() => {
     return allLeaves.filter((leave: any) => {
-      const matchesSearch = !searchQuery || 
+      const matchesSearch = !searchQuery ||
         (leave.employee_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (leave.emp_code || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (leave.id?.toString() || '').includes(searchQuery);
-      
-      const matchesStatus = !statusFilter || leave.status === statusFilter;
-      
-      return matchesSearch && matchesStatus;
+
+      const matchesStatus = !statusFilter || statusFilter === "all" || leave.status === statusFilter;
+
+      const matchesDateRange = (() => {
+        if (!fromDate && !toDate) return true;
+
+        const leaveStartDate = new Date(leave.start_date);
+        const leaveEndDate = new Date(leave.end_date);
+
+        let matchesFromDate = true;
+        let matchesToDate = true;
+
+        if (fromDate) {
+          const fromDateObj = new Date(fromDate);
+          // Check if leave period overlaps with or starts after the from date
+          matchesFromDate = leaveEndDate >= fromDateObj || leaveStartDate >= fromDateObj;
+        }
+
+        if (toDate) {
+          const toDateObj = new Date(toDate);
+          // Check if leave period overlaps with or ends before the to date
+          matchesToDate = leaveStartDate <= toDateObj || leaveEndDate <= toDateObj;
+        }
+
+        return matchesFromDate && matchesToDate;
+      })();
+
+      return matchesSearch && matchesStatus && matchesDateRange;
     });
-  }, [allLeaves, searchQuery, statusFilter]);
+  }, [allLeaves, searchQuery, statusFilter, fromDate, toDate]);
 
   // Memoized client-side pagination
   const paginatedLeaves = useMemo(() => {
@@ -495,7 +521,9 @@ export default function Leaves() {
             Leave Management
           </h1>
           <p className="text-muted-foreground mt-2">
-            {canApproveLeaves ? "Track and approve employee leave requests" : "View and manage your leave requests"}
+            {canApproveLeaves
+              ? "Track and approve employee leave requests"
+              : "View and manage your leave requests"}
           </p>
         </div>
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -510,10 +538,19 @@ export default function Leaves() {
               <DialogTitle>Apply for Leave</DialogTitle>
               <DialogDescription>Submit a new leave request</DialogDescription>
             </DialogHeader>
-            <form onSubmit={(e) => { e.preventDefault(); handleCreate(); }} noValidate>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleCreate();
+              }}
+              noValidate
+            >
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="leave-type" className={formErrors.leave_type ? "text-destructive" : ""}>
+                  <Label
+                    htmlFor="leave-type"
+                    className={formErrors.leave_type ? "text-destructive" : ""}
+                  >
                     Leave Type *
                   </Label>
                   <Select
@@ -523,7 +560,11 @@ export default function Leaves() {
                       setFormErrors({ ...formErrors, leave_type: "" });
                     }}
                   >
-                    <SelectTrigger className={formErrors.leave_type ? "border-destructive" : ""}>
+                    <SelectTrigger
+                      className={
+                        formErrors.leave_type ? "border-destructive" : ""
+                      }
+                    >
                       <SelectValue placeholder="Select leave type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -534,12 +575,19 @@ export default function Leaves() {
                     </SelectContent>
                   </Select>
                   {formErrors.leave_type && (
-                    <p className="text-sm text-destructive">{formErrors.leave_type}</p>
+                    <p className="text-sm text-destructive">
+                      {formErrors.leave_type}
+                    </p>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="start-date" className={formErrors.start_date ? "text-destructive" : ""}>
+                    <Label
+                      htmlFor="start-date"
+                      className={
+                        formErrors.start_date ? "text-destructive" : ""
+                      }
+                    >
                       Start Date *
                     </Label>
                     <DatePicker
@@ -550,14 +598,21 @@ export default function Leaves() {
                         setFormErrors({ ...formErrors, start_date: "" });
                       }}
                       placeholder="Select start date"
-                      className={formErrors.start_date ? "border-destructive" : ""}
+                      className={
+                        formErrors.start_date ? "border-destructive" : ""
+                      }
                     />
                     {formErrors.start_date && (
-                      <p className="text-sm text-destructive">{formErrors.start_date}</p>
+                      <p className="text-sm text-destructive">
+                        {formErrors.start_date}
+                      </p>
                     )}
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="end-date" className={formErrors.end_date ? "text-destructive" : ""}>
+                    <Label
+                      htmlFor="end-date"
+                      className={formErrors.end_date ? "text-destructive" : ""}
+                    >
                       End Date *
                     </Label>
                     <DatePicker
@@ -568,15 +623,22 @@ export default function Leaves() {
                         setFormErrors({ ...formErrors, end_date: "" });
                       }}
                       placeholder="Select end date"
-                      className={formErrors.end_date ? "border-destructive" : ""}
+                      className={
+                        formErrors.end_date ? "border-destructive" : ""
+                      }
                     />
                     {formErrors.end_date && (
-                      <p className="text-sm text-destructive">{formErrors.end_date}</p>
+                      <p className="text-sm text-destructive">
+                        {formErrors.end_date}
+                      </p>
                     )}
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="reason" className={formErrors.reason ? "text-destructive" : ""}>
+                  <Label
+                    htmlFor="reason"
+                    className={formErrors.reason ? "text-destructive" : ""}
+                  >
                     Reason *
                   </Label>
                   <Textarea
@@ -591,22 +653,32 @@ export default function Leaves() {
                     className={formErrors.reason ? "border-destructive" : ""}
                   />
                   {formErrors.reason && (
-                    <p className="text-sm text-destructive">{formErrors.reason}</p>
+                    <p className="text-sm text-destructive">
+                      {formErrors.reason}
+                    </p>
                   )}
                 </div>
               </div>
             </form>
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1" onClick={() => {
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
                   setShowCreateDialog(false);
                   resetForm();
-                }}>
-                  Cancel
-                </Button>
-                <Button className="flex-1" onClick={handleCreate} disabled={createMutation.isPending}>
-                  {createMutation.isPending ? "Submitting..." : "Submit Request"}
-                </Button>
-              </div>
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleCreate}
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending ? "Submitting..." : "Submit Request"}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
@@ -618,21 +690,21 @@ export default function Leaves() {
           <CardDescription>Search and filter leave requests</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by employee name, employee code, or leave ID..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-10"
               />
             </div>
-            <Select 
-              value={statusFilter || "all"} 
+            <Select
+              value={statusFilter || "all"}
               onValueChange={handleStatusFilterChange}
             >
-              <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectTrigger>
                 <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
@@ -643,6 +715,39 @@ export default function Leaves() {
                 <SelectItem value="Rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
+            <div>
+              <DatePicker
+                value={fromDate}
+                onChange={(date) => {
+                  setFromDate(date);
+                  setPage(1);
+                }}
+                placeholder="From date"
+              />
+            </div>
+            <div>
+              <DatePicker
+                value={toDate}
+                onChange={(date) => {
+                  setToDate(date);
+                  setPage(1);
+                }}
+                placeholder="To date"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchQuery("");
+                setStatusFilter("all");
+                setFromDate("");
+                setToDate("");
+                setPage(1);
+              }}
+              className="w-full"
+            >
+              Clear Filters
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -662,31 +767,35 @@ export default function Leaves() {
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading leave requests...</p>
+                <p className="text-muted-foreground">
+                  Loading leave requests...
+                </p>
               </div>
             </div>
           ) : filteredLeaves.length === 0 ? (
             <div className="text-center py-12">
               <Calendar className="mx-auto h-16 w-16 mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">No leave requests found</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                No leave requests found
+              </h3>
               <p className="text-muted-foreground">
                 {searchQuery || statusFilter
-                  ? 'Try adjusting your filters'
-                  : 'No leave requests available'}
+                  ? "Try adjusting your filters"
+                  : "No leave requests available"}
               </p>
             </div>
           ) : (
             <div className="rounded-md border">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[120px]">Leave ID</TableHead>
-                    {canApproveLeaves && <TableHead>Employee</TableHead>}
-                    <TableHead>Start Date</TableHead>
-                    <TableHead>End Date</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                <TableHeader className="bg-muted/50 border-b-2 border-border border-primary">
+                  <TableRow className="hover:bg-muted/30">
+                    <TableHead className="w-[120px] font-semibold text-foreground border-r border-border/50 text-center">ID</TableHead>
+                    <TableHead className="font-semibold text-foreground border-r border-border/50 text-center">Type</TableHead>
+                    <TableHead className="font-semibold text-foreground border-r border-border/50 text-center">Start & End Date</TableHead>
+                    <TableHead className="font-semibold text-foreground border-r border-border/50 text-center">Duration</TableHead>
+                    <TableHead className="font-semibold text-foreground border-r border-border/50 text-center">Status</TableHead>
+                    <TableHead className="font-semibold text-foreground border-r border-border/50 text-center">Approved By</TableHead>
+                    <TableHead className="text-center w-[100px] font-semibold text-foreground">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -694,7 +803,6 @@ export default function Leaves() {
                     <LeaveRow
                       key={leave.id}
                       leave={leave}
-                      canApproveLeaves={canApproveLeaves}
                       canApproveRejectLeave={canApproveRejectLeave}
                       canAcceptLeaves={canAcceptLeaves}
                       canRejectLeaves={canRejectLeaves}
@@ -714,11 +822,15 @@ export default function Leaves() {
           {total > 0 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
               <div className="text-sm text-muted-foreground">
-                Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total} leave requests
+                Showing {(page - 1) * limit + 1} to{" "}
+                {Math.min(page * limit, total)} of {total} leave requests
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="page-limit" className="text-sm text-muted-foreground">
+                  <Label
+                    htmlFor="page-limit"
+                    className="text-sm text-muted-foreground"
+                  >
                     Rows per page:
                   </Label>
                   <Select
@@ -767,14 +879,18 @@ export default function Leaves() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Edit Leave Request</DialogTitle>
-            <DialogDescription>Update your leave request details</DialogDescription>
+            <DialogDescription>
+              Update your leave request details
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="edit-leave-type">Leave Type *</Label>
               <Select
                 value={leaveForm.leave_type}
-                onValueChange={(value) => setLeaveForm({ ...leaveForm, leave_type: value })}
+                onValueChange={(value) =>
+                  setLeaveForm({ ...leaveForm, leave_type: value })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select leave type" />
@@ -793,7 +909,9 @@ export default function Leaves() {
                 <DatePicker
                   id="edit-start-date"
                   value={leaveForm.start_date}
-                  onChange={(date) => setLeaveForm({ ...leaveForm, start_date: date })}
+                  onChange={(date) =>
+                    setLeaveForm({ ...leaveForm, start_date: date })
+                  }
                   placeholder="Select start date"
                 />
               </div>
@@ -802,7 +920,9 @@ export default function Leaves() {
                 <DatePicker
                   id="edit-end-date"
                   value={leaveForm.end_date}
-                  onChange={(date) => setLeaveForm({ ...leaveForm, end_date: date })}
+                  onChange={(date) =>
+                    setLeaveForm({ ...leaveForm, end_date: date })
+                  }
                   placeholder="Select end date"
                 />
               </div>
@@ -813,15 +933,25 @@ export default function Leaves() {
                 id="edit-reason"
                 placeholder="Enter reason for leave"
                 value={leaveForm.reason}
-                onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                onChange={(e) =>
+                  setLeaveForm({ ...leaveForm, reason: e.target.value })
+                }
                 rows={4}
               />
             </div>
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setShowEditDialog(false)}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowEditDialog(false)}
+              >
                 Cancel
               </Button>
-              <Button className="flex-1" onClick={handleUpdate} disabled={updateMutation.isPending}>
+              <Button
+                className="flex-1"
+                onClick={handleUpdate}
+                disabled={updateMutation.isPending}
+              >
                 {updateMutation.isPending ? "Updating..." : "Update Request"}
               </Button>
             </div>
@@ -850,12 +980,23 @@ export default function Leaves() {
                     <CalendarDays className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Leave ID</p>
-                    <p className="text-lg font-bold font-mono">LV-{String(selectedLeave.id).padStart(4, '0')}</p>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Leave ID
+                    </p>
+                    <p className="text-lg font-bold font-mono">
+                      LV-{String(selectedLeave.id).padStart(4, "0")}
+                    </p>
                   </div>
                 </div>
                 <div>
-                  <StatusBadge variant={leaveStatusMap[selectedLeave.status as keyof typeof leaveStatusMap] || 'neutral'} className="text-sm px-3 py-1.5">
+                  <StatusBadge
+                    variant={
+                      leaveStatusMap[
+                        selectedLeave.status as keyof typeof leaveStatusMap
+                      ] || "neutral"
+                    }
+                    className="text-sm px-3 py-1.5"
+                  >
                     {selectedLeave.status}
                   </StatusBadge>
                 </div>
@@ -876,14 +1017,18 @@ export default function Leaves() {
                         <User className="h-3.5 w-3.5" />
                         Employee
                       </Label>
-                      <p className="text-sm font-medium">{selectedLeave.employee_name || 'N/A'}</p>
+                      <p className="text-sm font-medium">
+                        {selectedLeave.employee_name || "N/A"}
+                      </p>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                         <FileText className="h-3.5 w-3.5" />
                         Leave Type
                       </Label>
-                      <p className="text-sm font-medium">{selectedLeave.leave_type}</p>
+                      <p className="text-sm font-medium">
+                        {selectedLeave.leave_type}
+                      </p>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -891,7 +1036,8 @@ export default function Leaves() {
                         Duration
                       </Label>
                       <p className="text-sm font-medium">
-                        {selectedLeave.duration || 0} day{(selectedLeave.duration || 0) > 1 ? "s" : ""}
+                        {selectedLeave.duration || 0} day
+                        {(selectedLeave.duration || 0) > 1 ? "s" : ""}
                       </p>
                     </div>
                   </div>
@@ -902,7 +1048,9 @@ export default function Leaves() {
                         <FileText className="h-3.5 w-3.5" />
                         Leave Type
                       </Label>
-                      <p className="text-sm font-medium">{selectedLeave.leave_type}</p>
+                      <p className="text-sm font-medium">
+                        {selectedLeave.leave_type}
+                      </p>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
@@ -910,7 +1058,8 @@ export default function Leaves() {
                         Duration
                       </Label>
                       <p className="text-sm font-medium">
-                        {selectedLeave.duration || 0} day{(selectedLeave.duration || 0) > 1 ? "s" : ""}
+                        {selectedLeave.duration || 0} day
+                        {(selectedLeave.duration || 0) > 1 ? "s" : ""}
                       </p>
                     </div>
                   </div>
@@ -927,25 +1076,35 @@ export default function Leaves() {
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground">Start Date</Label>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      Start Date
+                    </Label>
                     <p className="text-sm font-semibold">
-                      {new Date(selectedLeave.start_date).toLocaleDateString("en-US", {
-                        weekday: "short",
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                      {new Date(selectedLeave.start_date).toLocaleDateString(
+                        "en-US",
+                        {
+                          weekday: "short",
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        }
+                      )}
                     </p>
                   </div>
                   <div className="space-y-1.5 p-3 bg-muted/30 rounded-md border">
-                    <Label className="text-xs font-medium text-muted-foreground">End Date</Label>
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      End Date
+                    </Label>
                     <p className="text-sm font-semibold">
-                      {new Date(selectedLeave.end_date).toLocaleDateString("en-US", {
-                        weekday: "short",
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                      {new Date(selectedLeave.end_date).toLocaleDateString(
+                        "en-US",
+                        {
+                          weekday: "short",
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        }
+                      )}
                     </p>
                   </div>
                 </div>
@@ -967,43 +1126,58 @@ export default function Leaves() {
               </div>
 
               {/* Approval/Rejection Information */}
-              {(selectedLeave.status === 'Approved' || selectedLeave.status === 'Rejected') && (
+              {(selectedLeave.status === "Approved" ||
+                selectedLeave.status === "Rejected") && (
                 <>
                   <Separator />
                   <div className="space-y-4">
                     <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
-                      {selectedLeave.status === 'Approved' ? (
+                      {selectedLeave.status === "Approved" ? (
                         <CheckCircle2 className="h-4 w-4 text-status-success" />
                       ) : (
                         <XCircle className="h-4 w-4 text-status-error" />
                       )}
-                      {selectedLeave.status === 'Approved' ? 'Approval' : 'Rejection'} Information
+                      {selectedLeave.status === "Approved"
+                        ? "Approval"
+                        : "Rejection"}{" "}
+                      Information
                     </h3>
-                    {selectedLeave.status === 'Approved' && selectedLeave.approved_by_name && (
-                      <div className="p-4 bg-status-success/10 rounded-md border border-status-success/20">
-                        <div className="flex items-center gap-2 mb-2">
-                          <CheckCircle2 className="h-4 w-4 text-status-success" />
-                          <Label className="text-xs font-medium text-muted-foreground">Approved By</Label>
+                    {selectedLeave.status === "Approved" &&
+                      selectedLeave.approved_by_name && (
+                        <div className="p-4 bg-status-success/10 rounded-md border border-status-success/20">
+                          <div className="flex items-center gap-2 mb-2">
+                            <CheckCircle2 className="h-4 w-4 text-status-success" />
+                            <Label className="text-xs font-medium text-muted-foreground">
+                              Approved By
+                            </Label>
+                          </div>
+                          <p className="text-sm font-semibold text-status-success">
+                            {selectedLeave.approved_by_name}
+                          </p>
                         </div>
-                        <p className="text-sm font-semibold text-status-success">{selectedLeave.approved_by_name}</p>
-                      </div>
-                    )}
-                    {selectedLeave.status === 'Rejected' && (
+                      )}
+                    {selectedLeave.status === "Rejected" && (
                       <div className="space-y-3">
                         {selectedLeave.approved_by_name && (
                           <div className="p-4 bg-status-error/10 rounded-md border border-status-error/20">
                             <div className="flex items-center gap-2 mb-2">
                               <XCircle className="h-4 w-4 text-status-error" />
-                              <Label className="text-xs font-medium text-muted-foreground">Rejected By</Label>
+                              <Label className="text-xs font-medium text-muted-foreground">
+                                Rejected By
+                              </Label>
                             </div>
-                            <p className="text-sm font-semibold text-status-error">{selectedLeave.approved_by_name}</p>
+                            <p className="text-sm font-semibold text-status-error">
+                              {selectedLeave.approved_by_name}
+                            </p>
                           </div>
                         )}
                         {selectedLeave.rejection_reason && (
                           <div className="p-4 bg-status-error/10 rounded-md border border-status-error/20">
                             <div className="flex items-center gap-2 mb-2">
                               <AlertCircle className="h-4 w-4 text-status-error" />
-                              <Label className="text-xs font-medium text-muted-foreground">Rejection Reason</Label>
+                              <Label className="text-xs font-medium text-muted-foreground">
+                                Rejection Reason
+                              </Label>
                             </div>
                             <p className="text-sm leading-relaxed whitespace-pre-wrap text-status-error font-medium">
                               {selectedLeave.rejection_reason}
@@ -1017,7 +1191,7 @@ export default function Leaves() {
               )}
 
               {/* Action Buttons for Level 1 Users */}
-              {canApproveLeaves && selectedLeave.status === 'Pending' && (
+              {canApproveLeaves && selectedLeave.status === "Pending" && (
                 <>
                   <Separator />
                   <div className="flex gap-3 pt-2">
@@ -1028,7 +1202,9 @@ export default function Leaves() {
                         disabled={approveRejectMutation.isPending}
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4" />
-                        {approveRejectMutation.isPending ? "Approving..." : "Approve"}
+                        {approveRejectMutation.isPending
+                          ? "Approving..."
+                          : "Approve"}
                       </Button>
                     )}
                     {canRejectLeaves && (
@@ -1058,11 +1234,14 @@ export default function Leaves() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the leave request.
+              This action cannot be undone. This will permanently delete the
+              leave request.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -1078,7 +1257,9 @@ export default function Leaves() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Reject Leave Request</DialogTitle>
-            <DialogDescription>Please provide a reason for rejecting this leave request</DialogDescription>
+            <DialogDescription>
+              Please provide a reason for rejecting this leave request
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -1096,9 +1277,9 @@ export default function Leaves() {
               </p>
             </div>
             <div className="flex gap-2 pt-2">
-              <Button 
-                variant="outline" 
-                className="flex-1" 
+              <Button
+                variant="outline"
+                className="flex-1"
                 onClick={() => {
                   setShowRejectDialog(false);
                   setRejectionReason("");
@@ -1106,12 +1287,16 @@ export default function Leaves() {
               >
                 Cancel
               </Button>
-              <Button 
-                className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" 
+              <Button
+                className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={confirmReject}
-                disabled={approveRejectMutation.isPending || !rejectionReason.trim()}
+                disabled={
+                  approveRejectMutation.isPending || !rejectionReason.trim()
+                }
               >
-                {approveRejectMutation.isPending ? "Rejecting..." : "Reject Leave"}
+                {approveRejectMutation.isPending
+                  ? "Rejecting..."
+                  : "Reject Leave"}
               </Button>
             </div>
           </div>

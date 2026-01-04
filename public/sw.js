@@ -1,6 +1,6 @@
 // Advanced PWA Service Worker with Multiple Caching Strategies
 // Version: 1.0.0
-const CACHE_VERSION = 'naethra-ems-v1.4.7';
+const CACHE_VERSION = 'naethra-ems-v1.4.8';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const IMAGE_CACHE = `${CACHE_VERSION}-images`;

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { MoreHorizontal, Edit, Trash2, Eye, FolderKanban, Loader2, AlertCircle } from "lucide-react";
+import { MoreHorizontal, Edit, Trash2, Eye, FolderKanban, Loader2, AlertCircle, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -45,6 +45,9 @@ interface ProjectsTableProps {
   onView: (project: Project) => void;
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
+  sortField: 'name' | null;
+  sortDirection: 'asc' | 'desc';
+  onSortChange: (field: 'name', direction: 'asc' | 'desc') => void;
 }
 
 export const ProjectsTable = memo(function ProjectsTable({
@@ -62,6 +65,9 @@ export const ProjectsTable = memo(function ProjectsTable({
   onView,
   onEdit,
   onDelete,
+  sortField,
+  sortDirection,
+  onSortChange,
 }: ProjectsTableProps) {
   if (isLoading) {
     return (
@@ -145,14 +151,36 @@ export const ProjectsTable = memo(function ProjectsTable({
       <CardContent>
         <div className="rounded-md border">
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[120px]">Project ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Team Lead</TableHead>
-                <TableHead>Timeline</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right w-[100px]">Actions</TableHead>
+            <TableHeader className="bg-muted/50 border-b-2 border-border border-primary">
+              <TableRow className="hover:bg-muted/30">
+                <TableHead className="w-[120px] font-semibold text-foreground border-r  border-border/50 text-center">Project ID</TableHead>
+                <TableHead
+                  className="font-semibold text-foreground border-r border-border/50 text-center cursor-pointer hover:bg-muted/30 transition-colors select-none"
+                  onClick={() => {
+                    if (sortField === 'name') {
+                      onSortChange('name', sortDirection === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      onSortChange('name', 'asc');
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    Name
+                    {sortField === 'name' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="h-4 w-4" />
+                      ) : (
+                        <ArrowDown className="h-4 w-4" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-4 w-4 opacity-50" />
+                    )}
+                  </div>
+                </TableHead>
+                <TableHead className="font-semibold text-foreground border-r border-border/50 text-center">Team Lead</TableHead>
+                <TableHead className="font-semibold text-foreground border-r border-border/50 text-center">Timeline</TableHead>
+                <TableHead className="font-semibold text-foreground border-r border-border/50 text-center">Status</TableHead>
+                <TableHead className="text-center w-[100px] font-semibold text-foreground">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -185,12 +213,12 @@ export const ProjectsTable = memo(function ProjectsTable({
                         {formatDate(project.start_date)} - {formatDate(project.end_date)}
                       </span>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-center">
                       <StatusBadge variant={projectStatusMap[project.status] || "neutral"}>
                         {project.status || 'Planning'}
                       </StatusBadge>
                     </TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

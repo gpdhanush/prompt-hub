@@ -44,20 +44,23 @@ export default function AppIssueCreate() {
       return appIssuesApi.create(submitData);
     },
     onSuccess: (data) => {
+      console.log('Issue created successfully:', data);
       // Invalidate queries to ensure lists update immediately
       queryClient.invalidateQueries({ queryKey: ['my-app-issues'] });
       queryClient.invalidateQueries({ queryKey: ['admin-app-issues'] });
+      queryClient.invalidateQueries({ queryKey: ['browse-app-issues'] });
 
       toast({
         title: 'Success',
         description: 'App issue created successfully!',
       });
-      navigate('/app-issues/my');
+      navigate('/app-issues');
     },
     onError: (error: any) => {
+      console.error('Issue creation error:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to create app issue',
+        description: error?.response?.data?.error || error?.message || 'Failed to create app issue',
         variant: 'destructive',
       });
     },
@@ -117,11 +120,11 @@ export default function AppIssueCreate() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/app-issues/my")}
+            onClick={() => navigate("/app-issues")}
             className="flex items-center gap-2 hover:bg-muted/50"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to My Issues
+            Back to Issues
           </Button>
         </div>
 
@@ -428,7 +431,7 @@ export default function AppIssueCreate() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => navigate("/app-issues/my")}
+                    onClick={() => navigate("/app-issues")}
                     disabled={createMutation.isPending}
                     className="h-12 px-8"
                   >

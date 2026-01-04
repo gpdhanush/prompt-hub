@@ -53,41 +53,111 @@ import {
 // All menu items in one list - organized by sections
 const allMenuItems = [
   // Dashboard - Separate, no section label
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, section: null },
+  {
+    name: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    section: null,
+  },
   // Administration (Super Admin only)
   { name: "Audit Logs", href: "/audit-logs", icon: FileText, section: "admin" },
-  { name: "App Issues Admin", href: "/admin/app-issues", icon: AlertCircle, section: "admin" },
+  {
+    name: "App Issues Admin",
+    href: "/admin/app-issues",
+    icon: AlertCircle,
+    section: "admin",
+  },
   // Activity Logs (All users) - Hidden
   // { name: "Activity Logs", href: "/activity-logs", icon: FileText, section: "main" },
-  { name: "User Hierarchy", href: "/user-hierarchy", icon: Users, section: "admin" },
-  { name: "Roles & Positions", href: "/roles-positions", icon: Shield, section: "admin" },
-  { name: "Roles & Permissions", href: "/roles-permissions", icon: KeyRound, section: "admin" },
+  {
+    name: "User Hierarchy",
+    href: "/user-hierarchy",
+    icon: Users,
+    section: "admin",
+  },
+  {
+    name: "Roles & Positions",
+    href: "/roles-positions",
+    icon: Shield,
+    section: "admin",
+  },
+  {
+    name: "Roles & Permissions",
+    href: "/roles-permissions",
+    icon: KeyRound,
+    section: "admin",
+  },
   // Main Management
   { name: "Users", href: "/users", icon: Users, section: "main" },
   { name: "Employees", href: "/employees", icon: UserCog, section: "main" },
-  { name: "Contact Directory", href: "/employees/list", icon: UserSearch, section: "main" },
+  {
+    name: "Contact Directory",
+    href: "/employees/list",
+    icon: UserSearch,
+    section: "main",
+  },
   { name: "Projects", href: "/projects", icon: FolderKanban, section: "main" },
   { name: "Tasks", href: "/tasks", icon: CheckSquare, section: "main" },
   { name: "Bugs", href: "/bugs", icon: Bug, section: "main" },
-  { name: "My Issues", href: "/app-issues/my", icon: AlertCircle, section: "main" },
-  { name: "Browse Issues", href: "/app-issues/browse", icon: Eye, section: "main" },
+
   { name: "Leaves", href: "/leaves", icon: Calendar, section: "main" },
   { name: "Holidays", href: "/holidays", icon: Calendar, section: "main" },
-  { name: "Reimbursements", href: "/reimbursements", icon: Receipt, section: "main" },
+  {
+    name: "Reimbursements",
+    href: "/reimbursements",
+    icon: Receipt,
+    section: "main",
+  },
   // { name: "Timesheet", href: "/timesheet", icon: Clock, section: "main" },
   { name: "My Devices", href: "/my-devices", icon: Laptop, section: "main" },
   { name: "Reports", href: "/reports", icon: BarChart3, section: "main" },
-  
+
   // IT Asset Management - Admin only (full menu)
-  { name: "IT Asset Dashboard", href: "/it-assets/dashboard", icon: LayoutDashboard, section: "it-assets" },
-  { name: "Assets", href: "/it-assets/assets", icon: Package, section: "it-assets" },
-  { name: "Assignments", href: "/it-assets/assignments", icon: ClipboardList, section: "it-assets" },
-  { name: "Tickets", href: "/it-assets/tickets", icon: Ticket, section: "it-assets" },
-  { name: "Maintenance", href: "/it-assets/maintenance", icon: Wrench, section: "it-assets" },
-  { name: "Inventory", href: "/it-assets/inventory", icon: Warehouse, section: "it-assets" },
-  
+  {
+    name: "IT Asset Dashboard",
+    href: "/it-assets/dashboard",
+    icon: LayoutDashboard,
+    section: "it-assets",
+  },
+  {
+    name: "Assets",
+    href: "/it-assets/assets",
+    icon: Package,
+    section: "it-assets",
+  },
+  {
+    name: "Assignments",
+    href: "/it-assets/assignments",
+    icon: ClipboardList,
+    section: "it-assets",
+  },
+  {
+    name: "Tickets",
+    href: "/it-assets/tickets",
+    icon: Ticket,
+    section: "it-assets",
+  },
+  {
+    name: "Maintenance",
+    href: "/it-assets/maintenance",
+    icon: Wrench,
+    section: "it-assets",
+  },
+  {
+    name: "Inventory",
+    href: "/it-assets/inventory",
+    icon: Warehouse,
+    section: "it-assets",
+  },
+
   // Support - All users except Super Admin (moved to end)
   { name: "Support", href: "/support", icon: Ticket, section: "support" },
+  {
+    name: "App Issues",
+    href: "/app-issues",
+    icon: AlertCircle,
+    section: "main",
+  },
 ];
 
 export function AdminSidebar() {
@@ -199,16 +269,11 @@ export function AdminSidebar() {
              location.pathname.match(/^\/employees\/\d+\/view$/) ||
              location.pathname.match(/^\/employee-profile\/\d+$/);
     }
-    // Special handling for My App Issues - should match /app-issues/my, /app-issues/create, and /app-issues/:uuid (but not /app-issues/browse/*)
-    if (href === '/app-issues/my') {
-      return location.pathname === '/app-issues/my' ||
+    // Special handling for Issues - should match /app-issues, /app-issues/create, and /app-issues/:uuid (but not /admin/app-issues/*)
+    if (href === '/app-issues') {
+      return location.pathname === '/app-issues' ||
              location.pathname === '/app-issues/create' ||
-             (location.pathname.match(/^\/app-issues\/[^/]+$/) && !location.pathname.startsWith('/app-issues/browse'));
-    }
-    // Special handling for Browse Issues - should match /app-issues/browse and /app-issues/browse/:uuid
-    if (href === '/app-issues/browse') {
-      return location.pathname === '/app-issues/browse' ||
-             location.pathname.startsWith('/app-issues/browse/');
+             (location.pathname.match(/^\/app-issues\/[^/]+$/) && !location.pathname.startsWith('/admin/app-issues'));
     }
     return location.pathname === href || location.pathname.startsWith(href + '/');
   };
@@ -274,8 +339,7 @@ export function AdminSidebar() {
             '/projects',
             '/tasks',
             '/bugs',
-            '/app-issues/my',
-            '/app-issues/browse',
+            '/app-issues',
             '/holidays',
             '/leaves',
             '/reimbursements',

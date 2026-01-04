@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Edit, Trash2, Users, Calendar, User, FileText, Clock, CheckCircle2, Mail, Phone, AlertTriangle, Github, Link as LinkIcon, FileCheck, MessageSquare, Upload, X, MoreHorizontal, Eye, EyeOff, Pencil, Trash, Calendar as CalendarIcon } from "lucide-react";
@@ -218,6 +218,11 @@ export default function ProjectDetail() {
   const queryClient = useQueryClient();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [activeDescriptionTab, setActiveDescriptionTab] = useState("description");
+
+  // Scroll to top when component mounts
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   // Get current user info
   const currentUser = getCurrentUser();

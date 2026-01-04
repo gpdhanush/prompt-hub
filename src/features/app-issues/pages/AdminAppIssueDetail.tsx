@@ -211,7 +211,7 @@ export default function AdminAppIssueDetail() {
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(issue.status)}`}>
                   {getStatusLabel(issue.status)}
                 </span>
-                {issue.is_anonymous && (
+                {!!issue.is_anonymous && (
                   <Badge variant="secondary">Anonymous Submission</Badge>
                 )}
               </div>

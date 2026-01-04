@@ -25,7 +25,9 @@ export default function Projects() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [page, setPage] = useState(1);
-  const limit = DEFAULT_PAGE_LIMIT;
+  const [limit, setLimit] = useState(DEFAULT_PAGE_LIMIT);
+  const [sortField, setSortField] = useState<'name' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // Check if user is CLIENT to determine route prefix
   const currentUser = getCurrentUser();
@@ -47,8 +49,8 @@ export default function Projects() {
   
   // Filter projects based on search query and status filter (client-side for now)
   const filteredProjects = useMemo(
-    () => filterProjects(projects, searchQuery, statusFilter),
-    [projects, searchQuery, statusFilter]
+    () => filterProjects(projects, searchQuery, statusFilter, sortField, sortDirection),
+    [projects, searchQuery, statusFilter, sortField, sortDirection]
   );
 
   // Project mutations
@@ -138,6 +140,8 @@ export default function Projects() {
         onStatusFilterChange={handleStatusFilterChange}
         viewFilter={viewFilter}
         onViewFilterChange={handleViewFilterChange}
+        pageSize={limit}
+        onPageSizeChange={setLimit}
       />
 
       <ProjectsTable
@@ -155,6 +159,13 @@ export default function Projects() {
         onView={handleView}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onSortChange={(field, direction) => {
+          setSortField(field);
+          setSortDirection(direction);
+          setPage(1);
+        }}
       />
 
       <DeleteProjectDialog

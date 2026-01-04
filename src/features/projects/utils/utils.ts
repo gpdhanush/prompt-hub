@@ -37,28 +37,51 @@ export const formatFullDate = (dateString?: string): string => {
 export const filterProjects = (
   projects: Project[],
   searchQuery: string,
-  statusFilter: string | null
+  statusFilter: string | null,
+  sortField: 'name' | null = null,
+  sortDirection: 'asc' | 'desc' = 'asc'
 ): Project[] => {
-  return projects.filter((project) => {
+  let filteredProjects = projects.filter((project) => {
     const matchesSearch = project.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       project.project_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       project.id?.toString().includes(searchQuery);
-    
+
     let matchesStatus = true;
     if (statusFilter) {
       if (statusFilter === 'In Progress') {
         // Match In Progress, Testing, Pre-Prod, or Production
-        matchesStatus = project.status === 'In Progress' || 
-                       project.status === 'Testing' || 
-                       project.status === 'Pre-Prod' || 
+        matchesStatus = project.status === 'In Progress' ||
+                       project.status === 'Testing' ||
+                       project.status === 'Pre-Prod' ||
                        project.status === 'Production';
       } else {
         matchesStatus = project.status === statusFilter;
       }
     }
-    
+
     return matchesSearch && matchesStatus;
   });
+
+  // Apply sorting
+  if (sortField) {
+    filteredProjects = filteredProjects.sort((a, b) => {
+      let aValue: string = '';
+      let bValue: string = '';
+
+      if (sortField === 'name') {
+        aValue = a.name?.toLowerCase() || '';
+        bValue = b.name?.toLowerCase() || '';
+      }
+
+      if (sortDirection === 'asc') {
+        return aValue.localeCompare(bValue);
+      } else {
+        return bValue.localeCompare(aValue);
+      }
+    });
+  }
+
+  return filteredProjects;
 };
 
 export const calculateProjectStats = (projects: Project[]) => {

@@ -186,9 +186,9 @@ router.post('/', authenticate, upload.array('attachments', 5), async (req, res) 
       // Insert app issue
       const [result] = await connection.query(`
         INSERT INTO app_issues (
-          uuid, user_id, title, description, issue_type, status, is_anonymous
-        ) VALUES (?, ?, ?, ?, ?, 'open', ?)
-      `, [uuid, userId, title, description, issue_type, isAnonymous ? 1 : 0]);
+          uuid, user_id, title, description, issue_type, status, is_anonymous, assigned_to
+        ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
+      `, [uuid, isAnonymous ? null : userId, title, description, issue_type, isAnonymous ? 1 : 0, isAnonymous ? null : userId]);
 
       const issueId = result.insertId;
 
@@ -372,6 +372,24 @@ router.get('/all', authenticate, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+    const search = req.query.search || '';
+    const status = req.query.status || '';
+
+    // Build WHERE conditions
+    let whereConditions = [];
+    let queryParams = [];
+
+    if (search) {
+      whereConditions.push('(ai.title LIKE ? OR ai.description LIKE ?)');
+      queryParams.push(`%${search}%`, `%${search}%`);
+    }
+
+    if (status) {
+      whereConditions.push('ai.status = ?');
+      queryParams.push(status);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     const [issues] = await db.query(`
       SELECT
@@ -385,14 +403,16 @@ router.get('/all', authenticate, async (req, res) => {
       LEFT JOIN users u ON ai.user_id = u.id AND ai.is_anonymous = 0
       LEFT JOIN app_issue_attachments aia ON ai.id = aia.issue_id
       LEFT JOIN app_issue_replies air ON ai.id = air.issue_id
+      ${whereClause}
       GROUP BY ai.id
       ORDER BY ai.created_at DESC
       LIMIT ? OFFSET ?
-    `, [limit, offset]);
+    `, [...queryParams, limit, offset]);
 
     const [totalResult] = await db.query(`
-      SELECT COUNT(*) as total FROM app_issues
-    `);
+      SELECT COUNT(*) as total FROM app_issues ai
+      ${whereClause}
+    `, queryParams);
 
     const total = totalResult[0].total;
     const totalPages = Math.ceil(total / limit);

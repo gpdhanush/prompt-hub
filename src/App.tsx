@@ -45,9 +45,7 @@ const TaskEdit = lazy(() => import("./features/tasks/pages/TaskEdit"));
 const TaskView = lazy(() => import("./features/tasks/pages/TaskView"));
 const Bugs = lazy(() => import("./features/bugs/pages/Bugs"));
 const AppIssueCreate = lazy(() => import("./features/app-issues/pages/AppIssueCreate"));
-const MyAppIssues = lazy(() => import("./features/app-issues/pages/MyAppIssues"));
-const BrowseIssues = lazy(() => import("./features/app-issues/pages/BrowseIssues"));
-const BrowseIssueDetail = lazy(() => import("./features/app-issues/pages/BrowseIssueDetail"));
+const Issues = lazy(() => import("./features/app-issues/pages/Issues"));
 const AppIssueDetail = lazy(() => import("./features/app-issues/pages/AppIssueDetail"));
 const AdminAppIssues = lazy(() => import("./features/app-issues/pages/AdminAppIssues"));
 const AdminAppIssueDetail = lazy(() => import("./features/app-issues/pages/AdminAppIssueDetail"));
@@ -363,30 +361,14 @@ const AppContent = () => {
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/app-issues/my"
-                element={
-                  <ProtectedRoute>
-                    <LazyRoute><MyAppIssues /></LazyRoute>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app-issues/browse"
-                element={
-                  <ProtectedRoute>
-                    <LazyRoute><BrowseIssues /></LazyRoute>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app-issues/browse/:uuid"
-                element={
-                  <ProtectedRoute>
-                    <LazyRoute><BrowseIssueDetail /></LazyRoute>
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/app-issues"
+                  element={
+                    <ProtectedRoute>
+                      <LazyRoute><Issues /></LazyRoute>
+                    </ProtectedRoute>
+                  }
+                />
               <Route
                 path="/app-issues/:uuid"
                 element={

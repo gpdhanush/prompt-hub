@@ -44,9 +44,9 @@ export default function AppIssueDetail() {
             <p className="text-muted-foreground">The issue you're looking for doesn't exist or you don't have permission to view it.</p>
             <Button
               className="mt-4"
-              onClick={() => navigate('/app-issues/my')}
+              onClick={() => navigate('/app-issues')}
             >
-              Back to My Issues
+              Back to Issues
             </Button>
           </div>
         </CardContent>
@@ -60,11 +60,11 @@ export default function AppIssueDetail() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate('/app-issues/my')}
+          onClick={() => navigate('/app-issues')}
           className="flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to My Issues
+          Back to Issues
         </Button>
       </div>
 
@@ -119,7 +119,7 @@ export default function AppIssueDetail() {
 
             <div className="text-sm text-muted-foreground">
               <p>Reported on {new Date(issue.created_at).toLocaleString()}</p>
-              {issue.is_anonymous && (
+              {!!issue.is_anonymous && (
                 <p className="text-orange-600 mt-1">
                   This issue was submitted anonymously
                 </p>

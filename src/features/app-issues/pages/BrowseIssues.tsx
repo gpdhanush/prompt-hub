@@ -217,6 +217,7 @@ export default function BrowseIssues() {
                       <Button
                         variant="default"
                         size="sm"
+                        className="bg-primary text-white hover:bg-primary/80"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleViewIssue(issue.uuid);
