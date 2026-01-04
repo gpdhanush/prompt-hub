@@ -113,12 +113,12 @@ export default function BrowseIssues() {
                 </div>
               </div>
               <div className="w-full md:w-48">
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Select value={statusFilter || "all"} onValueChange={(value) => setStatusFilter(value === "all" ? "" : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Statuses</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="open">Open</SelectItem>
                     <SelectItem value="in_review">In Review</SelectItem>
                     <SelectItem value="assigned">Assigned</SelectItem>
@@ -173,14 +173,14 @@ export default function BrowseIssues() {
                             <Badge variant={issue.issue_type === 'bug' ? 'destructive' : 'secondary'} className="text-xs">
                               {formatAppIssueType(issue.issue_type)}
                             </Badge>
-                            <Badge variant={getStatusBadgeColor(issue.status as "open" | "in_review" | "assigned" | "in_progress" | "resolved" | "closed" | "closed_by_tester" | "need_testing") as any} className="text-xs">
+                            {/* <Badge variant={getStatusBadgeColor(issue.status)} className="text-xs">
                               {getStatusLabel(issue.status)}
                             </Badge>
-                            {issue.is_anonymous === true && (
+                            {issue.is_anonymous === 1 && (
                               <Badge variant="outline" className="text-xs">
                                 Anonymous
                               </Badge>
-                            )}
+                            )} */}
                           </div>
                         </div>
                       </div>

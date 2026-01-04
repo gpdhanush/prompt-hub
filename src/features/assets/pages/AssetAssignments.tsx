@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import {
   Table,
   TableBody,
@@ -101,7 +102,11 @@ export default function AssetAssignments() {
                         <TableCell>
                           {item.emp_code} – {item.employee_name}
                         </TableCell>
-                        <TableCell>{item.assigned_date}</TableCell>
+                        <TableCell>
+                          {item.assigned_date
+                            ? format(new Date(item.assigned_date), "dd-MMM-yyyy")
+                            : "-"}
+                        </TableCell>
                         <TableCell className="capitalize">
                           {item.condition_on_assign}
                         </TableCell>
@@ -110,7 +115,7 @@ export default function AssetAssignments() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
-                            variant="ghost"
+                            variant="default"
                             size="sm"
                             onClick={() => {
                               setSelectedAssignment(item);
@@ -346,7 +351,7 @@ export default function AssetAssignments() {
                   }
                 }
               }}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-primary hover:bg-primary/80"
             >
               <Printer className="h-4 w-4 mr-2" />
               Print

@@ -60,6 +60,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DatePicker } from "@/components/ui/date-picker";
 
 export default function AssetMaintenance() {
   const navigate = useNavigate();
@@ -732,6 +733,8 @@ function MaintenanceForm({
     notes: maintenance?.notes || '',
   });
 
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
   // Reset form when maintenance prop changes (for edit mode)
   useEffect(() => {
     if (maintenance) {
@@ -770,33 +773,47 @@ function MaintenanceForm({
     }
   }, [maintenance]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validate required fields
-    if (!formData.asset_id || formData.asset_id === '' || !formData.maintenance_type || !formData.start_date) {
-      toast({
-        title: "Validation Error",
-        description: "Asset, maintenance type, and start date are required",
-        variant: "destructive",
-      });
-      return;
+  const validateForm = () => {
+    const newErrors: { [key: string]: string } = {};
+
+    if (!formData.asset_id || formData.asset_id === '') {
+      newErrors.asset_id = "Asset is required";
+    }
+
+    if (!formData.maintenance_type) {
+      newErrors.maintenance_type = "Maintenance type is required";
+    }
+
+    if (!formData.start_date) {
+      newErrors.start_date = "Start date is required";
+    }
+
+    if (formData.end_date && formData.start_date && new Date(formData.end_date) < new Date(formData.start_date)) {
+      newErrors.end_date = "End date cannot be before start date";
     }
 
     // Validate asset_id can be parsed
-    const assetId = parseInt(formData.asset_id);
-    if (isNaN(assetId)) {
-      toast({
-        title: "Validation Error",
-        description: "Please select a valid asset",
-        variant: "destructive",
-      });
+    if (formData.asset_id && formData.asset_id !== '') {
+      const assetId = parseInt(formData.asset_id);
+      if (isNaN(assetId)) {
+        newErrors.asset_id = "Please select a valid asset";
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) {
       return;
     }
 
     const submitData = {
       ...formData,
-      asset_id: assetId,
+      asset_id: parseInt(formData.asset_id),
       ticket_id: formData.ticket_id && formData.ticket_id !== '' && formData.ticket_id !== 'none' ? parseInt(formData.ticket_id) : null,
       cost: formData.cost && formData.cost !== '' ? parseFloat(formData.cost) : null,
       end_date: formData.end_date && formData.end_date !== '' ? formData.end_date : null,
@@ -809,11 +826,15 @@ function MaintenanceForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="asset_id">Asset *</Label>
+          <Label htmlFor="asset_id" className="text-red-500">Asset *</Label>
           <Select
             value={formData.asset_id}
-            onValueChange={(value) => setFormData({ ...formData, asset_id: value })}
-            required
+            onValueChange={(value) => {
+              setFormData({ ...formData, asset_id: value });
+              if (errors.asset_id) {
+                setErrors({ ...errors, asset_id: '' });
+              }
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select asset" />
@@ -832,13 +853,20 @@ function MaintenanceForm({
               )}
             </SelectContent>
           </Select>
+          {errors.asset_id && (
+            <p className="text-sm text-red-500">{errors.asset_id}</p>
+          )}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="maintenance_type">Maintenance Type *</Label>
+          <Label htmlFor="maintenance_type" className="text-red-500">Maintenance Type *</Label>
           <Select
             value={formData.maintenance_type}
-            onValueChange={(value) => setFormData({ ...formData, maintenance_type: value })}
-            required
+            onValueChange={(value) => {
+              setFormData({ ...formData, maintenance_type: value });
+              if (errors.maintenance_type) {
+                setErrors({ ...errors, maintenance_type: '' });
+              }
+            }}
           >
             <SelectTrigger>
               <SelectValue />
@@ -850,29 +878,46 @@ function MaintenanceForm({
               <SelectItem value="upgrade">Upgrade</SelectItem>
             </SelectContent>
           </Select>
+          {errors.maintenance_type && (
+            <p className="text-sm text-red-500">{errors.maintenance_type}</p>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="start_date">Start Date *</Label>
-          <Input
+          <Label htmlFor="start_date" className="text-red-500">Start Date *</Label>
+          <DatePicker
             id="start_date"
-            type="date"
             value={formData.start_date}
-            onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-            required
+            onChange={(date) => {
+              setFormData({ ...formData, start_date: date });
+              if (errors.start_date) {
+                setErrors({ ...errors, start_date: '' });
+              }
+            }}
+            placeholder="Select start date"
           />
+          {errors.start_date && (
+            <p className="text-sm text-red-500">{errors.start_date}</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="end_date">End Date</Label>
-          <Input
+          <DatePicker
             id="end_date"
-            type="date"
             value={formData.end_date}
-            onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-            min={formData.start_date}
+            onChange={(date) => {
+              setFormData({ ...formData, end_date: date });
+              if (errors.end_date) {
+                setErrors({ ...errors, end_date: '' });
+              }
+            }}
+            placeholder="Select end date"
           />
+          {errors.end_date && (
+            <p className="text-sm text-red-500">{errors.end_date}</p>
+          )}
         </div>
       </div>
 
