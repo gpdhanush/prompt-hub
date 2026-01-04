@@ -754,11 +754,9 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
  *               status:
  *                 type: string
  *                 enum: [Open, In Progress, Fixed, Rejected, Won't Fix, Duplicate]
- *                 type: string
- *                 enum: [Critical, High, Medium, Low]
  *               priority:
  *                 type: string
- *                 enum: [High, Medium, Low]
+ *                 enum: [Critical, High, Medium, Low]
  *               assigned_to:
  *                 type: integer
  *               resolution_type:
