@@ -229,13 +229,13 @@ export default function AssetTickets() {
             </div>
           ) : (
             <div className="rounded-md border">
-              <Table>
-                <TableHeader>
+              <Table className="border-collapse">
+                <TableHeader className="bg-muted/50 border-b-2 border-border border-primary text-black">
                   <TableRow>
-                    <TableHead className="w-[120px]">Ticket #</TableHead>
-                    <TableHead>Subject</TableHead>
-                    {isAdmin && <TableHead>Employee</TableHead>}
-                    <TableHead>Status</TableHead>
+                    <TableHead className="w-[120px] border-r border-border">Ticket #</TableHead>
+                    <TableHead className="border-r border-border">Subject</TableHead>
+                    {isAdmin && <TableHead className="border-r border-border">Employee</TableHead>}
+                    <TableHead className="border-r border-border">Status</TableHead>
                     <TableHead className="text-right w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -243,16 +243,16 @@ export default function AssetTickets() {
                   {filteredTickets.map((ticket: any) => (
                     <TableRow
                       key={ticket.id}
-                      className="hover:bg-muted/50 cursor-pointer"
+                      className="hover:bg-muted/50 cursor-pointer border-b border-border text-black"
                       onClick={() => navigate(`/it-assets/tickets/${ticket.id}`)}
                     >
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium border-r border-border">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(ticket.status)}
                           <span className="font-mono text-sm">{ticket.ticket_number}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border">
                         <div>
                           <p className="font-medium">{ticket.subject}</p>
                           {ticket.description && (
@@ -263,7 +263,7 @@ export default function AssetTickets() {
                         </div>
                       </TableCell>
                       {isAdmin && (
-                        <TableCell>
+                        <TableCell className="border-r border-border">
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-muted-foreground" />
                             <div>
@@ -273,7 +273,7 @@ export default function AssetTickets() {
                           </div>
                         </TableCell>
                       )}
-                      <TableCell>
+                      <TableCell className="border-r border-border">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(ticket.status)}
                           <StatusBadge variant={getStatusVariant(ticket.status)}>

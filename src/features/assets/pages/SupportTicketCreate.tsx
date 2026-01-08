@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { assetsApi } from "@/features/assets/api";
 import { toast } from "@/hooks/use-toast";
+import { toTitleCase } from "@/lib/utils";
 
 export default function SupportTicketCreate() {
   const navigate = useNavigate();
@@ -189,7 +190,7 @@ export default function SupportTicketCreate() {
                 fieldName="Subject"
                 value={formData.subject}
                 onChange={(e) => {
-                  setFormData({ ...formData, subject: e.target.value });
+                  setFormData({ ...formData, subject: toTitleCase(e.target.value) });
                   if (errors.subject) {
                     setErrors({ ...errors, subject: '' });
                   }

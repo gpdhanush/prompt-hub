@@ -26,6 +26,8 @@ import { ProjectLogoUpload } from "@/components/ui/project-logo-upload";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getCurrentUser } from "@/lib/auth";
 import { getImageUrl } from "@/lib/imageUtils";
+import { toTitleCase } from "@/lib/utils";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -861,7 +863,7 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                   fieldName="Project Name"
                   value={formData.name}
                   onChange={(e) => {
-                    setFormData({ ...formData, name: e.target.value });
+                    setFormData({ ...formData, name: toTitleCase(e.target.value) });
                     if (errors.name) {
                       const newErrors = { ...errors };
                       delete newErrors.name;
@@ -2296,6 +2298,10 @@ export default function ProjectForm({ projectId: propProjectId, mode }: ProjectF
                       (numericProjectId ?? fetchId) as any
                     );
                     setUploadedFiles(filesData.data || []);
+
+                    // Invalidate query cache for project files to update ProjectDetail page immediately
+                    queryClient.invalidateQueries({ queryKey: ['project-files', numericProjectId ?? fetchId] });
+
                     setShowUploadDialog(false);
                     setPendingFiles([]);
                   } catch (error: any) {

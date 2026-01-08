@@ -680,7 +680,7 @@ export default function MyDevices() {
           ) : (
             <div className="rounded-md border">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/50 border-b-2 border-border border-primary">
                   <TableRow>
                     <TableHead className="w-[120px]">Asset Code</TableHead>
                     <TableHead>Category</TableHead>

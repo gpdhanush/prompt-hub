@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../config/database.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import { authenticate, authorize, requirePermission } from '../middleware/auth.js';
+
 import { logCreate, logUpdate, logDelete } from '../utils/auditLogger.js';
 import { notifyBugAssigned, notifyBugStatusUpdated, notifyBugComment } from '../utils/notificationService.js';
 import { logger } from '../utils/logger.js';
@@ -10,6 +11,19 @@ import path from 'path';
 import fs from 'fs';
 
 const router = express.Router();
+
+// Helper middleware to check for Role OR Permission
+const checkBugPermission = (permission, allowedRoles) => {
+  return async (req, res, next) => {
+    // Check if user has one of the allowed roles
+    if (req.user && req.user.role && allowedRoles.includes(req.user.role)) {
+      return next();
+    }
+    // Fallback to permission check
+    return requirePermission(permission)(req, res, next);
+  };
+};
+
 
 // Apply authentication to all routes
 router.use(authenticate);
@@ -491,8 +505,11 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Server error
  */
-// Create bug - Tester, Admin, Team Leader, Developer, Designer, and Super Admin
-router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), upload.array('attachments', 10), async (req, res) => {
+// Create bug - Tester, Admin, Team Leader, Developer, Designer, Super Admin OR bugs.create permission
+const createRoles = ['Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'];
+router.post('/', checkBugPermission('bugs.create', createRoles), upload.array('attachments', 10), async (req, res) => {
+
+
   try {
     logger.debug('=== CREATE BUG REQUEST ===');
     logger.debug('Request body:', req.body);
@@ -510,12 +527,12 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
       });
     }
     
-    let { 
+    let {
       task_id, project_id, title, description, bug_type, priority, status, resolution_type,
-      steps_to_reproduce, expected_behavior, actual_behavior, 
+      steps_to_reproduce, expected_behavior, actual_behavior,
       assigned_to: provided_assigned_to, team_lead_id,
       browser, device, os, app_version, api_endpoint,
-      target_fix_date, tags
+      target_fix_date, deadline, tags
     } = req.body;
     
     // Use sanitized values
@@ -631,10 +648,6 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
     if (bug_type) {
       insertFields.push('bug_type');
       insertValues.push(bug_type);
-    }
-    if (priority) {
-      insertFields.push('priority');
-      insertValues.push(priority);
     }
     if (team_lead_id) {
       insertFields.push('team_lead_id');
@@ -784,7 +797,10 @@ router.post('/', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Devel
  *       500:
  *         description: Server error
  */
-router.put('/:id', authorize('Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'), async (req, res) => {
+const editRoles = ['Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'];
+router.put('/:id', checkBugPermission('bugs.edit', editRoles), async (req, res) => {
+
+
   try {
     const { id } = req.params;
 
@@ -1397,8 +1413,11 @@ router.post('/:id/comments', authorize('Tester', 'Developer', 'Designer', 'Admin
  *       500:
  *         description: Server error
  */
-// Delete bug - only Team Leader and Super Admin
-router.delete('/:id', authorize('Team Leader', 'Team Lead', 'Super Admin'), async (req, res) => {
+// Delete bug - only Team Leader and Super Admin OR bugs.delete permission
+const deleteRoles = ['Team Leader', 'Team Lead', 'Super Admin'];
+router.delete('/:id', checkBugPermission('bugs.delete', deleteRoles), async (req, res) => {
+
+
   try {
     const { id } = req.params;
 

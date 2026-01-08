@@ -1,3 +1,11 @@
+CREATE TABLE IF NOT EXISTS `settings` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `currency_symbol` VARCHAR(3) DEFAULT '$',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `audit_logs` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` INT UNSIGNED,
@@ -18,21 +26,21 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   INDEX `idx_audit_date` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `calendar_reminders` (
-  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS `notifications` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `user_id` INT UNSIGNED NOT NULL,
-  `title` VARCHAR(255) NOT NULL,
-  `description` TEXT,
-  `reminder_date` DATE NOT NULL,
-  `reminder_time` TIME NOT NULL,
-  `reminder_type` ENUM('call', 'meeting', 'deadline', 'important_date', 'other') DEFAULT 'other',
-  `is_completed` BOOLEAN DEFAULT FALSE,
-  `sent_at` TIMESTAMP NULL,
+  `type` VARCHAR(50) NOT NULL,
+  `title` VARCHAR(255),
+  `message` TEXT,
+  `payload` JSON,
+  `is_read` BOOLEAN DEFAULT FALSE,
+  `read_at` TIMESTAMP NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
   FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-  INDEX `idx_user_date` (`user_id`, `reminder_date`),
-  INDEX `idx_reminder_datetime` (`reminder_date`, `reminder_time`)
+  INDEX `idx_notification_user` (`user_id`),
+  INDEX `idx_notification_read` (`is_read`),
+  INDEX `idx_notification_date` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `fcm_tokens` (
@@ -54,35 +62,39 @@ CREATE TABLE IF NOT EXISTS `fcm_tokens` (
   INDEX `idx_fcm_device` (`device_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `notifications` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+CREATE TABLE IF NOT EXISTS `calendar_reminders` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `user_id` INT UNSIGNED NOT NULL,
-  `type` VARCHAR(50) NOT NULL,
-  `title` VARCHAR(255),
-  `message` TEXT,
-  `payload` JSON,
-  `is_read` BOOLEAN DEFAULT FALSE,
-  `read_at` TIMESTAMP NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `description` TEXT,
+  `reminder_date` DATE NOT NULL,
+  `reminder_time` TIME NOT NULL,
+  `reminder_type` ENUM('call', 'meeting', 'deadline', 'important_date', 'other') DEFAULT 'other',
+  `is_completed` BOOLEAN DEFAULT FALSE,
+  `sent_at` TIMESTAMP NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+  INDEX `idx_user_date` (`user_id`, `reminder_date`),
+  INDEX `idx_reminder_datetime` (`reminder_date`, `reminder_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `attachments` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `task_id` INT UNSIGNED,
+  `bug_id` INT UNSIGNED,
+  `reimbursement_id` INT UNSIGNED,
+  `uploaded_by` INT UNSIGNED NOT NULL,
+  `path` VARCHAR(500) NOT NULL,
+  `original_filename` VARCHAR(255),
+  `mime_type` VARCHAR(100),
+  `size` BIGINT UNSIGNED,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-  INDEX `idx_notification_user` (`user_id`),
-  INDEX `idx_notification_read` (`is_read`),
-  INDEX `idx_notification_date` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS `settings` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `currency_symbol` VARCHAR(3) DEFAULT '$',
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS `settings` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `currency_symbol` VARCHAR(3) DEFAULT '$',
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  FOREIGN KEY (`task_id`) REFERENCES `tasks`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`bug_id`) REFERENCES `bugs`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`reimbursement_id`) REFERENCES `reimbursements`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`uploaded_by`) REFERENCES `users`(`id`),
+  INDEX `idx_attachment_task` (`task_id`),
+  INDEX `idx_attachment_bug` (`bug_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

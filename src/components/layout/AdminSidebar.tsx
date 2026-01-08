@@ -150,13 +150,13 @@ const allMenuItems = [
     section: "it-assets",
   },
 
-  // Support - All users except Super Admin (moved to end)
+  // Support - All users except Super Admin
   { name: "Support", href: "/support", icon: Ticket, section: "support" },
   {
     name: "App Issues",
     href: "/app-issues",
     icon: AlertCircle,
-    section: "main",
+    section: "support",
   },
 ];
 
@@ -339,13 +339,13 @@ export function AdminSidebar() {
             '/projects',
             '/tasks',
             '/bugs',
-            '/app-issues',
             '/holidays',
             '/leaves',
             '/reimbursements',
             '/employees/list',
             '/my-devices',
-            '/support'
+            '/support',
+            '/app-issues'
           ];
           
           // Filter items first

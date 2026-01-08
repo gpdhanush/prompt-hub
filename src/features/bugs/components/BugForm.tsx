@@ -24,6 +24,8 @@ import { projectsApi } from "@/features/projects/api";
 import { employeesApi } from "@/features/employees/api";
 import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
+import { toTitleCase } from "@/lib/utils";
+
 import { BugStatusDropdown } from "./BugStatusDropdown";
 
 interface BugFormData {
@@ -149,7 +151,12 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
   }, [assignableUsersFromAPI]);
 
   const handleInputChange = (field: keyof BugFormData, value: string) => {
-    const normalizedValue = (value === "none" || value === "unassigned" || value === "all") ? "" : value;
+    let normalizedValue = (value === "none" || value === "unassigned" || value === "all") ? "" : value;
+    
+    if (field === 'title') {
+      normalizedValue = toTitleCase(normalizedValue);
+    }
+
     const newData = { ...formData, [field]: normalizedValue };
 
     // Clear task_id if project changes
@@ -317,8 +324,8 @@ export function BugForm({ formData, onChange, attachments, onAttachmentsChange, 
               />
             </div>
           </div>
-          {/* Second row: Team Lead, Assigned To, Priority & Status */}
-          <div className="grid grid-cols-4 gap-4">
+          {/* Second row: Team Lead, Assigned To, Priority, Status & Deadline */}
+          <div className="grid grid-cols-5 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="team_lead_id">Team Lead</Label>
               <Select

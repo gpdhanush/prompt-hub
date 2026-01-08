@@ -295,15 +295,15 @@ export default function MyTickets() {
             </div>
           ) : (
             <div className="rounded-md border">
-              <Table>
-                <TableHeader>
+              <Table className="border-collapse">
+                <TableHeader className="bg-muted/50 border-b-2 border-border border-primary text-black">
                   <TableRow>
-                    <TableHead className="w-[100px]">Ticket #</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead className="w-[100px] border-r border-border">Ticket #</TableHead>
+                    <TableHead className="border-r border-border">Subject</TableHead>
+                    <TableHead className="border-r border-border">Type</TableHead>
+                    <TableHead className="border-r border-border">Priority</TableHead>
+                    <TableHead className="border-r border-border">Status</TableHead>
+                    <TableHead className="border-r border-border">Created</TableHead>
                     <TableHead className="text-right w-[100px]">
                       Actions
                     </TableHead>
@@ -313,18 +313,18 @@ export default function MyTickets() {
                   {paginatedTickets.map((ticket: any) => (
                     <TableRow
                       key={ticket.id}
-                      className="hover:bg-muted/50 cursor-pointer"
+                      className="hover:bg-muted/50 cursor-pointer border-b border-border text-black"
                       onClick={() => handleViewTicket(ticket)}
                     >
                       <TableCell
-                        className="font-medium"
+                        className="font-medium border-r border-border"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <span className="font-mono text-sm">
                           #{ticket.ticket_number}
                         </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(ticket.status)}
                           <div>
@@ -340,22 +340,22 @@ export default function MyTickets() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border">
                         <div className="capitalize">
                           {ticket.ticket_type?.replace("_", " ") || "N/A"}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border">
                         <div className="capitalize">
                           {ticket.priority || "medium"}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border">
                         <div className="capitalize">
                           {ticket.status?.replace("_", " ") || "open"}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="border-r border-border">
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">

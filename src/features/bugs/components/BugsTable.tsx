@@ -159,7 +159,7 @@ export const BugsTable = memo(function BugsTable({
       <CardContent>
         <div className="rounded-md border">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted/50 border-b-2 border-border border-primary">
               <TableRow>
                 <TableHead className="w-[120px]">Bug ID</TableHead>
                 <TableHead>Task ID</TableHead>

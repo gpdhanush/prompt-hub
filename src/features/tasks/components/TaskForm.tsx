@@ -23,6 +23,8 @@ import { projectsApi } from "@/features/projects/api";
 import { employeesApi } from "@/features/employees/api";
 import { usersApi } from "@/features/users/api";
 import { getCurrentUser } from "@/lib/auth";
+import { toTitleCase } from "@/lib/utils";
+
 
 interface TaskFormData {
   project_id: string;
@@ -143,6 +145,8 @@ export function TaskForm({
     } else if (optionalFields.includes(field) && value === "") {
       // Keep empty string for optional fields - will be handled in submit
       normalizedValue = "";
+    } else if (field === 'title') {
+      normalizedValue = toTitleCase(value);
     } else {
       normalizedValue = value;
     }

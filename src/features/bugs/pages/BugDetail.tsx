@@ -16,7 +16,9 @@ import { getCurrentUser, getAuthToken } from "@/lib/auth";
 import { API_CONFIG } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import ConfirmationDialog from "@/shared/components/ConfirmationDialog";
+import { usePermissions } from "@/hooks/usePermissions";
 import { formatFullDate, formatDeadline } from "../utils/utils";
+
 
 export default function BugDetail() {
   const navigate = useNavigate();
@@ -27,9 +29,10 @@ export default function BugDetail() {
   const currentUser = getCurrentUser();
   const userRole = currentUser?.role || '';
 
-  // Permissions
-  const canEditBug = ['Admin', 'Team Lead', 'Super Admin', 'Developer', 'Designer', 'Tester'].includes(userRole);
-  const canDeleteBug = ['Super Admin', 'Team Lead'].includes(userRole);
+  const { hasPermission } = usePermissions();
+  // Permissions - Check roles AND dynamic permissions
+  const canEditBug = ['Admin', 'Team Lead', 'Super Admin', 'Developer', 'Designer', 'Tester'].includes(userRole) || hasPermission('bugs.edit');
+  const canDeleteBug = ['Super Admin', 'Team Lead'].includes(userRole) || hasPermission('bugs.delete');
 
   // Helper function to convert text to title case
   const toTitleCase = useCallback((text: string): string => {

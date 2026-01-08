@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, MoreHorizontal, Check, X, Eye, Filter, Calendar, Edit, Trash2, Loader2, User, Clock, CalendarDays, FileText, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Check, X, Eye, Filter, Calendar, Edit, Trash2, Loader2, User, Clock, CalendarDays, FileText, CheckCircle2, XCircle, AlertCircle, Download, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +54,7 @@ import { employeesApi } from "@/features/employees/api";
 import { toast } from "@/hooks/use-toast";
 import { getCurrentUser } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { exportToExcel, exportToPDF } from "@/utils/excelExport";
 
 // Memoized Leave Row Component
 const LeaveRow = React.memo(({
@@ -509,6 +510,114 @@ export default function Leaves() {
     setPage(1);
   }, []);
 
+  // Export functions
+  const handleExportExcel = useCallback(() => {
+    try {
+      if (filteredLeaves.length === 0) {
+        toast({
+          title: "No Data",
+          description: "No leave records to export.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Prepare data for export
+      const exportData = filteredLeaves.map(leave => ({
+        employee_name: leave.employee_name || 'N/A',
+        emp_code: leave.emp_code || 'N/A',
+        leave_type: leave.leave_type || 'N/A',
+        start_date: leave.start_date,
+        end_date: leave.end_date,
+        duration: leave.duration || 0,
+        status: leave.status || 'N/A',
+        reason: leave.reason || 'N/A',
+        approved_by_name: leave.approved_by_name || 'N/A',
+        created_at: leave.created_at,
+      }));
+
+      exportToExcel(exportData, [
+        { key: 'employee_name', header: 'Employee Name' },
+        { key: 'emp_code', header: 'Employee Code' },
+        { key: 'leave_type', header: 'Leave Type' },
+        { key: 'start_date', header: 'Start Date' },
+        { key: 'end_date', header: 'End Date' },
+        { key: 'duration', header: 'Duration (Days)' },
+        { key: 'status', header: 'Status' },
+        { key: 'reason', header: 'Reason' },
+        { key: 'approved_by_name', header: 'Approved By' },
+        { key: 'created_at', header: 'Applied Date' },
+      ], {
+        filename: `leave_report_${new Date().toISOString().split('T')[0]}.xlsx`
+      });
+
+      toast({
+        title: "Success",
+        description: "Leave report exported to Excel successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to export leave report.",
+        variant: "destructive",
+      });
+    }
+  }, [filteredLeaves]);
+
+  const handleExportPDF = useCallback(() => {
+    try {
+      if (filteredLeaves.length === 0) {
+        toast({
+          title: "No Data",
+          description: "No leave records to export.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Prepare data for export
+      const exportData = filteredLeaves.map(leave => ({
+        employee_name: leave.employee_name || 'N/A',
+        emp_code: leave.emp_code || 'N/A',
+        leave_type: leave.leave_type || 'N/A',
+        start_date: leave.start_date,
+        end_date: leave.end_date,
+        duration: leave.duration || 0,
+        status: leave.status || 'N/A',
+        reason: leave.reason || 'N/A',
+        approved_by_name: leave.approved_by_name || 'N/A',
+        created_at: leave.created_at,
+      }));
+
+      exportToPDF(exportData, [
+        { key: 'employee_name', header: 'Employee Name' },
+        { key: 'emp_code', header: 'Employee Code' },
+        { key: 'leave_type', header: 'Leave Type' },
+        { key: 'start_date', header: 'Start Date' },
+        { key: 'end_date', header: 'End Date' },
+        { key: 'duration', header: 'Duration (Days)' },
+        { key: 'status', header: 'Status' },
+        { key: 'reason', header: 'Reason' },
+        { key: 'approved_by_name', header: 'Approved By' },
+        { key: 'created_at', header: 'Applied Date' },
+      ], {
+        filename: `leave_report_${new Date().toISOString().split('T')[0]}.pdf`,
+        title: `Leave Report - ${new Date().toLocaleDateString()}`
+      });
+
+      toast({
+        title: "Success",
+        description: "Leave report opened in print dialog for PDF export.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to export leave report.",
+        variant: "destructive",
+      });
+    }
+  }, [filteredLeaves]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -760,6 +869,24 @@ export default function Leaves() {
               <CardTitle>Leave Requests ({filteredLeaves.length})</CardTitle>
               <CardDescription>List of all leave requests</CardDescription>
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="default" size="sm">
+                  <Download className="mr-2 h-4 w-4 text-white bg-primary" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportExcel}>
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export to Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export to PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardHeader>
         <CardContent>

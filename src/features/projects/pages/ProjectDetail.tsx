@@ -711,7 +711,7 @@ export default function ProjectDetail() {
                         path: file.file_url,
                         url: file.file_url,
                         file_url: file.file_url,
-                        size: 0,
+                        size: file.file_size || 0,
                       }))}
                       showLabel={false}
                     />
@@ -733,7 +733,7 @@ export default function ProjectDetail() {
                               <div className="mb-3">
                                 <div className="text-base font-semibold">
                                   {note.call_date
-                                    ? new Date(note.call_date).toLocaleString()
+                                    ? formatFullDate(note.call_date)
                                     : "No date"}
                                 </div>
                                 {note.participants && (
@@ -746,9 +746,9 @@ export default function ProjectDetail() {
                                   <CalendarIcon className="h-3 w-3" />
                                   {note.follow_up_required
                                     ? note.follow_up_date
-                                      ? `Follow-up Date: ${new Date(
+                                      ? `Follow-up Date: ${formatDate(
                                           note.follow_up_date
-                                        ).toLocaleDateString()}`
+                                        )}`
                                       : "Follow-up required"
                                     : "Follow-up: No need"}
                                 </div>

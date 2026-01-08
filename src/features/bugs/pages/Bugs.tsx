@@ -39,10 +39,14 @@ export default function Bugs() {
   
   // Use permission-based checks instead of hardcoded roles
   const { hasPermission } = usePermissions();
-  const canCreateBug = hasPermission('bugs.create');
-  const canEditBug = hasPermission('bugs.edit');
-  const canDeleteBug = hasPermission('bugs.delete');
-  const canUpdateStatus = hasPermission('bugs.edit');
+  
+  const createEditRoles = ['Tester', 'Admin', 'Team Leader', 'Team Lead', 'Developer', 'Designer', 'Super Admin'];
+  const deleteRoles = ['Team Leader', 'Team Lead', 'Super Admin'];
+  
+  const canCreateBug = createEditRoles.includes(userRole) || hasPermission('bugs.create');
+  const canEditBug = createEditRoles.includes(userRole) || hasPermission('bugs.edit');
+  const canDeleteBug = deleteRoles.includes(userRole) || hasPermission('bugs.delete');
+  const canUpdateStatus = canEditBug;
 
   // Fetch bugs from API
   const { data, isLoading, error } = useQuery({

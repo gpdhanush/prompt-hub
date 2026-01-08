@@ -493,7 +493,7 @@ export default function Reimbursements() {
           ) : (
             <>
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/50 border-b-2 border-border border-primary">
                   <TableRow>
                     <TableHead>Claim Code</TableHead>
                     <TableHead>Employee</TableHead>
